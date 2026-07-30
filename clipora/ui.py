@@ -76,6 +76,9 @@ class CliporaApp(tk.Tk):
         self.geometry('900x700')
         self.minsize(780, 650)
         self.configure(bg=BG)
+        self._first_run_setup = bool(missing_required_tools())
+        if self._first_run_setup:
+            self.withdraw()
 
         available_fonts = set(tkfont.families(self))
         self.ui_font = 'Leelawadee UI' if 'Leelawadee UI' in available_fonts else 'Segoe UI'
@@ -106,7 +109,7 @@ class CliporaApp(tk.Tk):
         self.bind_all('<Control-KeyPress>', self._on_control_keypress, add='+')
         self.bind_all('<Shift-Insert>', self._on_paste_shortcut, add='+')
         self.after_idle(self.source_entry.focus_set)
-        self.after(450, self._maybe_offer_tool_setup)
+        self.after(120, self._maybe_offer_tool_setup)
         self.protocol('WM_DELETE_WINDOW', self._on_close)
 
     def _create_icon(self) -> tk.PhotoImage:
@@ -555,10 +558,16 @@ class CliporaApp(tk.Tk):
         self._sync_options()
 
     def _maybe_offer_tool_setup(self) -> None:
-        if missing_required_tools():
-            self._open_tool_setup(repair_mode=False)
+        if self._first_run_setup and missing_required_tools():
+            self._open_tool_setup(repair_mode=False, first_run=True)
+        else:
+            self.deiconify()
 
-    def _open_tool_setup(self, repair_mode: bool = False) -> None:
+    def _open_tool_setup(
+        self,
+        repair_mode: bool = False,
+        first_run: bool = False,
+    ) -> None:
         if self._cancellation is not None:
             messagebox.showwarning(
                 'กำลังทำงาน',
@@ -578,11 +587,21 @@ class CliporaApp(tk.Tk):
         self._setup_dialog = ToolSetupDialog(
             self,
             repair_mode=repair_mode,
+            first_run=first_run,
             on_ready=self._tools_ready,
+            on_cancelled=self._setup_cancelled if first_run else None,
         )
 
     def _tools_ready(self) -> None:
+        self._first_run_setup = False
+        self.deiconify()
+        self.lift()
         self.status.set('พร้อมเริ่มงาน')
+        self.after_idle(self.source_entry.focus_set)
+
+    def _setup_cancelled(self) -> None:
+        if self._first_run_setup:
+            self.destroy()
 
     def _sync_options(self) -> None:
         if self.mode.get() == 'audio':
