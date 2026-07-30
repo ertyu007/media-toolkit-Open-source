@@ -1,0 +1,177 @@
+# คู่มือพัฒนา Clipora
+
+## สารบัญ
+
+1. เป้าหมายและ stack
+2. เตรียม environment
+3. Architecture
+4. Thread และ subprocess rules
+5. Workflow การเปลี่ยนโค้ด
+6. Testing
+7. เพิ่ม format หรือ feature
+8. Documentation และ release readiness
+
+## 1. เป้าหมายและ stack
+
+Clipora เป็น local-first Windows desktop media toolkit สำหรับไฟล์ที่ผู้ใช้มีสิทธิ์ใช้
+
+- Python 3.10+
+- Tkinter/ttk
+- External FFmpeg และ ffprobe
+- Standard-library unittest
+- ไม่มี runtime Python dependency ภายนอกในปัจจุบัน
+
+รักษา source safety, UI responsiveness, Unicode paths, bounded diagnostics และ explicit stream behavior ก่อนเพิ่ม feature
+
+## 2. เตรียม environment
+
+```powershell
+git clone https://github.com/ertyu007/media-toolkit-Open-source.git
+cd media-toolkit-Open-source
+python scripts/check_environment.py
+python -m unittest discover -s tests -v
+python app.py
+```
+
+ไม่จำเป็นต้องสร้าง virtual environment ในรุ่นที่ไม่มี dependency แต่สามารถสร้างเพื่อแยก Python tooling:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+```
+
+อย่าเพิ่ม package ลง `requirements.txt` เพียงเพื่อ development convenience โดยไม่แยก runtime/dev requirement และอธิบายเหตุผล
+
+## 3. Architecture
+
+```text
+app.py
+  -> CliporaApp (clipora/ui.py)
+     -> snapshot JobSpec on Tk main thread
+     -> worker thread
+        -> probe / validate_operation
+        -> build_command
+        -> convert / FFmpeg process
+     <- after callbacks for progress/success/failure
+```
+
+### `app.py`
+
+Entry point เท่านั้น อย่าใส่ business logic
+
+### `clipora/ui.py`
+
+รับผิดชอบ widgets, dialogs, display copy, validation เบื้องต้น, immutable job snapshot และ terminal UI states ห้ามใส่รายละเอียด codec/progress protocol ที่ควรทดสอบแบบ pure function
+
+### `clipora/ffmpeg.py`
+
+รับผิดชอบ model ปัจจุบัน, tool discovery, ffprobe JSON, stream validation, output naming, argument construction, progress parsing และ process runner
+
+เมื่อ module โต ให้แยกตาม responsibility เป็น models/media/commands/runner/naming โดยไม่ทำ refactor ใหญ่พร้อม feature ที่ไม่เกี่ยวข้อง
+
+## 4. Thread และ subprocess rules
+
+- สร้างและอ่าน Tk widgets/variables บน main thread เท่านั้น
+- Snapshot `JobSpec` ก่อนเริ่ม worker
+- Probe และ encode ใน worker
+- ส่ง UI update ผ่าน `after` หรือ queue ที่ main thread poll
+- ใช้ subprocess argument list และ `shell=False`
+- ซ่อน FFmpeg console บน Windows
+- อ่าน pipe แบบไม่ deadlock และเก็บ diagnostic tail แบบ bounded
+- Success ต้องมี exit code 0 และ target ที่มีขนาดมากกว่า 0
+- Source ห้ามเป็น cleanup target
+- การเพิ่ม cancel ต้องถือ process handle ที่แน่นอน ห้าม kill ตามชื่อ process
+
+## 5. Workflow การเปลี่ยนโค้ด
+
+ทำเป็น vertical slice:
+
+1. เขียน outcome และ acceptance criteria หนึ่งเรื่อง
+2. ระบุ modules และ non-goals
+3. แก้ pure function/model ที่เล็กที่สุด
+4. เพิ่ม unit test
+5. เชื่อม core process และเพิ่ม generated-fixture integration test
+6. เชื่อม UI หลัง core ผ่าน
+7. ทดสอบ manual interaction ที่เกี่ยวข้อง
+8. อัปเดต docs
+
+สำหรับ bug ให้นำ exact error/traceback/exit code/diagnostic tail มาจำแนก layer ก่อนแก้ เพิ่ม regression test และเปลี่ยน causal hypothesis ทีละเรื่อง
+
+## 6. Testing
+
+รัน syntax/import:
+
+```powershell
+python -m compileall -q app.py clipora tests scripts
+```
+
+รันทุก test โดยยกระดับ ResourceWarning เป็น failure:
+
+```powershell
+python -W error::ResourceWarning -m unittest discover -s tests -v
+```
+
+กลุ่มหลัก:
+
+- `test_ffmpeg.py`: naming, command, stream validation, progress
+- `test_ffmpeg_integration.py`: FFmpeg จริงกับ temporary generated media
+- `test_check_environment.py`: dependency checker ด้วย mocks
+
+Integration test ต้อง:
+
+- skip อย่างชัดเจนเมื่อไม่มี tools
+- สร้าง fixture ใน temporary directory
+- ไม่ใช้ media ส่วนตัว
+- probe output ไม่ตรวจเพียง existence
+- ยืนยันว่า source ไม่เปลี่ยนเมื่อเกี่ยวข้อง
+
+Manual GUI checks ที่ unit test แทนไม่ได้:
+
+- initial state และ mode switching
+- dialog/error copy
+- controls ระหว่างงานและหลัง failure
+- progress visual
+- overwrite prompt
+- Thai text และ display scale 100/125/150%
+- close ระหว่างงาน
+
+บันทึกสิ่งที่ไม่ได้ทดสอบ ห้ามเรียก fully tested จาก unit suite อย่างเดียว
+
+## 7. เพิ่ม format หรือ feature
+
+### Output format
+
+ตรวจ extension, container, codec, encoder availability, stream maps, quality semantics และ metadata เพิ่ม command/naming/invalid-value/integration tests
+
+### Trim
+
+Normalize time, reject reversed/out-of-range, นิยาม seeking accuracy, ใช้ effective duration กับ progress และ test A/V sync
+
+### Batch
+
+สร้าง job queue/controller แยกจาก widget นิยาม collision, failure continuation, cancellation และ aggregate progress ก่อนทำ UI เริ่ม sequential
+
+### Platform preset
+
+เก็บ constraints เป็น data แยกจาก import URL ระบุ fit/crop/pad, dimension, codec, frame rate และ audio โดยไม่อ้าง official endorsement
+
+### URL/account import
+
+อย่าเริ่มจาก scraper อ่าน official API/terms ปัจจุบัน นิยาม authorization, credential storage, retention และ policy แยก importer จาก converter และห้าม DRM/access-control bypass
+
+## 8. Documentation และ release readiness
+
+เมื่อ behavior เปลี่ยน ให้อัปเดต README, USER_GUIDE และ TROUBLESHOOTING ที่เกี่ยวข้อง
+
+ก่อน release ต้องมี:
+
+- รักษา GPLv3 license และ copyright/license notices
+- Test suite ผ่าน
+- Manual GUI smoke test
+- Clean-machine test
+- FFmpeg distribution/licensing decision หาก bundle
+- Version, release notes และ checksum
+- ไม่มี media, log, credential หรือ local path ใน Git
+
+PyInstaller ยังเป็น roadmap อย่า commit `.exe`, `dist/` หรือ speculative `.spec` จน packaging slice มี acceptance criteria และ clean-machine test

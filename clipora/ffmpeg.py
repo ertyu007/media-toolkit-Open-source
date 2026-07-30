@@ -1,0 +1,220 @@
+from __future__ import annotations
+
+import json
+import math
+import shutil
+import subprocess
+from collections import deque
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
+
+class FFmpegError(RuntimeError):
+    pass
+
+
+class UnsupportedMediaError(FFmpegError):
+    pass
+
+
+@dataclass(frozen=True)
+class MediaInfo:
+    duration: float | None
+    has_video: bool
+    has_audio: bool
+    width: int | None = None
+    height: int | None = None
+
+
+@dataclass(frozen=True)
+class JobSpec:
+    source: Path
+    destination: Path
+    mode: str
+    quality: str
+    audio_format: str
+
+
+PROGRESS_KEYS = {
+    'bitrate',
+    'drop_frames',
+    'dup_frames',
+    'fps',
+    'frame',
+    'out_time',
+    'out_time_ms',
+    'out_time_us',
+    'progress',
+    'speed',
+    'stream_0_0_q',
+    'total_size',
+}
+
+
+def tools_available() -> bool:
+    return shutil.which('ffmpeg') is not None and shutil.which('ffprobe') is not None
+
+
+def _duration(value: object) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) and parsed > 0 else None
+
+
+def probe(path: Path) -> MediaInfo:
+    command = [
+        'ffprobe',
+        '-v',
+        'error',
+        '-show_entries',
+        'format=duration:stream=codec_type,width,height',
+        '-of',
+        'json',
+        str(path),
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode:
+        raise FFmpegError(result.stderr.strip() or 'อ่านข้อมูลไฟล์ไม่สำเร็จ')
+
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise FFmpegError('ข้อมูลที่ได้รับจาก ffprobe ไม่ถูกต้อง') from exc
+
+    streams = data.get('streams', [])
+    video_stream = next((stream for stream in streams if stream.get('codec_type') == 'video'), None)
+    has_audio = any(stream.get('codec_type') == 'audio' for stream in streams)
+    return MediaInfo(
+        duration=_duration(data.get('format', {}).get('duration')),
+        has_video=video_stream is not None,
+        has_audio=has_audio,
+        width=video_stream.get('width') if video_stream else None,
+        height=video_stream.get('height') if video_stream else None,
+    )
+
+
+def validate_operation(info: MediaInfo, mode: str) -> None:
+    if mode == 'audio' and not info.has_audio:
+        raise UnsupportedMediaError('ไฟล์นี้ไม่มีเสียงให้แยก')
+    if mode == 'video' and not info.has_video:
+        raise UnsupportedMediaError('ไฟล์นี้ไม่มีภาพวิดีโอสำหรับแปลง')
+
+
+def output_path(source: Path, destination: Path, mode: str, audio_format: str) -> Path:
+    suffix = f'.{audio_format.lower()}' if mode == 'audio' else '.mp4'
+    operation = 'audio' if mode == 'audio' else 'converted'
+    return destination / f'{source.stem}_{operation}{suffix}'
+
+
+def build_command(
+    source: Path,
+    target: Path,
+    mode: str,
+    quality: str,
+    audio_format: str,
+) -> list[str]:
+    command = ['ffmpeg', '-y', '-loglevel', 'error', '-i', str(source)]
+    if mode == 'audio':
+        codecs = {
+            'mp3': ['-c:a', 'libmp3lame', '-q:a', '2'],
+            'm4a': ['-c:a', 'aac', '-b:a', '192k'],
+        }
+        try:
+            codec = codecs[audio_format.lower()]
+        except KeyError as exc:
+            raise ValueError(f'ไม่รองรับรูปแบบเสียง: {audio_format}') from exc
+        command += ['-map', '0:a:0', '-vn', *codec]
+    elif mode == 'video':
+        try:
+            crf = {'High': '18', 'Balanced': '23', 'Small': '28'}[quality]
+        except KeyError as exc:
+            raise ValueError(f'ไม่รองรับระดับคุณภาพ: {quality}') from exc
+        command += [
+            '-map',
+            '0:v:0',
+            '-map',
+            '0:a:0?',
+            '-c:v',
+            'libx264',
+            '-crf',
+            crf,
+            '-preset',
+            'medium',
+            '-c:a',
+            'aac',
+            '-b:a',
+            '192k',
+            '-movflags',
+            '+faststart',
+        ]
+    else:
+        raise ValueError(f'ไม่รองรับโหมด: {mode}')
+    return [*command, '-progress', 'pipe:1', '-nostats', str(target)]
+
+
+def _timestamp_seconds(value: str) -> float | None:
+    try:
+        hours, minutes, seconds = value.split(':')
+        parsed = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) and parsed >= 0 else None
+
+
+def parse_progress_line(raw_line: str, duration: float | None) -> float | None:
+    key, separator, value = raw_line.strip().partition('=')
+    if not separator:
+        return None
+    if key == 'progress' and value == 'end':
+        return 1.0
+    if not duration:
+        return None
+    if key == 'out_time':
+        elapsed = _timestamp_seconds(value)
+    elif key == 'out_time_us':
+        try:
+            elapsed = float(value) / 1_000_000
+        except ValueError:
+            return None
+    else:
+        return None
+    if elapsed is None:
+        return None
+    return max(0.0, min(elapsed / duration, 1.0))
+
+
+def convert(
+    command: list[str],
+    target: Path,
+    duration: float | None,
+    on_progress: Callable[[float], None],
+) -> None:
+    diagnostics: deque[str] = deque(maxlen=40)
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding='utf-8',
+        errors='replace',
+        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+    )
+    assert process.stdout is not None
+    for raw_line in process.stdout:
+        progress = parse_progress_line(raw_line, duration)
+        if progress is not None:
+            on_progress(progress)
+        key = raw_line.strip().partition('=')[0]
+        if key not in PROGRESS_KEYS and raw_line.strip():
+            diagnostics.append(raw_line.strip())
+
+    process.stdout.close()
+    return_code = process.wait()
+    if return_code != 0:
+        detail = '\n'.join(diagnostics)
+        raise FFmpegError(detail or f'FFmpeg หยุดทำงานด้วยรหัส {return_code}')
+    if not target.is_file() or target.stat().st_size == 0:
+        raise FFmpegError('FFmpeg ทำงานเสร็จแต่ไม่พบไฟล์ผลลัพธ์ที่สมบูรณ์')

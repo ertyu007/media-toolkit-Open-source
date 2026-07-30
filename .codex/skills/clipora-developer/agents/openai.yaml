@@ -1,0 +1,4 @@
+interface:
+  display_name: "Clipora Developer"
+  short_description: "Build and maintain Clipora safely and consistently"
+  default_prompt: "Use $clipora-developer to implement and verify the next Clipora feature."

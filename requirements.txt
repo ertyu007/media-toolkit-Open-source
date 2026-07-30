@@ -1,0 +1,1 @@
+# Clipora MVP uses only Python's standard library.
