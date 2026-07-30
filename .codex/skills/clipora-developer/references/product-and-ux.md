@@ -49,7 +49,7 @@ Non-goals:
 
 ## 3. Current MVP
 
-The current implementation provides single local-file selection, an existing destination folder, MP3/M4A extraction, H.264/AAC MP4 conversion, three CRF quality labels, progress from FFmpeg output time, overwrite confirmation, cancellation, job-owned partial-output cleanup, atomic final replacement, close-during-work confirmation, and optional folder opening.
+The current implementation provides local-file selection plus public single-item URL import through yt-dlp, an existing destination folder, MP3/M4A extraction, H.264/AAC MP4 conversion, URL quality targets, progress, collision handling, cancellation, job-owned partial-output/workspace cleanup, atomic local conversion replacement, close-during-work confirmation, and optional folder opening. URL mode requires an owned/authorized-media acknowledgement and excludes playlists, live streams, credentials, cookies, private/paid media, and DRM.
 
 Treat anything else as proposed until verified in code.
 
@@ -65,6 +65,14 @@ Treat anything else as proposed until verified in code.
 6. Start; observe busy state and progress.
 7. Receive success naming the exact target.
 8. Optionally open its folder.
+
+### URL path
+
+1. Select URL mode and paste one public HTTP/HTTPS URL.
+2. Select audio format or video quality target and destination.
+3. Acknowledge ownership or authorization.
+4. Download through yt-dlp while observing progress or cancelling.
+5. Finalize with a collision-free name and remove the exact job workspace.
 
 ### Recovery path
 
@@ -202,6 +210,6 @@ Prioritize:
 5. Add batch processing.
 6. Add export presets.
 7. Package/test a Windows executable.
-8. Explore authorized imports as a separate capability.
+8. Harden provider compatibility and URL diagnostics without adding account/cookie bypass.
 
 Do not let a broad “download everywhere” promise displace reliability of the local conversion core.

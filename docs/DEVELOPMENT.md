@@ -48,11 +48,10 @@ python -m pip install --upgrade pip
 ```text
 app.py
   -> CliporaApp (clipora/ui.py)
-     -> snapshot JobSpec on Tk main thread
+     -> snapshot JobSpec หรือ ImportSpec on Tk main thread
      -> worker thread
-        -> probe / validate_operation
-        -> build_command
-        -> convert / FFmpeg process
+        -> local: probe -> build_command -> FFmpeg
+        -> URL: validate_url -> build_import_command -> yt-dlp/FFmpeg
      <- after callbacks for progress/success/failure
 ```
 
@@ -70,6 +69,10 @@ Entry point เท่านั้น อย่าใส่ business logic
 
 เมื่อ module โต ให้แยกตาม responsibility เป็น models/media/commands/runner/naming โดยไม่ทำ refactor ใหญ่พร้อม feature ที่ไม่เกี่ยวข้อง
 
+### `clipora/importer.py`
+
+รับผิดชอบ URL validation, yt-dlp และ Deno/Node discovery, safe argument construction, progress protocol, single-item download, collision-free finalization และ job-owned temporary directory ห้ามเพิ่ม cookies, credentials, login, private media หรือ DRM bypass โดยไม่มี product/security review ใหม่
+
 ## 4. Thread และ subprocess rules
 
 - สร้างและอ่าน Tk widgets/variables บน main thread เท่านั้น
@@ -82,6 +85,8 @@ Entry point เท่านั้น อย่าใส่ business logic
 - Success ต้องมี exit code 0 และ target ที่มีขนาดมากกว่า 0
 - Source ห้ามเป็น cleanup target
 - การเพิ่ม cancel ต้องถือ process handle ที่แน่นอน ห้าม kill ตามชื่อ process
+- URL import ต้องหยุด exact yt-dlp process tree เพราะ yt-dlp อาจเรียก FFmpeg เป็น process ลูก
+- ใช้ `--ignore-config` เพื่อไม่รับ credential/cookie/exec options จาก config ส่วนตัวโดยไม่ตั้งใจ
 
 ## 5. Workflow การเปลี่ยนโค้ด
 
@@ -117,6 +122,9 @@ python -W error::ResourceWarning -m unittest discover -s tests -v
 - `test_ffmpeg.py`: naming, command, stream validation, progress
 - `test_ffmpeg_integration.py`: FFmpeg จริงกับ temporary generated media
 - `test_check_environment.py`: dependency checker ด้วย mocks
+- `test_importer.py`: URL validation, safe yt-dlp arguments, progress, collision และ temp cleanup
+- `test_tools.py`: managed/bundled/PATH discovery และ environment override
+- `test_dependencies.py`: checksum, safe archive staging, cancellation และ install record
 
 Integration test ต้อง:
 
@@ -158,7 +166,7 @@ Normalize time, reject reversed/out-of-range, นิยาม seeking accuracy, 
 
 ### URL/account import
 
-อย่าเริ่มจาก scraper อ่าน official API/terms ปัจจุบัน นิยาม authorization, credential storage, retention และ policy แยก importer จาก converter และห้าม DRM/access-control bypass
+URL import ปัจจุบันรองรับ public single-item ผ่าน yt-dlp โดยไม่มี account/cookies และแยกจาก converter การเพิ่ม provider/account scope ต้องอ่าน official API/terms ปัจจุบัน นิยาม authorization, credential storage, retention และ policy ใหม่ ห้าม DRM/access-control bypass
 
 ## 8. Documentation และ release readiness
 
@@ -174,4 +182,17 @@ Normalize time, reject reversed/out-of-range, นิยาม seeking accuracy, 
 - Version, release notes และ checksum
 - ไม่มี media, log, credential หรือ local path ใน Git
 
-PyInstaller ยังเป็น roadmap อย่า commit `.exe`, `dist/` หรือ speculative `.spec` จน packaging slice มี acceptance criteria และ clean-machine test
+Windows release ใช้ PyInstaller แบบ onedir และ Inno Setup แบบ per-user ห้าม commit `.exe`, `build/` หรือ `dist/` ลง Git
+
+สร้าง release ในเครื่อง:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements-dev.txt
+.\scripts\build_windows.ps1
+```
+
+ข้อกำหนด build: Python 3.10+, Inno Setup 6 และ Windows x64 สคริปต์สร้าง icon, `dist\Clipora`, Setup installer และ `.sha256` ห้าม release หาก test, EXE smoke test หรือ install/open/uninstall cycle ไม่ผ่าน
+
+GitHub workflow `.github/workflows/release.yml` ทำงานเมื่อ push tag `v*` และแนบ Setup/checksum ไปที่ Release การเปลี่ยน dependency manifest ต้องอัปเดต immutable URL, version, SHA-256, source และ license ใน `clipora/dependencies.py` กับ `THIRD_PARTY_NOTICES.md` พร้อมกัน

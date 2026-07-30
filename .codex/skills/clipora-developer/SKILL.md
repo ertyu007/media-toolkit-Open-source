@@ -16,7 +16,7 @@ Act as all of the following for this repository:
 - An FFmpeg/ffprobe integration specialist who understands containers, codecs, streams, subprocess lifecycle, diagnostics, and media-quality trade-offs.
 - A test-minded product engineer who turns vague requests into observable acceptance criteria and protects user data.
 
-Pursue this product goal: make Clipora a trustworthy, ad-free, local-first Windows tool that lets users process media they own or may use, initially by extracting MP3/M4A audio and producing compatible MP4 video without modifying the original.
+Pursue this product goal: make Clipora a trustworthy, ad-free Windows tool that lets users download authorized public media or process local media, producing MP3/M4A audio or compatible MP4 video without modifying local originals.
 
 Optimize for correctness, source safety, understandable Thai UX, responsive interaction, diagnosable failures, and small verifiable increments. Do not optimize for feature count or unsupported universal-download claims.
 
@@ -27,14 +27,18 @@ Treat these as the official constraints unless repository files or an explicit u
 - Language: Python 3.10 or newer. Keep syntax and type hints compatible with the documented minimum version.
 - Primary platform: Windows 10 and Windows 11.
 - GUI framework: standard-library Tkinter/ttk; do not introduce another GUI framework incidentally.
-- Media engine: external `ffmpeg` and `ffprobe` discovered from `PATH` until a reviewed packaging decision changes this.
+- Media tools: discover through `clipora/tools.py` from explicit test override, `%LOCALAPPDATA%\Clipora\tools`, packaged resources, legacy managed location, or `PATH`.
+- First-run setup: `clipora/dependencies.py` downloads pinned Windows x64 FFmpeg/yt-dlp/Deno assets through HTTPS, enforces size limits and SHA-256, stages only allowlisted files, then installs atomically. UI belongs in `clipora/setup_ui.py`.
+- URL importer: external or Clipora-managed `yt-dlp`, plus managed/system Deno or Node.js for current full YouTube extraction. Keep its subprocess protocol isolated in `clipora/importer.py`.
 - Dependencies: prefer the Python standard library. Justify, constrain, document, and package-test every new dependency.
 - Application entry point: `app.py`.
 - UI/orchestration: `clipora/ui.py`.
 - Media core: modules under `clipora/`, currently centered on `clipora/ffmpeg.py`.
+- URL acquisition: `clipora/importer.py`; keep acquisition separate from conversion.
+- Tool discovery/setup: `clipora/tools.py`, `clipora/dependencies.py`, and `clipora/setup_ui.py`; core download/install code must not import Tkinter.
 - Tests: standard-library `unittest` under `tests/`; keep unit tests independent of a user's folders and conditionally run FFmpeg integration tests.
 - Processing model: keep probing and conversion off the Tkinter main thread; access Tk variables/widgets only on the main thread.
-- Privacy: keep media local and add no telemetry, account, upload, or remote processing implicitly.
+- Privacy: never upload local input. URL mode may contact the selected public source through yt-dlp; add no telemetry, Clipora account, credential ingestion, or remote processing implicitly.
 - Safety: never modify source media, silently overwrite output, use `shell=True`, bypass DRM/access controls, or delete a broad/user-selected directory.
 - Performance: keep the UI responsive, bound logs/memory, avoid pipe deadlocks, coalesce excessive progress events, and default to one active encode unless measurements justify concurrency.
 - Compatibility: preserve Unicode/spaces in Windows paths and make container/codec/stream behavior explicit.
@@ -134,7 +138,7 @@ Read every applicable reference when a task crosses areas.
 7. Bound progress to `0..1`; use indeterminate progress for missing/invalid duration.
 8. Preserve Unicode, spaces, parentheses, ampersands, and long paths by passing each path as one argument.
 9. Show concise Thai errors; retain bounded FFmpeg detail for diagnosis.
-10. Keep files local unless a feature explicitly declares and obtains consent for network transfer.
+10. Never upload local files. Make URL network access explicit and limit it to the user-selected public source.
 11. Support only owned or authorized media. Never implement DRM bypass, access-control circumvention, login-cookie extraction, or platform evasion.
 12. Update tests and user docs when behavior, requirements, output, or formats change.
 
@@ -163,6 +167,8 @@ Check path existence, streams, duration, codecs, destination capacity, cancellat
 
 - Put widgets, dialog flow, and display formatting in `ui.py`.
 - Put models, validation, commands, probing, and process execution in core modules under `clipora/`.
+- Put URL validation, safe yt-dlp arguments, progress parsing, process-tree cancellation, collision-free finalization, and URL temp ownership in `importer.py`.
+- Put executable lookup in `tools.py`, verified dependency installation in `dependencies.py`, and its dialog/main-thread state in `setup_ui.py`.
 - Introduce a job/service module when orchestration becomes reusable or the UI owns process details.
 - Introduce settings only when preferences persist.
 - Avoid dependencies when the standard library suffices. Justify and constrain any dependency, update instructions, and account for packaging.
@@ -214,7 +220,7 @@ Read product/UX and FFmpeg references. Separate export presets from import/downl
 
 ### Add URL or account import
 
-Read `safety-and-platforms.md` first. Pause if authorization, API, terms, or data handling is unclear. Prefer official mechanisms. Keep import separate from conversion and require review for credentials, cookies, DRM, private media, or remote processing.
+Read `safety-and-platforms.md` first. Public single-item URL import currently uses yt-dlp with `--ignore-config`, `--no-playlist`, no credentials/cookies, a 10 GB cap, exact process-tree cancellation, and a job-owned workspace. Preserve those constraints. Pause for a new review before accounts, credentials, cookies, DRM, private/paid media, playlists, live streams, or remote processing.
 
 ### Diagnose a conversion failure
 
@@ -226,7 +232,7 @@ Read `product-and-ux.md`. Preserve keyboard access, focus, contrast, resizing, s
 
 ### Package Windows output
 
-Read `testing-and-release.md`. Decide whether FFmpeg is external or bundled; document licensing/update implications. Test in a clean Windows environment.
+Read `testing-and-release.md`. Preserve the reviewed PyInstaller onedir + per-user Inno Setup design and explicit first-run download. Update immutable URL/version/SHA/source/license together, then test EXE smoke and install/open/uninstall on a clean Windows environment.
 
 ## Definition of done
 

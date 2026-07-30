@@ -45,6 +45,8 @@ Test missing/moved source, bad/unwritable destination, missing tool, missing req
 
 Use temporary directories; never write to real Downloads.
 
+For URL import, test URL validation, forbidden credential/internal-network forms, yt-dlp arguments, no-playlist/no-config constraints, progress parsing, quality mapping, collision-free naming, job-owned workspace cleanup, and cancellation that preserves unrelated files.
+
 ## 3. FFmpeg integration
 
 Gate on tool availability. Generate tiny fixtures in controlled temp space.
@@ -84,6 +86,8 @@ Keep GUI tests separable/skippable in headless environments. Audit:
 - Windows 10/11.
 - Python launch and packaged launch.
 - FFmpeg present and absent/moved.
+- First-run with all tools missing; partial tools; Node already installed; repair mode.
+- Setup download cancellation, network failure, checksum mismatch, retry, and successful reopen.
 - 100%, 125%, 150% scaling after layout changes.
 
 ### Paths
@@ -115,19 +119,18 @@ Check repeated jobs for leaked processes, threads, handles/pipes, temporary file
 
 ## 7. Packaging
 
-PyInstaller is the planned Windows path. Decide one-file vs one-folder, console visibility, icon/version metadata, FFmpeg external vs bundled, settings/log locations, signing/false positives, and upgrade behavior.
+Windows release uses PyInstaller onedir plus a per-user Inno Setup installer. Python/Tkinter are packaged; FFmpeg, yt-dlp and Deno are downloaded explicitly on first run from immutable pinned releases and are not embedded in Setup.
 
-An exploratory command is:
+Build with:
 
 ```powershell
-pyinstaller --noconsole --name Clipora app.py
+python -m pip install -r requirements-dev.txt
+.\scripts\build_windows.ps1
 ```
 
-Do not treat it as a release configuration. Use a reviewed `.spec` after assets, metadata, imports, and binaries are defined.
+Release configuration lives in `packaging/clipora.spec`, `packaging/clipora.iss`, `packaging/version_info.txt`, and `.github/workflows/release.yml`. Generated icon/build/dist/installer artifacts stay outside Git. Keep `THIRD_PARTY_NOTICES.md` synchronized with the dependency manifest.
 
-When bundling FFmpeg, include matching ffmpeg/ffprobe, resolve packaged paths, ship required notices, document update/security approach, and test size/startup. When external, provide clear discovery/setup, optional custom path, PATH restart handling, and detected-version diagnostics.
-
-Test on a clean Windows VM/account without source tree or developer Python.
+Test on a clean Windows VM/account without source tree, developer Python, FFmpeg, yt-dlp, Deno, or Node. Required evidence is Setup install, first-run download, URL/local operation, close, repair, uninstall, and no broad leftover cleanup.
 
 ## 8. Release gates
 

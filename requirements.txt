@@ -1,1 +1,4 @@
-# Clipora MVP uses only Python's standard library.
+# Clipora uses only Python's standard library at runtime.
+# FFmpeg, ffprobe, yt-dlp and Deno/Node are external commands.
+# Windows Setup Assistant can install pinned verified binaries per-user.
+# Source developers may use PATH, explicit CLIPORA_* overrides, or a Python yt-dlp module.

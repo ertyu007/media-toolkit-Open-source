@@ -40,7 +40,7 @@ A provider block is a reason to stop and reassess, not to disguise the client.
 
 ## 4. Privacy and credentials
 
-Current conversion requires no account and sends no media off-device. Preserve that property unless the user explicitly selects a clearly documented network feature.
+Local conversion requires no account and sends no media off-device. URL mode is a clearly selected network feature that contacts the pasted public source through yt-dlp. It must not read browser cookies, user config, credentials, private media, or unrelated network destinations implicitly.
 
 If authentication is introduced, use official OAuth, minimum scopes, clear data-access copy, OS-backed secret storage, sign-out/revocation, and short-lived authorization state. Never log tokens, cookies, authorization headers, or signed URLs. Never put real credentials, personal media, or user paths in fixtures/issues.
 

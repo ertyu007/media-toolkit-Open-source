@@ -24,13 +24,20 @@ Clipora ยังอยู่ในช่วงก่อน release แรก �
 
 ## Security boundaries
 
-- Clipora ประมวลผล local media และไม่มี network/account/telemetry ในรุ่นปัจจุบัน
+- Clipora ไม่มี account หรือ telemetry ไฟล์ที่ผู้ใช้เลือกจากเครื่องไม่ถูกอัปโหลด
+- โหมด URL เชื่อมต่อเว็บไซต์ต้นทางผ่าน yt-dlp และบันทึกลงเครื่องเท่านั้น
+- URL import ไม่รองรับ credential, cookie, private media, paywall หรือ DRM
 - Media เป็น untrusted parser input และถูกส่งให้ external FFmpeg
-- ผู้ใช้รับผิดชอบติดตั้งและอัปเดต FFmpeg จากแหล่งเชื่อถือได้
+- URL และข้อมูลตอบกลับจากเว็บไซต์เป็น untrusted input เช่นกัน
+- Windows Setup Assistant ดาวน์โหลด FFmpeg/yt-dlp/Deno เฉพาะ immutable HTTPS URLs ที่ระบุใน source บังคับขนาดสูงสุด ตรวจ SHA-256 และ stage ทุกไฟล์ก่อน atomic replacement
+- การอัปเดต dependency manifest ต้องตรวจ release/source/license ใหม่ ห้ามใช้ `latest` URL หรือข้าม checksum และต้องทดสอบ checksum mismatch/cancellation
+- ผู้ใช้ source อาจใช้เครื่องมือจาก PATH หรือ explicit `CLIPORA_*` override และรับผิดชอบความน่าเชื่อถือของ binary นั้น
 - Clipora ไม่ออกแบบเพื่อข้าม DRM, paywall, login หรือ access control
 - Source media ต้องไม่ถูกแก้ไขหรือลบ
 - Output cleanup ต้องจำกัดเฉพาะไฟล์ที่ job สร้างและเป็นเจ้าของ
+- URL temp cleanup ต้องจำกัดเฉพาะ directory ที่มี marker ของงานและอยู่ใต้ destination
 - Subprocess ต้องใช้ argument list และไม่ใช้ shell interpretation
+- Setup archive extraction ต้องเลือกเฉพาะ allowlisted member ที่ match เพียงหนึ่งไฟล์ ห้าม `extractall` กับ archive จาก network
 
 ## Response process
 

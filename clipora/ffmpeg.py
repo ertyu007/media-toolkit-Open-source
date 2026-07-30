@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import json
 import math
-import shutil
 import subprocess
+import sys
 import threading
 import uuid
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+
+from .tools import find_executable
 
 
 class FFmpegError(RuntimeError):
@@ -47,6 +49,7 @@ class CancellationToken:
         self._cancelled = threading.Event()
         self._lock = threading.Lock()
         self._process: subprocess.Popen[str] | None = None
+        self._terminate_tree = False
 
     @property
     def cancelled(self) -> bool:
@@ -56,26 +59,47 @@ class CancellationToken:
         self._cancelled.set()
         with self._lock:
             process = self._process
+            terminate_tree = self._terminate_tree
         if process is not None and process.poll() is None:
-            try:
-                process.terminate()
-            except OSError:
-                pass
+            self._terminate(process, terminate_tree)
 
-    def attach(self, process: subprocess.Popen[str]) -> None:
+    @staticmethod
+    def _terminate(process: subprocess.Popen[str], terminate_tree: bool) -> None:
+        if terminate_tree and sys.platform == 'win32':
+            try:
+                subprocess.run(
+                    ['taskkill', '/PID', str(process.pid), '/T', '/F'],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                    timeout=10,
+                    creationflags=(
+                        subprocess.CREATE_NO_WINDOW
+                        if hasattr(subprocess, 'CREATE_NO_WINDOW')
+                        else 0
+                    ),
+                )
+                return
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        try:
+            process.terminate()
+        except OSError:
+            pass
+
+    def attach(self, process: subprocess.Popen[str], terminate_tree: bool = False) -> None:
         with self._lock:
             self._process = process
+            self._terminate_tree = terminate_tree
             cancelled = self._cancelled.is_set()
         if cancelled and process.poll() is None:
-            try:
-                process.terminate()
-            except OSError:
-                pass
+            self._terminate(process, terminate_tree)
 
     def detach(self, process: subprocess.Popen[str]) -> None:
         with self._lock:
             if self._process is process:
                 self._process = None
+                self._terminate_tree = False
 
 
 PROGRESS_KEYS = {
@@ -95,7 +119,7 @@ PROGRESS_KEYS = {
 
 
 def tools_available() -> bool:
-    return shutil.which('ffmpeg') is not None and shutil.which('ffprobe') is not None
+    return find_executable('ffmpeg') is not None and find_executable('ffprobe') is not None
 
 
 def _duration(value: object) -> float | None:
@@ -107,8 +131,11 @@ def _duration(value: object) -> float | None:
 
 
 def probe(path: Path) -> MediaInfo:
+    ffprobe = find_executable('ffprobe')
+    if ffprobe is None:
+        raise FFmpegError('ไม่พบ ffprobe กรุณาติดตั้งเครื่องมือของ Clipora')
     command = [
-        'ffprobe',
+        str(ffprobe),
         '-v',
         'error',
         '-show_entries',
@@ -192,7 +219,8 @@ def build_command(
     quality: str,
     audio_format: str,
 ) -> list[str]:
-    command = ['ffmpeg', '-y', '-loglevel', 'error', '-i', str(source)]
+    ffmpeg = find_executable('ffmpeg')
+    command = [str(ffmpeg) if ffmpeg is not None else 'ffmpeg', '-y', '-loglevel', 'error', '-i', str(source)]
     if mode == 'audio':
         codecs = {
             'mp3': ['-c:a', 'libmp3lame', '-q:a', '2'],

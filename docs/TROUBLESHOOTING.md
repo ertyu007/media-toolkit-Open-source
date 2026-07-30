@@ -14,14 +14,24 @@
 
 ## 1. ตรวจพื้นฐาน
 
-เปิด PowerShell ในโฟลเดอร์ที่มี `app.py`:
+หากติดตั้งจาก `Clipora-Setup.exe` ให้เปิดปุ่ม **เครื่องมือ** ในโปรแกรมก่อน แล้วเลือกติดตั้งหรือซ่อมใหม่ ผู้ใช้ Setup ไม่ต้องใช้ Python หรือแก้ PATH
+
+นักพัฒนาที่รันจาก source ให้เปิด PowerShell ในโฟลเดอร์ที่มี `app.py`:
 
 ```powershell
 python scripts/check_environment.py
 python -m unittest discover -s tests -v
 ```
 
-จดหัวข้อที่ FAIL และแก้จากบนลงล่าง อย่าติดตั้ง package แบบสุ่ม เพราะ Clipora รุ่นนี้ไม่มี third-party Python runtime dependency
+จดหัวข้อที่ FAIL และแก้จากบนลงล่าง อย่าติดตั้ง package แบบสุ่ม
+
+### Setup Assistant ดาวน์โหลดไม่สำเร็จ
+
+- ตรวจอินเทอร์เน็ต firewall, proxy และพื้นที่ว่าง
+- กด **เครื่องมือ → ติดตั้งใหม่ / ซ่อมเครื่องมือ**
+- โปรแกรมดาวน์โหลดผ่าน HTTPS และไม่ยอมติดตั้งไฟล์ที่ checksum ไม่ตรง
+- หากขึ้น `checksum ไม่ตรง` อย่าฝืนรันไฟล์ ให้เปิด issue พร้อมชื่อเครื่องมือและข้อความผิดพลาด แต่ห้ามแนบไฟล์ executable ที่สงสัย
+- ไฟล์ชั่วคราวของงานที่ล้มเหลวจะถูกล้าง เครื่องมือเดิมที่ใช้งานได้จะไม่ถูกแทนที่ก่อนตรวจครบ
 
 ## 2. Python และ Tkinter
 
@@ -60,6 +70,10 @@ python -c 'import tkinter; print(tkinter.TkVersion)'
 
 ### `ไม่พบ FFmpeg`
 
+รุ่น Setup: เปิด **เครื่องมือ** แล้วกดติดตั้ง/ซ่อม Clipora จะเก็บ `ffmpeg.exe` และ `ffprobe.exe` ใน `%LOCALAPPDATA%\Clipora\tools`
+
+รุ่น source ตรวจ PATH:
+
 ตรวจ:
 
 ```powershell
@@ -89,6 +103,36 @@ ffprobe -version
 ```
 
 จัด PATH ให้คู่ที่ต้องการมาก่อน หลีกเลี่ยง ffmpeg กับ ffprobe คนละ distribution/version
+
+### `ไม่พบ yt-dlp`
+
+รุ่น Setup: ใช้เมนู **เครื่องมือ** โดยไม่ต้องเปิด PowerShell
+
+รุ่น source ตรวจและติดตั้ง:
+
+ตรวจและติดตั้ง:
+
+```powershell
+Get-Command yt-dlp
+winget install yt-dlp.yt-dlp
+winget install DenoLand.Deno
+yt-dlp --version
+deno --version
+```
+
+เปิด PowerShell และ Clipora ใหม่หลังติดตั้ง หากเว็บไซต์ที่เคยใช้ได้เริ่มล้มเหลว ให้อัปเดตจากช่องทางติดตั้งเดิม หรือใช้ `yt-dlp -U` เมื่อเป็น official release binary
+
+หาก WinGet ใช้งานไม่ได้ สามารถวาง official `yt-dlp.exe` ไว้ที่ `%LOCALAPPDATA%\\Clipora\\bin\\yt-dlp.exe` ได้ Clipora จะตรวจตำแหน่งนี้โดยไม่ต้องแก้ PATH ควรดาวน์โหลดจากหน้า release ทางการและตรวจ checksum ก่อนใช้งาน
+
+หาก YouTube แจ้งว่าไม่พบ JavaScript runtime ให้ติดตั้ง Deno หรือ Node.js แล้วเปิดโปรแกรมใหม่ Clipora จะส่ง runtime ที่พบให้ yt-dlp โดยอัตโนมัติ
+
+### ดาวน์โหลดลิงก์ไม่สำเร็จ
+
+- ตรวจว่าลิงก์เปิดแบบสาธารณะได้และเป็นรายการเดียว ไม่ใช่ playlist/live
+- Clipora ไม่รับ login, cookies, private/paid media หรือ DRM
+- อัปเดต yt-dlp เพราะเว็บไซต์เปลี่ยน extractor บ่อย
+- ลองลิงก์สาธารณะที่ผู้ใช้เป็นเจ้าของหรือได้รับอนุญาต
+- อย่าโพสต์ private URL, signed URL, token หรือข้อมูลบัญชีใน issue
 
 ## 4. Input และ stream
 

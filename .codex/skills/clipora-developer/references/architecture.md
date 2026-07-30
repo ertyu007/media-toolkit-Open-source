@@ -17,9 +17,12 @@
 
 ```text
 app.py -> CliporaApp (ui.py)
-  -> validate/tools/output path
+  -> startup tool check -> ToolSetupDialog
+     -> dependency worker -> HTTPS/download limit/SHA-256/staging/atomic install
+  -> snapshot local JobSpec or URL ImportSpec
   -> worker Thread
-     -> probe -> build_command -> convert -> ffmpeg
+     -> local: probe -> build_command -> convert -> ffmpeg
+     -> URL: validate -> build_import_command -> yt-dlp/ffmpeg
   <- root.after callbacks
 ```
 
@@ -44,6 +47,10 @@ Evolve as complexity requires:
 ```text
 clipora/
   ui.py        widgets/dialogs/main-thread transitions
+  setup_ui.py  first-run/repair dialog and worker-to-main-thread progress
+  tools.py     managed/bundled/PATH executable discovery
+  dependencies.py pinned manifest/download/checksum/safe staging/install record
+  importer.py  public URL validation/yt-dlp/progress/temp/finalization
   models.py    immutable JobSpec, MediaInfo, Progress, Result
   media.py     probe and stream validation
   commands.py  pure argument construction and presets
@@ -107,7 +114,9 @@ CREATED -> STARTING -> RUNNING -> SUCCEEDED
 - On cancel, request graceful termination, wait a bounded interval off the GUI thread, then terminate the exact process tree if needed.
 - Make cleanup idempotent.
 
-If bundling tools, resolve relative to packaged resources. If external, resolve configured path or `PATH` and include detected version in diagnostics.
+Resolve tools only through `tools.py`. Setup-managed executables live under per-user application data and take priority over `PATH`; test overrides are explicit environment variables. yt-dlp receives the resolved FFmpeg directory and JavaScript runtime path.
+
+Dependency installation must download into an owned temporary directory, allow HTTPS only, enforce a bounded size, verify the pinned archive SHA-256, extract only uniquely matched allowlisted members, stage every selected tool, and use atomic replacement. Cancellation never deletes the managed root or a previously working tool.
 
 ## 6. Errors and diagnostics
 
@@ -151,6 +160,7 @@ Store under per-user application data, not installation. Write atomically and to
 - **Preset:** Store constraints as data; separate display labels from FFmpeg values.
 - **Batch:** Create a queue/controller outside widgets. Give every job spec, state, progress, diagnostics, and target. Default to one active encode.
 - **Import:** Create a separate importer returning an authorized local source. Define provenance, temp ownership, authentication, cancellation, limits, and cleanup first.
+- **Current public URL import:** Preserve `--ignore-config`, single-item/no-live behavior, no credentials or cookies, bounded diagnostics, 10 GB limit, exact yt-dlp process-tree cancellation, and collision-free finalization from an owned workspace.
 
 ## 10. Conventions
 
