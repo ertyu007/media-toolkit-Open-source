@@ -4,6 +4,8 @@ import json
 import math
 import shutil
 import subprocess
+import threading
+import uuid
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +17,10 @@ class FFmpegError(RuntimeError):
 
 
 class UnsupportedMediaError(FFmpegError):
+    pass
+
+
+class ConversionCancelled(FFmpegError):
     pass
 
 
@@ -34,6 +40,42 @@ class JobSpec:
     mode: str
     quality: str
     audio_format: str
+
+
+class CancellationToken:
+    def __init__(self) -> None:
+        self._cancelled = threading.Event()
+        self._lock = threading.Lock()
+        self._process: subprocess.Popen[str] | None = None
+
+    @property
+    def cancelled(self) -> bool:
+        return self._cancelled.is_set()
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+        with self._lock:
+            process = self._process
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+            except OSError:
+                pass
+
+    def attach(self, process: subprocess.Popen[str]) -> None:
+        with self._lock:
+            self._process = process
+            cancelled = self._cancelled.is_set()
+        if cancelled and process.poll() is None:
+            try:
+                process.terminate()
+            except OSError:
+                pass
+
+    def detach(self, process: subprocess.Popen[str]) -> None:
+        with self._lock:
+            if self._process is process:
+                self._process = None
 
 
 PROGRESS_KEYS = {
@@ -101,6 +143,40 @@ def validate_operation(info: MediaInfo, mode: str) -> None:
         raise UnsupportedMediaError('ไฟล์นี้ไม่มีเสียงให้แยก')
     if mode == 'video' and not info.has_video:
         raise UnsupportedMediaError('ไฟล์นี้ไม่มีภาพวิดีโอสำหรับแปลง')
+
+
+def temporary_output_path(target: Path) -> Path:
+    unique = uuid.uuid4().hex
+    return target.with_name(f'.{target.stem}.clipora-{unique}{target.suffix}')
+
+
+def _is_temporary_output_for(temporary: Path, target: Path) -> bool:
+    try:
+        same_parent = temporary.parent.resolve() == target.parent.resolve()
+    except OSError:
+        return False
+    prefix = f'.{target.stem}.clipora-'
+    return (
+        temporary != target
+        and same_parent
+        and temporary.suffix.lower() == target.suffix.lower()
+        and temporary.name.startswith(prefix)
+    )
+
+
+def cleanup_temporary_output(temporary: Path, target: Path) -> None:
+    if not _is_temporary_output_for(temporary, target):
+        raise ValueError('ปฏิเสธการลบไฟล์ชั่วคราวที่ไม่ได้เป็นของงานนี้')
+    if temporary.is_file():
+        temporary.unlink()
+
+
+def finalize_output(temporary: Path, target: Path) -> None:
+    if not _is_temporary_output_for(temporary, target):
+        raise ValueError('ไฟล์ชั่วคราวไม่ตรงกับไฟล์ผลลัพธ์ของงาน')
+    if not temporary.is_file() or temporary.stat().st_size == 0:
+        raise FFmpegError('ไม่พบไฟล์ผลลัพธ์ชั่วคราวที่สมบูรณ์')
+    temporary.replace(target)
 
 
 def output_path(source: Path, destination: Path, mode: str, audio_format: str) -> Path:
@@ -191,7 +267,11 @@ def convert(
     target: Path,
     duration: float | None,
     on_progress: Callable[[float], None],
+    cancellation: CancellationToken | None = None,
 ) -> None:
+    token = cancellation or CancellationToken()
+    if token.cancelled:
+        raise ConversionCancelled('ยกเลิกงานแล้ว')
     diagnostics: deque[str] = deque(maxlen=40)
     process = subprocess.Popen(
         command,
@@ -202,17 +282,22 @@ def convert(
         errors='replace',
         creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
     )
+    token.attach(process)
     assert process.stdout is not None
-    for raw_line in process.stdout:
-        progress = parse_progress_line(raw_line, duration)
-        if progress is not None:
-            on_progress(progress)
-        key = raw_line.strip().partition('=')[0]
-        if key not in PROGRESS_KEYS and raw_line.strip():
-            diagnostics.append(raw_line.strip())
-
-    process.stdout.close()
-    return_code = process.wait()
+    try:
+        for raw_line in process.stdout:
+            progress = parse_progress_line(raw_line, duration)
+            if progress is not None:
+                on_progress(progress)
+            key = raw_line.strip().partition('=')[0]
+            if key not in PROGRESS_KEYS and raw_line.strip():
+                diagnostics.append(raw_line.strip())
+    finally:
+        process.stdout.close()
+        return_code = process.wait()
+        token.detach(process)
+    if token.cancelled:
+        raise ConversionCancelled('ยกเลิกงานแล้ว')
     if return_code != 0:
         detail = '\n'.join(diagnostics)
         raise FFmpegError(detail or f'FFmpeg หยุดทำงานด้วยรหัส {return_code}')

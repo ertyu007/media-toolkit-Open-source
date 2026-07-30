@@ -29,7 +29,7 @@ Address these pressure points only when relevant:
 
 - Worker currently reads Tk variables; snapshot on the main thread.
 - One module owns probe, naming, commands, and execution.
-- Runner has no cancellation handle.
+- Runner now has a cancellation token and exact FFmpeg process handle; preserve and extend this lifecycle.
 - Sequential stdout/stderr reading can deadlock when stderr fills.
 - Progress assumes valid duration and one field's unit.
 - Naming lacks sanitization/collision alternatives.

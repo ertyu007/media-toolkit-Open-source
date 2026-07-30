@@ -7,12 +7,17 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from .ffmpeg import (
+    CancellationToken,
+    ConversionCancelled,
     FFmpegError,
     JobSpec,
     build_command,
+    cleanup_temporary_output,
     convert,
+    finalize_output,
     output_path,
     probe,
+    temporary_output_path,
     tools_available,
     validate_operation,
 )
@@ -39,7 +44,10 @@ class CliporaApp(tk.Tk):
         self.audio_format = tk.StringVar(value='mp3')
         self.quality = tk.StringVar(value='Balanced')
         self.status = tk.StringVar(value='พร้อมเริ่มงาน')
+        self._cancellation: CancellationToken | None = None
+        self._closing = False
         self._build()
+        self.protocol('WM_DELETE_WINDOW', self._on_close)
 
     def _build(self) -> None:
         style = ttk.Style(self)
@@ -167,6 +175,8 @@ class CliporaApp(tk.Tk):
             self.destination.set(path)
 
     def _start(self) -> None:
+        if self._cancellation is not None:
+            return
         job = JobSpec(
             source=Path(self.source.get()),
             destination=Path(self.destination.get()),
@@ -193,18 +203,32 @@ class CliporaApp(tk.Tk):
             f'{target.name} มีอยู่แล้ว ต้องการเขียนทับหรือไม่?',
         ):
             return
-        self.start_button.state(['disabled'])
+        cancellation = CancellationToken()
+        self._cancellation = cancellation
+        self.start_button.configure(text='ยกเลิกงาน', command=self._cancel)
+        self.start_button.state(['!disabled'])
         self.progress['value'] = 0
         self.status.set('กำลังตรวจสอบไฟล์…')
-        threading.Thread(target=self._run, args=(job, target), daemon=True).start()
+        threading.Thread(
+            target=self._run,
+            args=(job, target, cancellation),
+            daemon=True,
+        ).start()
 
-    def _run(self, job: JobSpec, target: Path) -> None:
+    def _run(self, job: JobSpec, target: Path, cancellation: CancellationToken) -> None:
+        temporary = temporary_output_path(target)
+        outcome = 'done'
+        detail = ''
         try:
+            if cancellation.cancelled:
+                raise ConversionCancelled('ยกเลิกงานแล้ว')
             info = probe(job.source)
             validate_operation(info, job.mode)
+            if cancellation.cancelled:
+                raise ConversionCancelled('ยกเลิกงานแล้ว')
             command = build_command(
                 job.source,
-                target,
+                temporary,
                 job.mode,
                 job.quality,
                 job.audio_format,
@@ -212,20 +236,51 @@ class CliporaApp(tk.Tk):
             self.after(0, self.status.set, 'กำลังประมวลผล…')
             convert(
                 command,
-                target,
+                temporary,
                 info.duration,
-                lambda value: self.after(0, self._set_progress, value),
+                lambda value: self.after(0, self._set_progress, value, cancellation),
+                cancellation,
             )
-            self.after(0, self._done, target)
+            finalize_output(temporary, target)
+        except ConversionCancelled:
+            outcome = 'cancelled'
         except (FFmpegError, OSError, ValueError) as exc:
-            self.after(0, self._failed, str(exc))
+            outcome = 'failed'
+            detail = str(exc)
+        finally:
+            try:
+                cleanup_temporary_output(temporary, target)
+            except (OSError, ValueError) as exc:
+                outcome = 'failed'
+                detail = f'ไม่สามารถลบไฟล์ชั่วคราวได้: {exc}\n{temporary}'
 
-    def _set_progress(self, value: float) -> None:
+        if outcome == 'done':
+            self.after(0, self._done, target, cancellation)
+        elif outcome == 'cancelled':
+            self.after(0, self._cancelled, cancellation)
+        else:
+            self.after(0, self._failed, detail, cancellation)
+
+    def _set_progress(self, value: float, cancellation: CancellationToken) -> None:
+        if cancellation is not self._cancellation or cancellation.cancelled:
+            return
         self.progress['value'] = value * 100
         self.status.set(f'กำลังประมวลผล… {value * 100:.0f}%')
 
-    def _done(self, target: Path) -> None:
+    def _finish_job(self, cancellation: CancellationToken) -> bool:
+        if cancellation is not self._cancellation:
+            return False
+        self._cancellation = None
+        self.start_button.configure(text='เริ่มแปลงไฟล์', command=self._start)
         self.start_button.state(['!disabled'])
+        if self._closing:
+            self.destroy()
+            return False
+        return True
+
+    def _done(self, target: Path, cancellation: CancellationToken) -> None:
+        if not self._finish_job(cancellation):
+            return
         self.status.set(f'เสร็จแล้ว: {target.name}')
         if messagebox.askyesno(
             'สำเร็จ',
@@ -233,7 +288,35 @@ class CliporaApp(tk.Tk):
         ):
             os.startfile(target.parent)
 
-    def _failed(self, detail: str) -> None:
-        self.start_button.state(['!disabled'])
+    def _cancelled(self, cancellation: CancellationToken) -> None:
+        if not self._finish_job(cancellation):
+            return
+        self.progress['value'] = 0
+        self.status.set('ยกเลิกงานแล้ว')
+
+    def _failed(self, detail: str, cancellation: CancellationToken) -> None:
+        if not self._finish_job(cancellation):
+            return
         self.status.set('เกิดข้อผิดพลาด')
         messagebox.showerror('แปลงไฟล์ไม่สำเร็จ', detail[-1200:])
+
+    def _cancel(self) -> None:
+        cancellation = self._cancellation
+        if cancellation is None or cancellation.cancelled:
+            return
+        self.start_button.state(['disabled'])
+        self.status.set('กำลังยกเลิก…')
+        cancellation.cancel()
+
+    def _on_close(self) -> None:
+        cancellation = self._cancellation
+        if cancellation is None:
+            self.destroy()
+            return
+        if not messagebox.askyesno(
+            'กำลังประมวลผล',
+            'ต้องการยกเลิกงานและปิด Clipora หรือไม่?',
+        ):
+            return
+        self._closing = True
+        self._cancel()

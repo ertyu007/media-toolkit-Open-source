@@ -49,7 +49,7 @@ Non-goals:
 
 ## 3. Current MVP
 
-The current implementation provides single local-file selection, an existing destination folder, MP3/M4A extraction, H.264/AAC MP4 conversion, three CRF quality labels, progress from FFmpeg output time, overwrite confirmation, and optional folder opening.
+The current implementation provides single local-file selection, an existing destination folder, MP3/M4A extraction, H.264/AAC MP4 conversion, three CRF quality labels, progress from FFmpeg output time, overwrite confirmation, cancellation, job-owned partial-output cleanup, atomic final replacement, close-during-work confirmation, and optional folder opening.
 
 Treat anything else as proposed until verified in code.
 
@@ -195,14 +195,13 @@ Naming must preserve the useful source stem, add a stable operation suffix, use 
 
 Prioritize:
 
-1. Harden single-file conversion.
-2. Add cancellation and exact incomplete-output cleanup.
-3. Add stream-aware validation and clearer errors.
-4. Add trimming.
-5. Add collision-free names and recent destination.
-6. Add batch processing.
-7. Add export presets.
-8. Package/test a Windows executable.
-9. Explore authorized imports as a separate capability.
+1. Harden single-file conversion and cancellation edge cases.
+2. Add stream-aware validation and clearer errors.
+3. Add trimming.
+4. Add collision-free names and recent destination.
+5. Add batch processing.
+6. Add export presets.
+7. Package/test a Windows executable.
+8. Explore authorized imports as a separate capability.
 
 Do not let a broad “download everywhere” promise displace reliability of the local conversion core.

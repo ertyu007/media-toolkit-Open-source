@@ -140,7 +140,7 @@ Clipora จะถามก่อน overwrite หากต้องการเ�
 
 ### มีไฟล์ output หลังงานล้มเหลว
 
-รุ่นปัจจุบันยังไม่มี automatic incomplete-output cleanup ตรวจว่าไฟล์เปิด/เล่นครบก่อนใช้ หากไม่สมบูรณ์ ให้ลบเฉพาะ output ที่งานสร้าง ห้ามลบ source หรือทั้ง destination directory
+Clipora เขียนลงไฟล์ชั่วคราวที่มี `.clipora-` ในชื่อและลบไฟล์นั้นหลังยกเลิกหรือเกิด error หากยังเหลือไฟล์ชั่วคราว แสดงว่า cleanup ถูกขัดขวาง เช่น permission หรือโปรแกรมหยุดแบบไม่ปกติ ปิดโปรแกรมที่ล็อกไฟล์แล้วลบเฉพาะไฟล์ `.clipora-` ที่ตรวจแล้วว่าเป็น partial output ห้ามลบ source หรือทั้ง destination directory
 
 ## 6. Progress และ performance
 

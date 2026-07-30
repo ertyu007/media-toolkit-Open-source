@@ -1,12 +1,19 @@
 import unittest
+from tempfile import TemporaryDirectory
 from pathlib import Path
 
 from clipora.ffmpeg import (
+    CancellationToken,
+    ConversionCancelled,
     MediaInfo,
     UnsupportedMediaError,
     build_command,
+    cleanup_temporary_output,
+    convert,
+    finalize_output,
     output_path,
     parse_progress_line,
+    temporary_output_path,
     validate_operation,
 )
 
@@ -87,6 +94,55 @@ class ProgressParserTests(unittest.TestCase):
         self.assertIsNone(parse_progress_line('out_time=nope', 10.0))
         self.assertIsNone(parse_progress_line('frame=20', 10.0))
         self.assertIsNone(parse_progress_line('out_time=00:00:01.000000', None))
+
+
+class OutputLifecycleTests(unittest.TestCase):
+    def test_temporary_output_keeps_directory_and_extension(self):
+        target = Path('out/clip_audio.mp3')
+        temporary = temporary_output_path(target)
+        self.assertEqual(temporary.parent, target.parent)
+        self.assertEqual(temporary.suffix, target.suffix)
+        self.assertNotEqual(temporary, target)
+        self.assertTrue(temporary.name.startswith('.clip_audio.clipora-'))
+
+    def test_finalize_replaces_existing_target_only_after_success(self):
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / 'result.mp3'
+            temporary = temporary_output_path(target)
+            target.write_bytes(b'original')
+            temporary.write_bytes(b'completed output')
+
+            finalize_output(temporary, target)
+
+            self.assertEqual(target.read_bytes(), b'completed output')
+            self.assertFalse(temporary.exists())
+
+    def test_cleanup_removes_only_matching_temporary_output(self):
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / 'result.mp3'
+            temporary = temporary_output_path(target)
+            unrelated = Path(directory) / 'unrelated.mp3'
+            temporary.write_bytes(b'partial')
+            unrelated.write_bytes(b'keep')
+
+            cleanup_temporary_output(temporary, target)
+
+            self.assertFalse(temporary.exists())
+            self.assertTrue(unrelated.exists())
+            with self.assertRaises(ValueError):
+                cleanup_temporary_output(unrelated, target)
+
+    def test_pre_cancelled_conversion_does_not_start_process(self):
+        cancellation = CancellationToken()
+        cancellation.cancel()
+        with self.assertRaises(ConversionCancelled):
+            convert(
+                ['ffmpeg', 'this command must not run'],
+                Path('unused.mp4'),
+                1.0,
+                lambda _: None,
+                cancellation,
+            )
 
 
 if __name__ == '__main__':
