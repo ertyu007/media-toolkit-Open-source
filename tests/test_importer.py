@@ -69,13 +69,22 @@ class YtDlpDiscoveryTests(unittest.TestCase):
 
 
 class ImportCommandTests(unittest.TestCase):
-    def make_spec(self, mode='video', quality='สูงสุด', audio_format='mp3'):
+    def make_spec(
+        self,
+        mode='video',
+        quality='สูงสุด',
+        audio_format='mp3',
+        video_format='mp4',
+        fps='สูงสุด',
+    ):
         return ImportSpec(
             url='https://example.com/watch/123',
             destination=Path('output'),
             mode=mode,
             quality=quality,
             audio_format=audio_format,
+            video_format=video_format,
+            fps=fps,
         )
 
     def test_video_command_is_single_item_public_download(self):
@@ -91,11 +100,13 @@ class ImportCommandTests(unittest.TestCase):
 
     def test_video_quality_limits_are_explicit(self):
         expected = {
+            '2160p': 'res:2160,fps,vcodec:h264,acodec:aac',
             '1080p': 'res:1080,fps,vcodec:h264,acodec:aac',
             '720p': 'res:720,fps,vcodec:h264,acodec:aac',
             '480p': 'res:480,fps,vcodec:h264,acodec:aac',
+            '360p': 'res:360,fps,vcodec:h264,acodec:aac',
         }
-        self.assertEqual(VIDEO_QUALITIES, ('สูงสุด', '1080p', '720p', '480p'))
+        self.assertEqual(VIDEO_QUALITIES, ('สูงสุด', '2160p', '1080p', '720p', '480p', '360p'))
         for quality, sort_value in expected.items():
             with self.subTest(quality=quality):
                 command = build_import_command(
@@ -104,6 +115,34 @@ class ImportCommandTests(unittest.TestCase):
                     Path('temporary'),
                 )
                 self.assertIn(sort_value, command)
+
+    def test_video_command_applies_fps_cap_to_format_selector(self):
+        command = build_import_command(
+            ['yt-dlp'],
+            self.make_spec(fps='60'),
+            Path('temporary'),
+        )
+        format_selector = command[command.index('--format') + 1]
+        self.assertIn('[fps<=60]', format_selector)
+
+    def test_video_command_without_fps_cap_keeps_default_selector(self):
+        command = build_import_command(
+            ['yt-dlp'],
+            self.make_spec(fps='สูงสุด'),
+            Path('temporary'),
+        )
+        format_selector = command[command.index('--format') + 1]
+        self.assertNotIn('[fps', format_selector)
+        self.assertIn('bv*[ext=mp4]+ba[ext=m4a]', format_selector)
+
+    def test_video_command_mov_import_still_downloads_mp4_source(self):
+        command = build_import_command(
+            ['yt-dlp'],
+            self.make_spec(video_format='mov'),
+            Path('temporary'),
+        )
+        self.assertEqual(command[command.index('--merge-output-format') + 1], 'mp4')
+        self.assertEqual(command[command.index('--remux-video') + 1], 'mp4')
 
     def test_audio_command_extracts_requested_format(self):
         command = build_import_command(
@@ -131,7 +170,13 @@ class ImportCommandTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_import_command(
                 ['yt-dlp'],
-                self.make_spec(mode='audio', audio_format='wav'),
+                self.make_spec(mode='audio', audio_format='aiff'),
+                Path('temporary'),
+            )
+        with self.assertRaises(ValueError):
+            build_import_command(
+                ['yt-dlp'],
+                self.make_spec(mode='video', video_format='mkv'),
                 Path('temporary'),
             )
 

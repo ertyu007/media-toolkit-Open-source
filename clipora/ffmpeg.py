@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import subprocess
 import sys
 import threading
@@ -12,6 +13,21 @@ from pathlib import Path
 from typing import Callable
 
 from .tools import find_executable
+
+
+AUDIO_FORMATS = ('mp3', 'm4a', 'wav', 'flac', 'opus')
+VIDEO_CONTAINERS = ('mp4', 'mov')
+VIDEO_QUALITY_PRESETS = ('High', 'Balanced', 'Small')
+FPS_OPTIONS = ('สูงสุด', '60', '30')
+PRORES_PROFILES = {
+    'High': '3',
+    'Balanced': '2',
+    'Small': '1',
+    'สูงสุด': '3',
+    '1080p': '3',
+    '720p': '2',
+    '480p': '1',
+}
 
 
 class FFmpegError(RuntimeError):
@@ -42,6 +58,8 @@ class JobSpec:
     mode: str
     quality: str
     audio_format: str
+    video_format: str = 'mp4'
+    fps: str = 'สูงสุด'
 
 
 class CancellationToken:
@@ -212,10 +230,52 @@ def finalize_output(temporary: Path, target: Path) -> None:
     temporary.replace(target)
 
 
-def output_path(source: Path, destination: Path, mode: str, audio_format: str) -> Path:
-    suffix = f'.{audio_format.lower()}' if mode == 'audio' else '.mp4'
-    operation = 'audio' if mode == 'audio' else 'converted'
+def output_path(
+    source: Path,
+    destination: Path,
+    mode: str,
+    audio_format: str,
+    video_format: str = 'mp4',
+) -> Path:
+    if mode == 'audio':
+        suffix = f'.{audio_format.lower()}'
+        operation = 'audio'
+    else:
+        suffix = f'.{video_format.lower()}'
+        operation = 'converted'
     return destination / f'{source.stem}_{operation}{suffix}'
+
+
+def prores_encoder() -> str | None:
+    ffmpeg = find_executable('ffmpeg')
+    if ffmpeg is None:
+        return None
+    try:
+        result = subprocess.run(
+            [str(ffmpeg), '-hide_banner', '-encoders'],
+            capture_output=True,
+            text=True,
+            check=False,
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+        )
+    except OSError:
+        return None
+    if result.returncode:
+        return None
+    for candidate in ('prores_ks', 'prores', 'prores_aw'):
+        if re.search(rf'(?m)^\s*[VFS.]+\s+{candidate}\b', result.stdout):
+            return candidate
+    return None
+
+
+def _fps_value(fps: str) -> str | None:
+    digits = ''.join(character for character in fps if character.isdigit())
+    if not digits:
+        return None
+    value = int(digits)
+    if value < 1:
+        return None
+    return str(value)
 
 
 def build_command(
@@ -224,6 +284,8 @@ def build_command(
     mode: str,
     quality: str,
     audio_format: str,
+    video_format: str = 'mp4',
+    fps: str = 'สูงสุด',
 ) -> list[str]:
     ffmpeg = find_executable('ffmpeg')
     command = [str(ffmpeg) if ffmpeg is not None else 'ffmpeg', '-y', '-loglevel', 'error', '-i', str(source)]
@@ -231,6 +293,9 @@ def build_command(
         codecs = {
             'mp3': ['-c:a', 'libmp3lame', '-q:a', '2'],
             'm4a': ['-c:a', 'aac', '-b:a', '192k'],
+            'wav': ['-c:a', 'pcm_s16le'],
+            'flac': ['-c:a', 'flac'],
+            'opus': ['-c:a', 'libopus', '-b:a', '160k'],
         }
         try:
             codec = codecs[audio_format.lower()]
@@ -238,31 +303,86 @@ def build_command(
             raise ValueError(f'ไม่รองรับรูปแบบเสียง: {audio_format}') from exc
         command += ['-map', '0:a:0', '-vn', *codec]
     elif mode == 'video':
-        try:
-            crf = {'High': '18', 'Balanced': '23', 'Small': '28'}[quality]
-        except KeyError as exc:
-            raise ValueError(f'ไม่รองรับระดับคุณภาพ: {quality}') from exc
-        command += [
-            '-map',
-            '0:v:0',
-            '-map',
-            '0:a:0?',
-            '-c:v',
-            'libx264',
-            '-crf',
-            crf,
-            '-preset',
-            'medium',
-            '-c:a',
-            'aac',
-            '-b:a',
-            '192k',
-            '-movflags',
-            '+faststart',
-        ]
+        container = video_format.lower()
+        if container == 'mp4':
+            try:
+                crf = {'High': '18', 'Balanced': '23', 'Small': '28'}[quality]
+            except KeyError as exc:
+                raise ValueError(f'ไม่รองรับระดับคุณภาพ: {quality}') from exc
+            command += [
+                '-map',
+                '0:v:0',
+                '-map',
+                '0:a:0?',
+                '-c:v',
+                'libx264',
+                '-crf',
+                crf,
+                '-preset',
+                'medium',
+                '-c:a',
+                'aac',
+                '-b:a',
+                '192k',
+                '-movflags',
+                '+faststart',
+            ]
+        elif container == 'mov':
+            encoder = prores_encoder()
+            if encoder is None:
+                raise ValueError(
+                    'FFmpeg ที่ติดตั้งไม่รองรับ ProRes กรุณาเลือก MP4 หรืออัปเดตเครื่องมือ'
+                )
+            try:
+                profile = PRORES_PROFILES[quality]
+            except KeyError as exc:
+                raise ValueError(f'ไม่รองรับระดับคุณภาพ: {quality}') from exc
+            command += [
+                '-map',
+                '0:v:0',
+                '-map',
+                '0:a:0?',
+                '-c:v',
+                encoder,
+                '-profile:v',
+                profile,
+                '-pix_fmt',
+                'yuv422p10le',
+                '-c:a',
+                'pcm_s16le',
+            ]
+        else:
+            raise ValueError(f'ไม่รองรับรูปแบบไฟล์วิดีโอ: {video_format}')
+        fps_value = _fps_value(fps)
+        if fps_value is not None:
+            command += ['-r', fps_value]
     else:
         raise ValueError(f'ไม่รองรับโหมด: {mode}')
     return [*command, '-progress', 'pipe:1', '-nostats', str(target)]
+
+
+def convert_for_after_effects(
+    source: Path,
+    target: Path,
+    quality: str,
+    on_progress: Callable[[float], None],
+    cancellation: CancellationToken | None = None,
+    fps: str = 'สูงสุด',
+) -> Path:
+    info = probe(source)
+    if not info.has_video:
+        raise UnsupportedMediaError('ไฟล์นี้ไม่มีภาพวิดีโอสำหรับแปลงเป็น ProRes')
+    command = build_command(
+        source,
+        target,
+        'video',
+        quality,
+        'm4a',
+        video_format='mov',
+        fps=fps,
+    )
+    convert(command, target, info.duration, on_progress, cancellation)
+    return target
 
 
 def _timestamp_seconds(value: str) -> float | None:

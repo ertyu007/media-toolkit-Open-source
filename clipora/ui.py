@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import threading
 import tkinter as tk
+import webbrowser
 from pathlib import Path
 from tkinter import filedialog, font as tkfont, messagebox, ttk
 
@@ -11,6 +12,7 @@ from .ffmpeg import (
     ConversionCancelled,
     FFmpegError,
     JobSpec,
+    VIDEO_QUALITY_PRESETS,
     build_command,
     cleanup_temporary_output,
     convert,
@@ -30,6 +32,7 @@ from .importer import (
     validate_url,
     ytdlp_available,
 )
+from .legal import DMCA_EMAIL, DMCA_NOTE, DISCLAIMER_TEXT, build_dmca_mailto
 from .setup_ui import ToolSetupDialog
 from .tools import missing_required_tools
 
@@ -43,6 +46,16 @@ MUTED = '#96a3b8'
 ACCENT = '#7c5cff'
 ACCENT_HOVER = '#6c4df0'
 DANGER = '#e35d6a'
+
+AUDIO_FORMAT_LABELS = ('MP3', 'M4A', 'WAV', 'FLAC', 'OPUS')
+AUDIO_FORMAT_VALUES = {'MP3': 'mp3', 'M4A': 'm4a', 'WAV': 'wav', 'FLAC': 'flac', 'OPUS': 'opus'}
+VIDEO_FORMAT_LABELS = ('MP4  •  เล่นได้ทั่วไป', 'MOV  •  ProRes (After Effects)')
+VIDEO_FORMAT_VALUES = {
+    'MP4  •  เล่นได้ทั่วไป': 'mp4',
+    'MOV  •  ProRes (After Effects)': 'mov',
+}
+FPS_LABELS = ('สูงสุด', '60fps', '30fps')
+FPS_VALUES = {'สูงสุด': 'สูงสุด', '60fps': '60', '30fps': '30'}
 
 
 def format_file_size(size: int) -> str:
@@ -96,7 +109,9 @@ class CliporaApp(tk.Tk):
         self.input_kind = tk.StringVar(value='url')
         self.destination = tk.StringVar(value=str(Path.home() / 'Downloads'))
         self.mode = tk.StringVar(value='video')
-        self.audio_format = tk.StringVar(value='mp3')
+        self.audio_format = tk.StringVar(value='MP3')
+        self.video_format = tk.StringVar(value=VIDEO_FORMAT_LABELS[0])
+        self.fps = tk.StringVar(value=FPS_LABELS[0])
         self.quality = tk.StringVar(value='Balanced')
         self.authorized = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value='พร้อมเริ่มงาน')
@@ -186,6 +201,13 @@ class CliporaApp(tk.Tk):
             background='#111827',
             foreground=MUTED,
             font=(self.ui_font, 9),
+        )
+        style.configure(
+            'Pill.TLabel',
+            background=ACCENT,
+            foreground='#ffffff',
+            font=(self.ui_font, 9, 'bold'),
+            padding=(10, 4),
         )
         style.configure(
             'Dark.TEntry',
@@ -344,9 +366,16 @@ class CliporaApp(tk.Tk):
         ttk.Label(header, text='Clipora', style='Heading.TLabel').grid(row=0, column=1, sticky='w')
         ttk.Label(
             header,
-            text='ดาวน์โหลด แปลงวิดีโอ และแยกเสียงบนเครื่องของคุณ',
+            text='แปลงวิดีโอ 360p–4K, แยกเสียง และ ProRes สำหรับ After Effects — บนเครื่องของคุณ',
             style='Muted.TLabel',
         ).grid(row=1, column=1, sticky='w')
+        ttk.Label(header, text='สร้างโดย ertyu.dev', style='Pill.TLabel').grid(
+            row=0,
+            column=2,
+            rowspan=2,
+            padx=(0, 10),
+            sticky='e',
+        )
         ttk.Button(
             header,
             text='เครื่องมือ',
@@ -354,7 +383,7 @@ class CliporaApp(tk.Tk):
             command=lambda: self._open_tool_setup(repair_mode=True),
         ).grid(
             row=0,
-            column=2,
+            column=3,
             rowspan=2,
             sticky='e',
         )
@@ -425,13 +454,49 @@ class CliporaApp(tk.Tk):
             textvariable=self.source_detail,
             style='CardMuted.TLabel',
         ).grid(row=0, column=0, sticky='w')
+        link_font = (self.ui_font, 9, 'underline')
+        self.rights_row = ttk.Frame(source_meta, style='Card.TFrame')
+        self.rights_row.grid(row=1, column=0, sticky='w', pady=(6, 0))
         self.rights_check = ttk.Checkbutton(
-            source_meta,
-            text='ฉันมีสิทธิ์ดาวน์โหลดสื่อนี้',
+            self.rights_row,
+            text='ฉันยืนยันว่าอ่านและยอมรับ',
             variable=self.authorized,
         )
-        self.rights_check.grid(row=1, column=0, sticky='w', pady=(5, 0))
-        self.rights_check.grid_remove()
+        self.rights_check.pack(side='left')
+        self.disclaimer_link = tk.Label(
+            self.rights_row,
+            text='คำปฏิเสธด้านลิขสิทธิ์',
+            bg=CARD,
+            fg=ACCENT,
+            font=link_font,
+            cursor='hand2',
+        )
+        self.disclaimer_link.pack(side='left')
+        self.disclaimer_link.bind('<Button-1>', lambda _event: self._open_disclaimer())
+        ttk.Label(
+            self.rights_row,
+            text='แล้ว และจะไม่ดาวน์โหลดเนื้อหาที่มีลิขสิทธิ์',
+            style='CardMuted.TLabel',
+        ).pack(side='left')
+        self.dmca_row = ttk.Frame(source_meta, style='Card.TFrame')
+        self.dmca_row.grid(row=2, column=0, sticky='w', pady=(2, 0))
+        ttk.Label(
+            self.dmca_row,
+            text='ต้องการบล็อกการดาวน์โหลดวิดีโอที่มีลิขสิทธิ์?',
+            style='CardMuted.TLabel',
+        ).pack(side='left')
+        self.dmca_link = tk.Label(
+            self.dmca_row,
+            text='รายงานได้ที่นี่',
+            bg=CARD,
+            fg=ACCENT,
+            font=link_font,
+            cursor='hand2',
+        )
+        self.dmca_link.pack(side='left', padx=(4, 0))
+        self.dmca_link.bind('<Button-1>', lambda _event: self._open_dmca())
+        self.rights_row.grid_remove()
+        self.dmca_row.grid_remove()
 
         ttk.Separator(card, style='Card.TSeparator').grid(row=4, column=0, sticky='ew', pady=(0, 12))
 
@@ -463,10 +528,11 @@ class CliporaApp(tk.Tk):
         )
 
         ttk.Separator(card, style='Card.TSeparator').grid(row=7, column=0, sticky='ew', pady=(0, 12))
-        ttk.Label(card, text='03  เลือกรูปแบบ', style='Step.TLabel').grid(row=8, column=0, sticky='w')
+        ttk.Label(card, text='03  เลือกรูปแบบผลลัพธ์', style='Step.TLabel').grid(row=8, column=0, sticky='w')
         options = ttk.Frame(card, style='Card.TFrame')
         options.grid(row=9, column=0, sticky='ew', pady=(5, 0))
         options.columnconfigure(0, weight=1)
+
         mode_options = ttk.Frame(options, style='Card.TFrame')
         mode_options.grid(row=0, column=0, sticky='w')
         self.audio_radio = ttk.Radiobutton(
@@ -480,7 +546,7 @@ class CliporaApp(tk.Tk):
         self.audio_radio.pack(side='left')
         self.video_radio = ttk.Radiobutton(
             mode_options,
-            text='แปลงเป็น MP4',
+            text='แปลงเป็นวิดีโอ',
             variable=self.mode,
             value='video',
             command=self._sync_options,
@@ -488,28 +554,55 @@ class CliporaApp(tk.Tk):
         )
         self.video_radio.pack(side='left', padx=(6, 0))
 
-        format_options = ttk.Frame(options, style='Card.TFrame')
-        format_options.grid(row=0, column=1, sticky='e')
-        self.option_label = ttk.Label(format_options, style='CardMuted.TLabel')
-        self.option_label.grid(row=0, column=0, padx=(0, 10))
+        result_options = ttk.Frame(options, style='Card.TFrame')
+        result_options.grid(row=0, column=1, sticky='e')
+        self.option_label = ttk.Label(result_options, style='CardMuted.TLabel')
+        self.option_label.grid(row=0, column=0, padx=(0, 10), sticky='e')
         self.format_box = ttk.Combobox(
-            format_options,
+            result_options,
             textvariable=self.audio_format,
-            values=('mp3', 'm4a'),
-            state='readonly',
-            style='Dark.TCombobox',
-            width=10,
-        )
-        self.format_box.grid(row=0, column=1)
-        self.quality_box = ttk.Combobox(
-            format_options,
-            textvariable=self.quality,
-            values=('High', 'Balanced', 'Small'),
+            values=AUDIO_FORMAT_LABELS,
             state='readonly',
             style='Dark.TCombobox',
             width=12,
         )
-        self.quality_box.grid(row=0, column=1)
+        self.format_box.grid(row=0, column=1)
+        self.video_format_box = ttk.Combobox(
+            result_options,
+            textvariable=self.video_format,
+            values=VIDEO_FORMAT_LABELS,
+            state='readonly',
+            style='Dark.TCombobox',
+            width=30,
+        )
+        self.video_format_box.grid(row=0, column=1)
+
+        detail_options = ttk.Frame(options, style='Card.TFrame')
+        detail_options.grid(row=1, column=0, columnspan=2, sticky='ew', pady=(10, 0))
+        detail_options.columnconfigure(1, weight=1)
+        detail_options.columnconfigure(3, weight=1)
+        self.quality_label = ttk.Label(detail_options, text='คุณภาพ', style='CardMuted.TLabel')
+        self.quality_label.grid(row=0, column=0, padx=(0, 8), sticky='e')
+        self.quality_box = ttk.Combobox(
+            detail_options,
+            textvariable=self.quality,
+            values=VIDEO_QUALITY_PRESETS,
+            state='readonly',
+            style='Dark.TCombobox',
+            width=12,
+        )
+        self.quality_box.grid(row=0, column=1, sticky='w')
+        self.fps_label = ttk.Label(detail_options, text='เฟรมเรต', style='CardMuted.TLabel')
+        self.fps_label.grid(row=0, column=2, padx=(16, 8), sticky='e')
+        self.fps_box = ttk.Combobox(
+            detail_options,
+            textvariable=self.fps,
+            values=FPS_LABELS,
+            state='readonly',
+            style='Dark.TCombobox',
+            width=10,
+        )
+        self.fps_box.grid(row=0, column=3, sticky='w')
 
         action_card = ttk.Frame(main, style='Action.TFrame', padding=(20, 14))
         action_card.grid(row=2, column=0, sticky='ew', pady=(14, 8))
@@ -543,7 +636,7 @@ class CliporaApp(tk.Tk):
         self.start_button.grid(row=2, column=0, sticky='ew', pady=(12, 0))
         ttk.Label(
             main,
-            text='ประมวลผลบนเครื่อง  •  ไม่มีโฆษณา  •  ไม่แก้ไขไฟล์ต้นฉบับ',
+            text='สร้างโดย ertyu.dev  •  ประมวลผลบนเครื่อง  •  ไม่มีโฆษณา  •  ไม่แก้ไขไฟล์ต้นฉบับ',
             style='Muted.TLabel',
             anchor='center',
         ).grid(row=3, column=0, sticky='ew')
@@ -559,7 +652,9 @@ class CliporaApp(tk.Tk):
             self.audio_radio,
             self.video_radio,
             self.format_box,
+            self.video_format_box,
             self.quality_box,
+            self.fps_box,
         ]
         self._sync_source_kind()
         self._sync_options()
@@ -610,31 +705,50 @@ class CliporaApp(tk.Tk):
         if self._first_run_setup:
             self.destroy()
 
+    def _open_disclaimer(self) -> None:
+        DisclaimerDialog(self)
+
+    def _open_dmca(self) -> None:
+        DmcaDialog(self)
+
+    def _audio_format_value(self) -> str:
+        return AUDIO_FORMAT_VALUES.get(self.audio_format.get(), 'mp3')
+
+    def _video_format_value(self) -> str:
+        return VIDEO_FORMAT_VALUES.get(self.video_format.get(), 'mp4')
+
+    def _fps_value(self) -> str:
+        return FPS_VALUES.get(self.fps.get(), 'สูงสุด')
+
     def _sync_options(self) -> None:
+        is_url = self.input_kind.get() == 'url'
         if self.mode.get() == 'audio':
+            self.video_format_box.grid_remove()
+            self.quality_label.grid_remove()
             self.quality_box.grid_remove()
+            self.fps_label.grid_remove()
+            self.fps_box.grid_remove()
             self.format_box.grid()
-            self.option_label.configure(text='ไฟล์เสียง')
-            action_text = (
-                'เริ่มดาวน์โหลดเสียง'
-                if self.input_kind.get() == 'url'
-                else 'เริ่มแยกเสียง'
-            )
+            self.option_label.configure(text='รูปแบบเสียง')
+            action_text = 'เริ่มดาวน์โหลดเสียง' if is_url else 'เริ่มแยกเสียง'
         else:
             self.format_box.grid_remove()
+            self.video_format_box.grid()
+            self.option_label.configure(text='รูปแบบไฟล์')
+            self.quality_label.grid()
             self.quality_box.grid()
-            self.option_label.configure(text='คุณภาพ')
-            if self.input_kind.get() == 'url':
+            self.fps_label.grid()
+            self.fps_box.grid()
+            if is_url:
                 self.quality_box.configure(values=VIDEO_QUALITIES)
                 if self.quality.get() not in VIDEO_QUALITIES:
                     self.quality.set(VIDEO_QUALITIES[0])
                 action_text = 'เริ่มดาวน์โหลดวิดีโอ'
             else:
-                local_qualities = ('High', 'Balanced', 'Small')
-                self.quality_box.configure(values=local_qualities)
-                if self.quality.get() not in local_qualities:
+                self.quality_box.configure(values=VIDEO_QUALITY_PRESETS)
+                if self.quality.get() not in VIDEO_QUALITY_PRESETS:
                     self.quality.set('Balanced')
-                action_text = 'เริ่มแปลงเป็น MP4'
+                action_text = 'เริ่มแปลงวิดีโอ'
         if self._cancellation is None:
             self.start_button.configure(text=action_text, style='Accent.TButton', command=self._start)
 
@@ -648,17 +762,22 @@ class CliporaApp(tk.Tk):
             self._active_source_kind = new_kind
             self.source.set(self._source_values[new_kind])
         if new_kind == 'url':
-            self.source_hint.set('วางลิงก์สาธารณะจาก YouTube, Facebook, Instagram หรือเว็บที่รองรับ')
+            self.source_hint.set(
+                'วางลิงก์สาธารณะจาก YouTube, Facebook, Instagram หรือเว็บที่รองรับ '
+                '• เลือกความละเอียด 360p ถึง 4K ได้'
+            )
             self.source_button_text.set('วางจากคลิปบอร์ด')
             self.audio_radio.configure(text='ดาวน์โหลดเฉพาะเสียง')
             self.video_radio.configure(text='ดาวน์โหลดวิดีโอ')
-            self.rights_check.grid()
+            self.rights_row.grid()
+            self.dmca_row.grid()
         else:
             self.source_hint.set('เลือกวิดีโอที่ต้องการประมวลผล')
             self.source_button_text.set('เลือกไฟล์')
             self.audio_radio.configure(text='แยกเสียง')
-            self.video_radio.configure(text='แปลงเป็น MP4')
-            self.rights_check.grid_remove()
+            self.video_radio.configure(text='แปลงเป็นวิดีโอ')
+            self.rights_row.grid_remove()
+            self.dmca_row.grid_remove()
         self._on_source_changed()
         self._sync_options()
 
@@ -747,7 +866,9 @@ class CliporaApp(tk.Tk):
             destination=destination,
             mode=self.mode.get(),
             quality=self.quality.get(),
-            audio_format=self.audio_format.get(),
+            audio_format=self._audio_format_value(),
+            video_format=self._video_format_value(),
+            fps=self._fps_value(),
         )
         if not job.source.is_file():
             messagebox.showwarning('ยังไม่มีไฟล์', 'กรุณาเลือกไฟล์วิดีโอก่อน')
@@ -760,7 +881,13 @@ class CliporaApp(tk.Tk):
             self._open_tool_setup()
             return
 
-        target = output_path(job.source, job.destination, job.mode, job.audio_format)
+        target = output_path(
+            job.source,
+            job.destination,
+            job.mode,
+            job.audio_format,
+            job.video_format,
+        )
         if target.exists() and not messagebox.askyesno(
             'ไฟล์มีอยู่แล้ว',
             f'{target.name} มีอยู่แล้ว ต้องการเขียนทับหรือไม่?',
@@ -807,7 +934,9 @@ class CliporaApp(tk.Tk):
             destination=destination,
             mode=self.mode.get(),
             quality=self.quality.get(),
-            audio_format=self.audio_format.get(),
+            audio_format=self._audio_format_value(),
+            video_format=self._video_format_value(),
+            fps=self._fps_value(),
         )
         cancellation = CancellationToken()
         self._begin_job(cancellation, 'กำลังตรวจสอบลิงก์…', 'กำลังดาวน์โหลด')
@@ -849,6 +978,8 @@ class CliporaApp(tk.Tk):
                 job.mode,
                 job.quality,
                 job.audio_format,
+                job.video_format,
+                job.fps,
             )
             self.after(0, self.status.set, 'กำลังประมวลผล…')
             convert(
@@ -960,3 +1091,157 @@ class CliporaApp(tk.Tk):
             return
         self._closing = True
         self._cancel()
+
+class DisclaimerDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent)
+        self.title('คำปฏิเสธด้านลิขสิทธิ์')
+        self.geometry('640x560')
+        self.minsize(580, 480)
+        self.configure(bg=BG)
+        self.transient(parent)
+        self.resizable(True, True)
+        self.protocol('WM_DELETE_WINDOW', self.destroy)
+
+        shell = ttk.Frame(self, padding=(28, 22, 28, 20))
+        shell.pack(fill='both', expand=True)
+        shell.columnconfigure(0, weight=1)
+        shell.rowconfigure(2, weight=1)
+
+        ttk.Label(shell, text='คำปฏิเสธด้านลิขสิทธิ์', style='Heading.TLabel').grid(
+            row=0, column=0, sticky='w'
+        )
+        ttk.Label(shell, text='อ่านและทำความเข้าใจก่อนเริ่มใช้งาน', style='Muted.TLabel').grid(
+            row=1, column=0, sticky='w', pady=(2, 14)
+        )
+        text = tk.Text(
+            shell,
+            wrap='word',
+            bg=FIELD,
+            fg=TEXT,
+            insertbackground=TEXT,
+            relief='flat',
+            borderwidth=0,
+            padx=16,
+            pady=14,
+            font=(getattr(parent, 'ui_font', 'Segoe UI'), 10),
+        )
+        text.grid(row=2, column=0, sticky='nsew')
+        text.insert('1.0', DISCLAIMER_TEXT)
+        text.configure(state='disabled')
+        close = ttk.Button(
+            shell,
+            text='ปิด',
+            style='Accent.TButton',
+            command=self.destroy,
+        )
+        close.grid(row=3, column=0, sticky='e', pady=(16, 0))
+        self.grab_set()
+        close.focus_set()
+
+
+class DmcaDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent)
+        self.title('รายงาน DMCA')
+        self.geometry('620x600')
+        self.minsize(580, 540)
+        self.configure(bg=BG)
+        self.transient(parent)
+        self.resizable(False, False)
+        self.protocol('WM_DELETE_WINDOW', self.destroy)
+
+        self.video_url = tk.StringVar()
+        self.email = tk.StringVar()
+
+        shell = ttk.Frame(self, padding=(28, 22, 28, 20))
+        shell.pack(fill='both', expand=True)
+        shell.columnconfigure(0, weight=1)
+
+        ttk.Label(shell, text='รายงาน DMCA', style='Heading.TLabel').grid(
+            row=0, column=0, sticky='w'
+        )
+        ttk.Label(
+            shell,
+            text='คุณเป็นเจ้าของสิทธิ์ของวิดีโอ YouTube ที่ถูกดาวน์โหลดผ่าน Clipora ใช่หรือไม่ '
+            'ส่ง URL ด้านล่าง แล้ววิดีโอนั้นจะถูกบล็อกจากการดาวน์โหลดต่อไป',
+            style='Muted.TLabel',
+            wraplength=560,
+        ).grid(row=1, column=0, sticky='w', pady=(2, 16))
+
+        ttk.Label(shell, text='YouTube Video URL', style='CardMuted.TLabel').grid(
+            row=2, column=0, sticky='w'
+        )
+        ttk.Entry(shell, textvariable=self.video_url, style='Dark.TEntry').grid(
+            row=3, column=0, sticky='ew', pady=(4, 4)
+        )
+        ttk.Label(
+            shell,
+            text='วางลิงก์เต็ม เช่น https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            style='CardMuted.TLabel',
+        ).grid(row=4, column=0, sticky='w', pady=(0, 12))
+
+        ttk.Label(shell, text='อีเมลของคุณ', style='CardMuted.TLabel').grid(
+            row=5, column=0, sticky='w'
+        )
+        ttk.Entry(shell, textvariable=self.email, style='Dark.TEntry').grid(
+            row=6, column=0, sticky='ew', pady=(4, 4)
+        )
+        ttk.Label(
+            shell,
+            text='เราอาจติดต่อกลับเพื่อขอข้อมูลเพิ่มเติมหรือแจ้งผลการคัดค้าน (counter-notice)',
+            style='CardMuted.TLabel',
+        ).grid(row=7, column=0, sticky='w', pady=(0, 12))
+
+        ttk.Label(shell, text='เหตุผล', style='CardMuted.TLabel').grid(
+            row=8, column=0, sticky='w'
+        )
+        self.reason = tk.Text(
+            shell,
+            height=6,
+            wrap='word',
+            bg=FIELD,
+            fg=TEXT,
+            insertbackground=TEXT,
+            relief='flat',
+            borderwidth=0,
+            padx=12,
+            pady=10,
+            font=(getattr(parent, 'ui_font', 'Segoe UI'), 10),
+        )
+        self.reason.grid(row=9, column=0, sticky='ew', pady=(4, 10))
+        ttk.Label(shell, text=DMCA_NOTE, style='CardMuted.TLabel', wraplength=560).grid(
+            row=10, column=0, sticky='w', pady=(0, 16)
+        )
+        ttk.Button(
+            shell,
+            text='ส่งรายงานทางอีเมล',
+            style='Accent.TButton',
+            command=self._submit,
+        ).grid(row=11, column=0, sticky='e')
+        self.grab_set()
+        self.after_idle(lambda: self.reason.focus_set())
+
+    def _submit(self) -> None:
+        url = self.video_url.get().strip()
+        email = self.email.get().strip()
+        reason = self.reason.get('1.0', 'end').strip()
+        try:
+            video_url = validate_url(url)
+        except ValueError as exc:
+            messagebox.showwarning('ลิงก์ไม่ถูกต้อง', str(exc), parent=self)
+            return
+        if not email or '@' not in email:
+            messagebox.showwarning('อีเมลไม่ถูกต้อง', 'กรุณากรอกอีเมลที่ติดต่อกลับได้', parent=self)
+            return
+        if not reason:
+            messagebox.showwarning('ยังไม่มีเหตุผล', 'กรุณาอธิบายความเป็นเจ้าของและเหตุผลที่ต้องบล็อก', parent=self)
+            return
+        self.grab_release()
+        webbrowser.open(build_dmca_mailto(video_url, email, reason))
+        self.destroy()
+        messagebox.showinfo(
+            'ส่งรายงาน DMCA',
+            f'เปิดโปรแกรมอีเมลพร้อมรายงานถึง {DMCA_EMAIL} แล้ว\n\n'
+            'เราจะตรวจสอบคำร้องและบล็อกวิดีโอนั้นจากการดาวน์โหลดต่อไป',
+        )

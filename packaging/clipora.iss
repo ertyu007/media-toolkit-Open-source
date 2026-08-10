@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.4.2"
+  #define AppVersion "0.5.0"
 #endif
 
 [Setup]
@@ -7,11 +7,11 @@ AppId={{8D7337D4-8713-4B4C-85D2-56E8E0D3A251}
 AppName=Clipora
 AppVersion={#AppVersion}
 AppVerName=Clipora {#AppVersion}
-AppPublisher=Clipora Contributors
-AppPublisherURL=https://github.com/ertyu007/media-toolkit-Open-source
+AppPublisher=ertyu.dev
+AppPublisherURL=https://ertyu.dev
 AppSupportURL=https://github.com/ertyu007/media-toolkit-Open-source/issues
 AppUpdatesURL=https://github.com/ertyu007/media-toolkit-Open-source/releases
-AppCopyright=Copyright (C) Clipora Contributors
+AppCopyright=Copyright (C) ertyu.dev
 AppComments=Download, convert and extract audio from authorized media on your PC
 DefaultDirName={localappdata}\Programs\Clipora
 DefaultGroupName=Clipora

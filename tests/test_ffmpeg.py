@@ -55,11 +55,76 @@ class FFmpegCommandTests(unittest.TestCase):
 
     def test_invalid_options_are_rejected(self):
         with self.assertRaises(ValueError):
-            build_command(Path('in'), Path('out'), 'audio', 'Balanced', 'wav')
+            build_command(Path('in'), Path('out'), 'audio', 'Balanced', 'aiff')
         with self.assertRaises(ValueError):
             build_command(Path('in'), Path('out'), 'video', 'Ultra', 'mp3')
         with self.assertRaises(ValueError):
+            build_command(Path('in'), Path('out'), 'video', 'High', 'mp3', 'avi')
+        with self.assertRaises(ValueError):
             build_command(Path('in'), Path('out'), 'unknown', 'High', 'mp3')
+
+    def test_audio_command_accepts_lossless_and_opus(self):
+        for audio_format, encoder in (
+            ('wav', 'pcm_s16le'),
+            ('flac', 'flac'),
+            ('opus', 'libopus'),
+        ):
+            with self.subTest(audio_format=audio_format):
+                command = build_command(
+                    Path('in.mp4'),
+                    Path('out'),
+                    'audio',
+                    'Balanced',
+                    audio_format,
+                )
+                self.assertIn(encoder, command)
+                self.assertIn('-vn', command)
+
+    def test_mov_output_path(self):
+        self.assertEqual(
+            output_path(Path('sample.mov'), Path('out'), 'video', 'mp3', 'mov'),
+            Path('out/sample_converted.mov'),
+        )
+
+    def test_video_command_mov_uses_prores_encoder(self):
+        command = build_command(
+            Path('in.mp4'),
+            Path('out'),
+            'video',
+            'High',
+            'mp3',
+            'mov',
+        )
+        self.assertIn('prores_ks', command)
+        self.assertEqual(command[command.index('-profile:v') + 1], '3')
+        self.assertEqual(command[command.index('-pix_fmt') + 1], 'yuv422p10le')
+        self.assertIn('pcm_s16le', command)
+
+    def test_video_command_applies_fps_cap(self):
+        for fps, expected in (('60', '-r'), ('30', '-r')):
+            with self.subTest(fps=fps):
+                command = build_command(
+                    Path('in.mp4'),
+                    Path('out'),
+                    'video',
+                    'High',
+                    'mp3',
+                    'mp4',
+                    fps,
+                )
+                self.assertEqual(command[command.index('-r') + 1], fps)
+
+    def test_video_command_without_fps_cap_has_no_rate_flag(self):
+        command = build_command(
+            Path('in.mp4'),
+            Path('out'),
+            'video',
+            'High',
+            'mp3',
+            'mp4',
+            'สูงสุด',
+        )
+        self.assertNotIn('-r', command)
 
 
 class MediaValidationTests(unittest.TestCase):

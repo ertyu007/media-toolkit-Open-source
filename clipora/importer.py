@@ -15,7 +15,13 @@ from pathlib import Path
 from typing import Callable, Sequence
 from urllib.parse import urlsplit
 
-from .ffmpeg import CancellationToken, ConversionCancelled
+from .ffmpeg import (
+    CancellationToken,
+    ConversionCancelled,
+    convert_for_after_effects,
+    probe,
+    validate_operation,
+)
 from .tools import find_executable
 
 
@@ -34,7 +40,7 @@ ALLOWED_OUTPUT_SUFFIXES = {
     '.wav',
     '.webm',
 }
-VIDEO_QUALITIES = ('สูงสุด', '1080p', '720p', '480p')
+VIDEO_QUALITIES = ('สูงสุด', '2160p', '1080p', '720p', '480p', '360p')
 _PROGRESS_PATTERN = re.compile(r'^clipora-progress:\s*([0-9]+(?:\.[0-9]+)?)%')
 _OUTPUT_PREFIX = 'clipora-output:'
 
@@ -50,6 +56,8 @@ class ImportSpec:
     mode: str
     quality: str
     audio_format: str
+    video_format: str = 'mp4'
+    fps: str = 'สูงสุด'
 
 
 def validate_url(raw_url: str) -> str:
@@ -175,7 +183,7 @@ def build_import_command(
         command += ['--ffmpeg-location', str(ffmpeg.parent)]
     if spec.mode == 'audio':
         audio_format = spec.audio_format.lower()
-        if audio_format not in {'mp3', 'm4a'}:
+        if audio_format not in {'mp3', 'm4a', 'wav', 'flac', 'opus'}:
             raise ValueError(f'ไม่รองรับรูปแบบเสียง: {spec.audio_format}')
         command += [
             '--format',
@@ -187,18 +195,31 @@ def build_import_command(
             '0',
         ]
     else:
+        if spec.video_format not in {'mp4', 'mov'}:
+            raise ValueError(f'ไม่รองรับรูปแบบไฟล์วิดีโอ: {spec.video_format}')
         try:
             sort_value = {
                 'สูงสุด': 'res,fps,vcodec:h264,acodec:aac',
+                '2160p': 'res:2160,fps,vcodec:h264,acodec:aac',
                 '1080p': 'res:1080,fps,vcodec:h264,acodec:aac',
                 '720p': 'res:720,fps,vcodec:h264,acodec:aac',
                 '480p': 'res:480,fps,vcodec:h264,acodec:aac',
+                '360p': 'res:360,fps,vcodec:h264,acodec:aac',
             }[spec.quality]
         except KeyError as exc:
             raise ValueError(f'ไม่รองรับระดับคุณภาพลิงก์: {spec.quality}') from exc
+        fps_digits = ''.join(character for character in spec.fps if character.isdigit())
+        if fps_digits:
+            fps_filter = f'[fps<={fps_digits}]'
+            download_format = (
+                f'bv*[ext=mp4]{fps_filter}+ba[ext=m4a]'
+                f'/b[ext=mp4]{fps_filter}/bv*+ba/b'
+            )
+        else:
+            download_format = 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b'
         command += [
             '--format',
-            'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b',
+            download_format,
             '--format-sort',
             sort_value,
             '--merge-output-format',
@@ -409,6 +430,28 @@ def import_url(
     workspace = create_import_workspace(spec.destination)
     try:
         command = build_import_command(command_prefix, spec, workspace)
+        if spec.video_format == 'mov':
+            def download_progress(value: float) -> None:
+                on_progress(value * 0.85)
+
+            completed = _run_import_process(command, workspace, download_progress, token)
+            info = probe(completed)
+            validate_operation(info, 'video')
+            mov_output = completed.with_suffix('.mov')
+
+            def convert_progress(value: float) -> None:
+                on_progress(0.85 + value * 0.15)
+
+            convert_for_after_effects(
+                completed,
+                mov_output,
+                spec.quality,
+                convert_progress,
+                token,
+                fps=spec.fps,
+            )
+            completed.unlink()
+            return finalize_import_output(mov_output, spec.destination)
         completed = _run_import_process(command, workspace, on_progress, token)
         return finalize_import_output(completed, spec.destination)
     finally:
