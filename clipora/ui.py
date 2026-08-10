@@ -94,7 +94,7 @@ class CliporaApp(tk.Tk):
         super().__init__()
         self.title('Clipora')
         self.geometry('900x700')
-        self.minsize(780, 650)
+        self.minsize(660, 480)
         self.configure(bg=BG)
         self._first_run_setup = bool(missing_required_tools())
         if self._first_run_setup:
@@ -388,9 +388,60 @@ class CliporaApp(tk.Tk):
             sticky='e',
         )
 
-        card = ttk.Frame(main, style='Card.TFrame', padding=(24, 16))
-        card.grid(row=1, column=0, sticky='nsew')
+        card_scroll = ttk.Frame(main, style='TFrame')
+        card_scroll.grid(row=1, column=0, sticky='nsew')
+        card_scroll.rowconfigure(0, weight=1)
+        card_scroll.columnconfigure(0, weight=1)
+        self.card_canvas = tk.Canvas(
+            card_scroll,
+            bg=CARD,
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        self.card_scrollbar = ttk.Scrollbar(
+            card_scroll,
+            orient='vertical',
+            command=self.card_canvas.yview,
+        )
+        self.card_canvas.grid(row=0, column=0, sticky='nsew')
+        self.card_scrollbar.grid(row=0, column=1, sticky='ns')
+
+        card = ttk.Frame(self.card_canvas, style='Card.TFrame', padding=(24, 16))
+        card_window = self.card_canvas.create_window((0, 0), window=card, anchor='nw')
         card.columnconfigure(0, weight=1)
+
+        def _on_card_configure(_event: tk.Event) -> None:
+            self.card_canvas.configure(scrollregion=self.card_canvas.bbox('all'))
+
+        def _on_canvas_configure(_event: tk.Event) -> None:
+            self.card_canvas.itemconfigure(card_window, width=self.card_canvas.winfo_width())
+
+        def _on_scroll_command(first: str, last: str) -> None:
+            self.card_scrollbar.set(first, last)
+            if float(first) <= 0.0 and float(last) >= 1.0:
+                self.card_scrollbar.grid_remove()
+            else:
+                self.card_scrollbar.grid()
+
+        def _on_mousewheel(event: tk.Event) -> None:
+            widget = self.winfo_containing(event.x_root, event.y_root)
+            if widget is not None and isinstance(widget, ttk.Combobox):
+                return
+            delta = int(getattr(event, 'delta', 0))
+            if delta:
+                self.card_canvas.yview_scroll(int(-delta / 120), 'units')
+
+        def _bind_wheel(_event: tk.Event) -> None:
+            self.bind_all('<MouseWheel>', _on_mousewheel)
+
+        def _unbind_wheel(_event: tk.Event) -> None:
+            self.unbind_all('<MouseWheel>')
+
+        card.bind('<Configure>', _on_card_configure)
+        self.card_canvas.bind('<Configure>', _on_canvas_configure)
+        self.card_canvas.configure(yscrollcommand=_on_scroll_command)
+        self.card_canvas.bind('<Enter>', _bind_wheel)
+        self.card_canvas.bind('<Leave>', _unbind_wheel)
 
         source_header = ttk.Frame(card, style='Card.TFrame')
         source_header.grid(row=0, column=0, sticky='ew')
@@ -1145,18 +1196,58 @@ class DmcaDialog(tk.Toplevel):
         super().__init__(parent)
         self.title('รายงาน DMCA')
         self.geometry('620x600')
-        self.minsize(580, 540)
+        self.minsize(500, 360)
         self.configure(bg=BG)
         self.transient(parent)
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.protocol('WM_DELETE_WINDOW', self.destroy)
 
         self.video_url = tk.StringVar()
         self.email = tk.StringVar()
 
-        shell = ttk.Frame(self, padding=(28, 22, 28, 20))
-        shell.pack(fill='both', expand=True)
+        self._dialog_canvas = tk.Canvas(self, bg=BG, highlightthickness=0, borderwidth=0)
+        dialog_scrollbar = ttk.Scrollbar(self, orient='vertical', command=self._dialog_canvas.yview)
+        self._dialog_canvas.grid(row=0, column=0, sticky='nsew')
+        dialog_scrollbar.grid(row=0, column=1, sticky='ns')
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+
+        shell = ttk.Frame(self._dialog_canvas, padding=(28, 22, 28, 20))
+        shell_window = self._dialog_canvas.create_window((0, 0), window=shell, anchor='nw')
         shell.columnconfigure(0, weight=1)
+
+        def _on_dialog_card_configure(_event: tk.Event) -> None:
+            self._dialog_canvas.configure(scrollregion=self._dialog_canvas.bbox('all'))
+
+        def _on_dialog_canvas_configure(_event: tk.Event) -> None:
+            self._dialog_canvas.itemconfigure(shell_window, width=self._dialog_canvas.winfo_width())
+
+        def _on_dialog_scroll(first: str, last: str) -> None:
+            dialog_scrollbar.set(first, last)
+            if float(first) <= 0.0 and float(last) >= 1.0:
+                dialog_scrollbar.grid_remove()
+            else:
+                dialog_scrollbar.grid()
+
+        def _on_dialog_mousewheel(event: tk.Event) -> None:
+            widget = self.winfo_containing(event.x_root, event.y_root)
+            if widget is not None and isinstance(widget, ttk.Combobox):
+                return
+            delta = int(getattr(event, 'delta', 0))
+            if delta:
+                self._dialog_canvas.yview_scroll(int(-delta / 120), 'units')
+
+        shell.bind('<Configure>', _on_dialog_card_configure)
+        self._dialog_canvas.bind('<Configure>', _on_dialog_canvas_configure)
+        self._dialog_canvas.configure(yscrollcommand=_on_dialog_scroll)
+        self._dialog_canvas.bind(
+            '<Enter>',
+            lambda _event: self.bind_all('<MouseWheel>', _on_dialog_mousewheel),
+        )
+        self._dialog_canvas.bind(
+            '<Leave>',
+            lambda _event: self.unbind_all('<MouseWheel>'),
+        )
 
         ttk.Label(shell, text='รายงาน DMCA', style='Heading.TLabel').grid(
             row=0, column=0, sticky='w'
