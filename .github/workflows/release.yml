@@ -12,6 +12,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     env:
+      PYTHONIOENCODING: utf-8
       CLIPORA_AZURE_ACCOUNT_URI: ${{ secrets.CLIPORA_AZURE_ACCOUNT_URI }}
       CLIPORA_AZURE_CLIENT_ID: ${{ secrets.CLIPORA_AZURE_CLIENT_ID }}
       CLIPORA_AZURE_CLIENT_SECRET: ${{ secrets.CLIPORA_AZURE_CLIENT_SECRET }}

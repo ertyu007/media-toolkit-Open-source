@@ -21,6 +21,10 @@ from clipora.dependencies import (  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
+
     parser = argparse.ArgumentParser(
         description='Stage pinned tools for the offline installer'
     )
