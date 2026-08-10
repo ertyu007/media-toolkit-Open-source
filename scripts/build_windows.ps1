@@ -1,3 +1,7 @@
+param(
+    [switch]$SkipTools
+)
+
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -12,6 +16,14 @@ python scripts/generate_icon.py
 python -m PyInstaller --noconfirm --clean packaging/clipora.spec
 if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller failed with exit code $LASTEXITCODE"
+}
+
+if (-not $SkipTools) {
+    Write-Host 'Staging bundled tools (FFmpeg, yt-dlp, Deno) into the installer...'
+    python scripts/stage_bundled_tools.py --dest (Join-Path $projectRoot 'dist\Clipora\tools')
+    if ($LASTEXITCODE -ne 0) {
+        throw "Tool staging failed with exit code $LASTEXITCODE"
+    }
 }
 
 $isccCandidates = @(

@@ -1,4 +1,6 @@
+import importlib
 import re
+import sys
 import unittest
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -8,6 +10,9 @@ from clipora.dependencies import WINDOWS_X64_DEPENDENCIES
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = PROJECT_ROOT / 'scripts'
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
 
 
 class PackagingConfigurationTests(unittest.TestCase):
@@ -39,11 +44,19 @@ class PackagingConfigurationTests(unittest.TestCase):
             'packaging/clipora.spec',
             'packaging/clipora.iss',
             'scripts/build_windows.ps1',
+            'scripts/stage_bundled_tools.py',
             'THIRD_PARTY_NOTICES.md',
         )
         for relative in required:
             with self.subTest(path=relative):
                 self.assertTrue((PROJECT_ROOT / relative).is_file())
+
+    def test_staging_script_imports_and_stages_pinned_specs(self):
+        module = importlib.import_module('stage_bundled_tools')
+        self.assertTrue(callable(getattr(module, 'main', None)))
+        self.assertIs(module.WINDOWS_X64_DEPENDENCIES, WINDOWS_X64_DEPENDENCIES)
+        for spec in module.WINDOWS_X64_DEPENDENCIES:
+            self.assertTrue(spec.destination_names)
 
 
 if __name__ == '__main__':

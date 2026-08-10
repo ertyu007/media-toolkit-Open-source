@@ -8,9 +8,9 @@ Clipora เป็น GPL-3.0-only แต่ใช้หรือช่วยต�
 - Tcl/Tk ซึ่งมากับ Python/Tkinter — license files อยู่ใน distribution ที่ PyInstaller รวบรวม
 - PyInstaller bootloader — GPL พร้อม exception สำหรับการแจก application bundle: https://pyinstaller.org/en/stable/license.html
 
-## เครื่องมือที่ Setup Assistant ดาวน์โหลด
+## เครื่องมือที่รวมอยู่ใน Windows build
 
-เครื่องมือด้านล่างไม่ได้ถูกเก็บใน Git repository หรือรวมใน `Clipora-Setup.exe` โปรแกรมดาวน์โหลดผ่าน HTTPS จาก release URL ที่ pin ไว้ ตรวจ SHA-256 แล้วเก็บใน `%LOCALAPPDATA%\Clipora\tools`
+เครื่องมือด้านล่างไม่ได้ถูกเก็บใน Git repository แต่ถูก staging ลงใน `dist\Clipora\tools` ระหว่าง build และรวมใน `Clipora-Setup.exe` ตัว build ดาวน์โหลดผ่าน HTTPS จาก release URL ที่ pin ไว้ ตรวจ SHA-256 ก่อนติดตั้ง โปรแกรมสามารถค้นหาเครื่องมือเหล่านี้ได้โดยไม่ต้องดาวน์โหลดตอนเปิดครั้งแรก และสามารถดาวน์โหลดใหม่ไปยัง `%LOCALAPPDATA%\Clipora\tools` ได้ผ่านปุ่ม **เครื่องมือ** ในแอป
 
 ### FFmpeg Essentials 8.1.2
 

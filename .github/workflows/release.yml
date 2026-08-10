@@ -26,6 +26,8 @@ jobs:
         run: python scripts/generate_icon.py
       - name: Build Clipora application
         run: python -m PyInstaller --noconfirm --clean packaging/clipora.spec
+      - name: Stage bundled tools for offline installer
+        run: python scripts/stage_bundled_tools.py --dest dist/Clipora/tools
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
       - name: Build installer and checksum
