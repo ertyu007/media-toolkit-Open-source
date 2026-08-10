@@ -36,7 +36,7 @@ jobs:
       - name: Stage bundled tools for offline installer
         run: python scripts/stage_bundled_tools.py --dest dist/Clipora/tools
       - name: Decode code-signing certificate
-        if: ${{ secrets.CLIPORA_CERT_BASE64 != '' }}
+        if: ${{ env.SIGN_CERT_BASE64 != '' }}
         shell: pwsh
         env:
           SIGN_CERT_BASE64: ${{ secrets.CLIPORA_CERT_BASE64 }}
@@ -54,7 +54,13 @@ jobs:
           & scripts/sign_windows.ps1 -Path "dist\Clipora\Clipora.exe" -Description 'Clipora desktop media toolkit' -Url 'https://github.com/ertyu007/media-toolkit-Open-source'
           if ($LASTEXITCODE -ne 0) { throw "Signing Clipora.exe failed: $LASTEXITCODE" }
       - name: Install Inno Setup
-        run: choco install innosetup --no-progress -y
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'innosetup.exe'
+          Invoke-WebRequest -Uri 'https://jrsoftware.org/download.php/is.exe' -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path -LiteralPath $iscc)) { throw "ISCC.exe not found after install: $iscc" }
       - name: Build installer, sign and checksum
         shell: pwsh
         run: |
