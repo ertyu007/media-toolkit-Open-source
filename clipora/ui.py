@@ -57,6 +57,13 @@ def format_file_size(size: int) -> str:
     return '0 B'
 
 
+def destination_path(value: str) -> Path:
+    text = value.strip()
+    if not text:
+        raise ValueError('กรุณาเลือกโฟลเดอร์บันทึกก่อนเริ่มงาน')
+    return Path(text)
+
+
 def source_summary(path_value: str) -> str:
     if not path_value.strip():
         return 'ยังไม่ได้เลือกไฟล์'
@@ -730,9 +737,14 @@ class CliporaApp(tk.Tk):
             self._start_local()
 
     def _start_local(self) -> None:
+        try:
+            destination = destination_path(self.destination.get())
+        except ValueError as exc:
+            messagebox.showwarning('ไม่พบโฟลเดอร์', str(exc))
+            return
         job = JobSpec(
             source=Path(self.source.get()),
-            destination=Path(self.destination.get()),
+            destination=destination,
             mode=self.mode.get(),
             quality=self.quality.get(),
             audio_format=self.audio_format.get(),
@@ -763,7 +775,11 @@ class CliporaApp(tk.Tk):
         ).start()
 
     def _start_url(self) -> None:
-        destination = Path(self.destination.get())
+        try:
+            destination = destination_path(self.destination.get())
+        except ValueError as exc:
+            messagebox.showwarning('ไม่พบโฟลเดอร์', str(exc))
+            return
         if not destination.is_dir():
             messagebox.showwarning('ไม่พบโฟลเดอร์', 'กรุณาเลือกโฟลเดอร์บันทึกที่มีอยู่')
             return

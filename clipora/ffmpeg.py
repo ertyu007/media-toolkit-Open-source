@@ -144,7 +144,13 @@ def probe(path: Path) -> MediaInfo:
         'json',
         str(path),
     ]
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+    )
     if result.returncode:
         raise FFmpegError(result.stderr.strip() or 'อ่านข้อมูลไฟล์ไม่สำเร็จ')
 

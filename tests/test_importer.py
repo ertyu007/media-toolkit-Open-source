@@ -12,6 +12,7 @@ from clipora.ffmpeg import CancellationToken, ConversionCancelled
 from clipora.importer import (
     ImportSpec,
     VIDEO_QUALITIES,
+    _find_completed_output,
     _run_import_process,
     build_import_command,
     cleanup_import_workspace,
@@ -187,6 +188,17 @@ class ImportWorkspaceTests(unittest.TestCase):
             self.assertEqual(target.name, 'clip (1).mp4')
             self.assertEqual(target.read_bytes(), b'downloaded')
             self.assertFalse(completed.exists())
+            cleanup_import_workspace(workspace, destination)
+
+    def test_falls_back_to_workspace_scan_when_reported_output_is_stale(self):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+            workspace = create_import_workspace(destination)
+            completed = workspace / 'คลิป.mp4'
+            completed.write_bytes(b'downloaded')
+            stale = workspace / 'intermediate.webm'
+
+            self.assertEqual(_find_completed_output(workspace, [stale]), completed.resolve())
             cleanup_import_workspace(workspace, destination)
 
     @patch('clipora.importer._run_import_process')

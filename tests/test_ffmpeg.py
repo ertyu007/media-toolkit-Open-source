@@ -1,6 +1,8 @@
 import unittest
-from tempfile import TemporaryDirectory
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from clipora.ffmpeg import (
     CancellationToken,
@@ -13,6 +15,7 @@ from clipora.ffmpeg import (
     finalize_output,
     output_path,
     parse_progress_line,
+    probe,
     temporary_output_path,
     validate_operation,
 )
@@ -74,6 +77,26 @@ class MediaValidationTests(unittest.TestCase):
         info = MediaInfo(1.0, has_video=True, has_audio=True)
         validate_operation(info, 'audio')
         validate_operation(info, 'video')
+
+
+class FFmpegProbeTests(unittest.TestCase):
+    @patch('clipora.ffmpeg.find_executable', return_value=Path('C:/fake/ffprobe.exe'))
+    @patch('clipora.ffmpeg.subprocess.run')
+    def test_probe_runs_ffprobe_hidden_on_windows(self, run, _find_executable):
+        run.return_value = SimpleNamespace(
+            returncode=0,
+            stdout='{"format":{"duration":"1.0"},"streams":[]}',
+            stderr='',
+        )
+
+        info = probe(Path('clip.mp4'))
+
+        self.assertEqual(info.duration, 1.0)
+        self.assertFalse(info.has_video)
+        self.assertFalse(info.has_audio)
+        self.assertIn('creationflags', run.call_args.kwargs)
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], str(Path('C:/fake/ffprobe.exe')))
 
 
 class ProgressParserTests(unittest.TestCase):

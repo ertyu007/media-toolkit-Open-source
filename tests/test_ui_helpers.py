@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from clipora.ui import format_file_size, source_summary
+from clipora.ui import destination_path, format_file_size, source_summary
 
 
 class FileSummaryTests(unittest.TestCase):
@@ -26,6 +26,19 @@ class FileSummaryTests(unittest.TestCase):
 
     def test_missing_source_has_recovery_message(self):
         self.assertIn('ไม่พบไฟล์', source_summary('missing-video.mp4'))
+
+
+class DestinationValidationTests(unittest.TestCase):
+    def test_empty_destination_is_rejected_not_treated_as_cwd(self):
+        with self.assertRaisesRegex(ValueError, 'โฟลเดอร์บันทึก'):
+            destination_path('')
+
+    def test_whitespace_destination_is_rejected(self):
+        with self.assertRaises(ValueError):
+            destination_path('   ')
+
+    def test_trimmed_destination_is_returned(self):
+        self.assertEqual(destination_path('  C:\\Videos  '), Path('C:\\Videos'))
 
 
 if __name__ == '__main__':

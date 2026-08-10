@@ -312,26 +312,36 @@ def finalize_import_output(completed: Path, destination: Path) -> Path:
     raise URLImportError('มีไฟล์ชื่อซ้ำจำนวนมาก กรุณาเลือกโฟลเดอร์อื่น')
 
 
-def _find_completed_output(workspace: Path, reported: Sequence[Path]) -> Path:
-    root = workspace.resolve()
-    ordered = [*reversed(reported)]
-    candidates = ordered or sorted(
-        (path for path in workspace.iterdir() if path.is_file()),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
-    for candidate in candidates:
-        path = candidate if candidate.is_absolute() else workspace / candidate
-        try:
-            resolved = path.resolve()
-            resolved.relative_to(root)
-        except (OSError, ValueError):
-            continue
+def _resolve_completed_candidate(workspace: Path, root: Path, candidate: Path) -> Path | None:
+    path = candidate if candidate.is_absolute() else workspace / candidate
+    try:
+        resolved = path.resolve()
+        resolved.relative_to(root)
         if (
             resolved.is_file()
             and resolved.stat().st_size > 0
             and resolved.suffix.lower() in ALLOWED_OUTPUT_SUFFIXES
         ):
+            return resolved
+    except (OSError, ValueError):
+        return None
+    return None
+
+
+def _find_completed_output(workspace: Path, reported: Sequence[Path]) -> Path:
+    root = workspace.resolve()
+    for candidate in reversed(reported):
+        resolved = _resolve_completed_candidate(workspace, root, candidate)
+        if resolved is not None:
+            return resolved
+    fallback = sorted(
+        (path for path in workspace.iterdir() if path.is_file()),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for candidate in fallback:
+        resolved = _resolve_completed_candidate(workspace, root, candidate)
+        if resolved is not None:
             return resolved
     raise URLImportError('ดาวน์โหลดเสร็จแต่ไม่พบไฟล์สื่อผลลัพธ์ที่สมบูรณ์')
 
