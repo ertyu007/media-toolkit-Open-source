@@ -86,7 +86,8 @@ class FFmpegCommandTests(unittest.TestCase):
             Path('out/sample_converted.mov'),
         )
 
-    def test_video_command_mov_uses_prores_encoder(self):
+    @patch('clipora.ffmpeg.prores_encoder', return_value='prores_ks')
+    def test_video_command_mov_uses_prores_encoder(self, _prores_encoder):
         command = build_command(
             Path('in.mp4'),
             Path('out'),
@@ -99,6 +100,11 @@ class FFmpegCommandTests(unittest.TestCase):
         self.assertEqual(command[command.index('-profile:v') + 1], '3')
         self.assertEqual(command[command.index('-pix_fmt') + 1], 'yuv422p10le')
         self.assertIn('pcm_s16le', command)
+
+    @patch('clipora.ffmpeg.prores_encoder', return_value=None)
+    def test_mov_requires_prores_support(self, _prores_encoder):
+        with self.assertRaisesRegex(ValueError, 'ProRes'):
+            build_command(Path('in.mp4'), Path('out'), 'video', 'High', 'mp3', 'mov')
 
     def test_video_command_applies_fps_cap(self):
         for fps, expected in (('60', '-r'), ('30', '-r')):
