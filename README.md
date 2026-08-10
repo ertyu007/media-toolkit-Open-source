@@ -43,6 +43,8 @@ Clipora คือโปรแกรมเดสก์ท็อปโอเพน
 
 ตัวติดตั้งรวม FFmpeg, yt-dlp และ Deno ไว้แล้ว จึงทำงานได้โดยไม่ต้องเชื่อมต่ออินเทอร์เน็ตตอนติดตั้ง สำหรับการติดตั้งใหม่หรือซ่อมเครื่องมือ Setup Assistant ใช้ flow แบบ Welcome → ข้อตกลง → ตรวจรายการ → ติดตั้ง → เสร็จสิ้น และไม่ดาวน์โหลดไฟล์แบบเงียบ ผู้ใช้ต้องยินยอมและกดติดตั้งก่อน ทุก URL ใช้ HTTPS มีขีดจำกัดขนาด และตรวจ checksum ที่ pin ไว้ก่อนติดตั้ง
 
+ตัวติดตั้งรองรับการลงนาม Authenticode แล้ว (แบบ .pfx หรือ Azure Trusted Signing) เพื่อลดคำเตือน SmartScreen และ false positive ของ antivirus ดู [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md) build ที่ยังไม่ลงนามจะได้ตัวติดตั้งแบบเดียวกับเดิม
+
 ## Clone และเปิดใช้งานสำหรับนักพัฒนา
 
 ```powershell
@@ -100,6 +102,7 @@ python -m pip install -r requirements-dev.txt
 - [คู่มือผู้ใช้](docs/USER_GUIDE.md)
 - [แก้ปัญหาและเก็บ Error Log](docs/TROUBLESHOOTING.md)
 - [คู่มือพัฒนาและ Architecture](docs/DEVELOPMENT.md)
+- [ลงนาม Code Signing เพื่อลดคำเตือน SmartScreen/ไวรัส](docs/CODE_SIGNING.md)
 - [แนวทางร่วมพัฒนา](CONTRIBUTING.md)
 - [รายงานช่องโหว่](SECURITY.md)
 

@@ -11,6 +11,13 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
+    env:
+      CLIPORA_AZURE_ACCOUNT_URI: ${{ secrets.CLIPORA_AZURE_ACCOUNT_URI }}
+      CLIPORA_AZURE_CLIENT_ID: ${{ secrets.CLIPORA_AZURE_CLIENT_ID }}
+      CLIPORA_AZURE_CLIENT_SECRET: ${{ secrets.CLIPORA_AZURE_CLIENT_SECRET }}
+      CLIPORA_AZURE_TENANT: ${{ secrets.CLIPORA_AZURE_TENANT }}
+      CLIPORA_AZURE_CERT_PROFILE: ${{ secrets.CLIPORA_AZURE_CERT_PROFILE }}
+      CLIPORA_AZURE_CERT_NAME: ${{ secrets.CLIPORA_AZURE_CERT_NAME }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,9 +35,27 @@ jobs:
         run: python -m PyInstaller --noconfirm --clean packaging/clipora.spec
       - name: Stage bundled tools for offline installer
         run: python scripts/stage_bundled_tools.py --dest dist/Clipora/tools
+      - name: Decode code-signing certificate
+        if: ${{ secrets.CLIPORA_CERT_BASE64 != '' }}
+        shell: pwsh
+        env:
+          SIGN_CERT_BASE64: ${{ secrets.CLIPORA_CERT_BASE64 }}
+          SIGN_CERT_PASSWORD: ${{ secrets.CLIPORA_CERT_PASSWORD }}
+        run: |
+          $cert = Join-Path $env:RUNNER_TEMP 'clipora.pfx'
+          [IO.File]::WriteAllBytes($cert, [Convert]::FromBase64String($env:SIGN_CERT_BASE64))
+          "CLIPORA_CERT_PATH=$cert" | Out-File -FilePath $env:GITHUB_ENV -Append
+          if ($env:SIGN_CERT_PASSWORD) {
+            "CLIPORA_CERT_PASSWORD=$env:SIGN_CERT_PASSWORD" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
+      - name: Sign Clipora executable
+        shell: pwsh
+        run: |
+          & scripts/sign_windows.ps1 -Path "dist\Clipora\Clipora.exe" -Description 'Clipora desktop media toolkit' -Url 'https://github.com/ertyu007/media-toolkit-Open-source'
+          if ($LASTEXITCODE -ne 0) { throw "Signing Clipora.exe failed: $LASTEXITCODE" }
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
-      - name: Build installer and checksum
+      - name: Build installer, sign and checksum
         shell: pwsh
         run: |
           $version = python -c 'from clipora import __version__; print(__version__)'
@@ -38,6 +63,8 @@ jobs:
           & $iscc "/DAppVersion=$version" packaging/clipora.iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed: $LASTEXITCODE" }
           $installer = "dist\installer\Clipora-Setup-$version-x64.exe"
+          & scripts/sign_windows.ps1 -Path $installer -Description 'Clipora Setup' -Url 'https://github.com/ertyu007/media-toolkit-Open-source'
+          if ($LASTEXITCODE -ne 0) { throw "Signing installer failed: $LASTEXITCODE" }
           $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer).Hash.ToLowerInvariant()
           Set-Content -LiteralPath "$installer.sha256" -Value "$hash  $(Split-Path -Leaf $installer)" -Encoding ascii
       - uses: actions/upload-artifact@v4

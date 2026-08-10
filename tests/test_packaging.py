@@ -43,13 +43,30 @@ class PackagingConfigurationTests(unittest.TestCase):
             '.github/workflows/release.yml',
             'packaging/clipora.spec',
             'packaging/clipora.iss',
+            'packaging/clipora.manifest',
             'scripts/build_windows.ps1',
+            'scripts/sign_windows.ps1',
             'scripts/stage_bundled_tools.py',
+            'docs/CODE_SIGNING.md',
             'THIRD_PARTY_NOTICES.md',
         )
         for relative in required:
             with self.subTest(path=relative):
                 self.assertTrue((PROJECT_ROOT / relative).is_file())
+
+    def test_application_manifest_is_standard(self):
+        manifest = (PROJECT_ROOT / 'packaging' / 'clipora.manifest').read_text(encoding='utf-8')
+        self.assertIn('requestedExecutionLevel', manifest)
+        self.assertIn('asInvoker', manifest)
+        self.assertIn('longPathAware', manifest)
+        self.assertIn('supportedOS', manifest)
+
+    def test_installer_has_professional_version_metadata(self):
+        inno = (PROJECT_ROOT / 'packaging' / 'clipora.iss').read_text(encoding='utf-8')
+        self.assertIn('VersionInfoProductName', inno)
+        self.assertIn('UninstallDisplayName', inno)
+        self.assertIn('AppCopyright', inno)
+        self.assertIn('SetupLogging=yes', inno)
 
     def test_staging_script_imports_and_stages_pinned_specs(self):
         module = importlib.import_module('stage_bundled_tools')

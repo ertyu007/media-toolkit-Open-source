@@ -4,6 +4,7 @@ from pathlib import Path
 project_root = Path(SPECPATH).parent
 icon_path = project_root / 'assets' / 'clipora.ico'
 version_path = project_root / 'packaging' / 'version_info.txt'
+manifest_path = project_root / 'packaging' / 'clipora.manifest'
 
 a = Analysis(
     [str(project_root / 'app.py')],
@@ -36,6 +37,7 @@ exe = EXE(
     console=False,
     icon=str(icon_path),
     version=str(version_path),
+    manifest=str(manifest_path),
 )
 
 coll = COLLECT(

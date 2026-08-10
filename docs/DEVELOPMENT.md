@@ -181,6 +181,7 @@ URL import ปัจจุบันรองรับ public single-item ผ่�
 - FFmpeg distribution/licensing decision หาก bundle
 - Version, release notes และ checksum
 - ไม่มี media, log, credential หรือ local path ใน Git
+- หากมี certificate: ลงนาม `Clipora.exe` และตัวติดตั้งผ่าน `scripts/sign_windows.ps1` (ตั้งค่า environment ตาม [CODE_SIGNING.md](CODE_SIGNING.md)) build ที่ไม่มี certificate จะข้ามการลงนามได้ตามปกติ
 
 Windows release ใช้ PyInstaller แบบ onedir และ Inno Setup แบบ per-user ห้าม commit `.exe`, `build/` หรือ `dist/` ลง Git
 

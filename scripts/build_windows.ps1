@@ -26,6 +26,14 @@ if (-not $SkipTools) {
     }
 }
 
+& $PSScriptRoot\sign_windows.ps1 `
+    -Path (Join-Path $projectRoot 'dist\Clipora\Clipora.exe') `
+    -Description 'Clipora desktop media toolkit' `
+    -Url 'https://github.com/ertyu007/media-toolkit-Open-source'
+if ($LASTEXITCODE -ne 0) {
+    throw "Signing Clipora.exe failed with exit code $LASTEXITCODE"
+}
+
 $isccCandidates = @(
     (Get-Command ISCC.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue),
     (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
@@ -43,6 +51,15 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $installer = Join-Path $projectRoot "dist\installer\Clipora-Setup-$version-x64.exe"
+
+& $PSScriptRoot\sign_windows.ps1 `
+    -Path $installer `
+    -Description 'Clipora Setup' `
+    -Url 'https://github.com/ertyu007/media-toolkit-Open-source'
+if ($LASTEXITCODE -ne 0) {
+    throw "Signing installer failed with exit code $LASTEXITCODE"
+}
+
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer).Hash.ToLowerInvariant()
 $checksumPath = "$installer.sha256"
 Set-Content -LiteralPath $checksumPath -Value "$hash  $(Split-Path -Leaf $installer)" -Encoding ascii

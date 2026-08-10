@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.4.1"
+  #define AppVersion "0.4.2"
 #endif
 
 [Setup]
@@ -11,20 +11,30 @@ AppPublisher=Clipora Contributors
 AppPublisherURL=https://github.com/ertyu007/media-toolkit-Open-source
 AppSupportURL=https://github.com/ertyu007/media-toolkit-Open-source/issues
 AppUpdatesURL=https://github.com/ertyu007/media-toolkit-Open-source/releases
+AppCopyright=Copyright (C) Clipora Contributors
+AppComments=Download, convert and extract audio from authorized media on your PC
 DefaultDirName={localappdata}\Programs\Clipora
 DefaultGroupName=Clipora
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist\installer
 OutputBaseFilename=Clipora-Setup-{#AppVersion}-x64
 SetupIconFile=..\assets\clipora.ico
+UninstallDisplayName=Clipora
 UninstallDisplayIcon={app}\Clipora.exe
+VersionInfoDescription=Clipora desktop media toolkit
+VersionInfoCopyright=GNU GPL v3
+VersionInfoProductName=Clipora
+VersionInfoProductVersion={#AppVersion}
+VersionInfoOriginalFileName=Clipora-Setup-{#AppVersion}-x64.exe
 LicenseFile=..\LICENSE
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
+SetupLogging=yes
 AppMutex=Clipora-8D7337D4-8713-4B4C-85D2-56E8E0D3A251
 MinVersion=10.0.17763
 
