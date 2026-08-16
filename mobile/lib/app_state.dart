@@ -22,9 +22,6 @@ class AppState extends ChangeNotifier {
   bool initialized = false;
   String? initError;
 
-  /// path ของไฟล์คุกกี้ (Netscape format) ที่ผู้ใช้ import ไว้ จะเป็น `null` ถ้ายังไม่มี
-  String? cookiesPath;
-
   /// การตั้งค่าที่ผู้ใช้เลือกไว้ล่าสุด (เก็บเป็น JSON ข้ามครั้ง)
   final Map<String, dynamic> settings = {};
 
@@ -75,72 +72,7 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       initError = 'ไม่สามารถเริ่มต้นระบบได้: ${e.toString()}';
     }
-    await refreshCookies();
     await loadSettings();
-    notifyListeners();
-  }
-
-  Future<String> _cookiesFile() async {
-    final dir = Directory('${await _appDir()}/clipora');
-    await dir.create(recursive: true);
-    return '${dir.path}/cookies.txt';
-  }
-
-  /// อัปเดต `cookiesPath` จากไฟล์คุกกี้ที่เก็บไว้ (ถ้ามี)
-  Future<void> refreshCookies() async {
-    final path = await _cookiesFile();
-    cookiesPath = File(path).existsSync() ? path : null;
-  }
-
-  /// นำเข้าไฟล์คุกกี้ที่ผู้ใช้เลือก (คัดลอกไปยังตำแหน่งถาวร) คืน path ถ้าสำเร็จ
-  /// ตรวจสอบว่าเป็นไฟล์คุกกี้แบบ Netscape format ที่ yt-dlp อ่านได้จริงก่อน
-  Future<String?> importCookies(String pickedPath) async {
-    try {
-      final src = File(pickedPath);
-      if (!src.existsSync()) return null;
-      final dest = await _cookiesFile();
-      await src.copy(dest);
-      if (!looksLikeNetscapeCookies(File(dest))) {
-        await File(dest).delete();
-        return null;
-      }
-      cookiesPath = dest;
-      notifyListeners();
-      return dest;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// ตรวจสอบว่าไฟล์เป็น Netscape cookie file (แบบที่ "Get cookies.txt LOCALLY"
-  /// ส่งออก) — ต้องมี header หรือมีบรรทัดคุกกี้ 7 ช่อง คั่นด้วย tab
-  @visibleForTesting
-  static bool looksLikeNetscapeCookies(File file) {
-    try {
-      final lines = file.readAsLinesSync();
-      if (lines.any((l) => l.contains('# Netscape HTTP Cookie File'))) {
-        return true;
-      }
-      for (final l in lines) {
-        final t = l.trim();
-        if (t.isEmpty || t.startsWith('#')) continue;
-        final parts = t.split('\t');
-        // domain, flag, path, secure, expiry, name, value
-        if (parts.length >= 7 && (parts[1] == 'TRUE' || parts[1] == 'FALSE')) {
-          return true;
-        }
-      }
-    } catch (_) {}
-    return false;
-  }
-
-  /// ลบไฟล์คุกกี้ที่ import ไว้
-  Future<void> clearCookies() async {
-    try {
-      final f = File(await _cookiesFile());
-      if (f.existsSync()) await f.delete();
-    } catch (_) {}
-    cookiesPath = null;
     notifyListeners();
   }
 
@@ -199,10 +131,6 @@ class AppState extends ChangeNotifier {
       }
       if (!playlist) {
         options.add('--no-playlist');
-      }
-      // ใช้คุกกี้ที่ผู้ใช้ import เพื่อเลี่ยงการบล็อก (YouTube/TikTok/Facebook/IG)
-      if (cookiesPath != null) {
-        options.addAll(['--cookies', cookiesPath!]);
       }
 
       final ok = await _runYtDlp(job, url, outputTemplate, options);

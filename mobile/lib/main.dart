@@ -448,7 +448,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-        _cookiesRow(),
         _checkRow(
           value: _playlists,
           label: 'โหลดทั้งเพลย์ลิสต์ (ถ้าลิงก์เป็นเพลย์ลิสต์)',
@@ -518,59 +517,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       _toast('ไม่สามารถอ่านคลิปบอร์ดได้', bad: true);
     }
-  }
-
-  Future<void> _importCookies() async {
-    try {
-      final picked = await NativeService.instance.pickCookieFile();
-      if (picked == null) return;
-      final saved = await app.importCookies(picked);
-      _toast(
-        saved != null ? 'นำเข้าคุกกี้สำเร็จ' : 'นำเข้าคุกกี้ไม่สำเร็จ',
-        bad: saved == null,
-      );
-    } catch (e) {
-      _toast('นำเข้าคุกกี้ไม่สำเร็จ: $e', bad: true);
-    }
-  }
-
-  Widget _cookiesRow() {
-    final has = app.cookiesPath != null;
-    return Container(
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: has ? const Color(0xFF2E7D32) : Colors.white12,
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            has ? Icons.check_circle_outline : Icons.info_outline,
-            size: 18,
-            color: has ? const Color(0xFF2E7D32) : Colors.white38,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              has
-                  ? 'ใช้คุกกี้แล้ว (ช่วยเลี่ยงการบล็อกดาวน์โหลด)'
-                  : 'คุกกี้ช่วยเลี่ยงการบล็อกของ YouTube/TikTok/Facebook/IG',
-              style: TextStyle(
-                fontSize: 12,
-                color: has ? Colors.white70 : Colors.white54,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: has ? app.clearCookies : _importCookies,
-            child: Text(has ? 'ลบ' : 'นำเข้า'),
-          ),
-        ],
-      ),
-    );
   }
 
   // ---------------- File panel ----------------

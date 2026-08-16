@@ -31,7 +31,6 @@ class MainActivity : FlutterActivity() {
         const val EVENTS = "com.clipora/ytdlp/events"
         const val NATIVE_CHANNEL = "com.clipora/native"
         const val PICK_MEDIA_REQUEST = 9101
-        const val PICK_COOKIE_REQUEST = 9102
     }
 
     private val runningJobs = ConcurrentHashMap<String, Future<YtDlpResponse>>()
@@ -41,7 +40,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != PICK_MEDIA_REQUEST && requestCode != PICK_COOKIE_REQUEST) return
+        if (requestCode != PICK_MEDIA_REQUEST) return
         val result = pendingPickResult
         pendingPickResult = null
         if (result == null) return
@@ -51,10 +50,9 @@ class MainActivity : FlutterActivity() {
             return
         }
         try {
-            val subDir = if (requestCode == PICK_COOKIE_REQUEST) "clipora-cookies" else "clipora-picks"
-            val cacheDir = File(cacheDir, subDir)
+            val cacheDir = File(cacheDir, "clipora-picks")
             cacheDir.mkdirs()
-            val name = queryDisplayName(uri) ?: "cookies.txt"
+            val name = queryDisplayName(uri) ?: "picked_file"
             val dest = File(cacheDir, name)
             contentResolver.openInputStream(uri).use { input ->
                 if (input == null) throw IllegalStateException("ไม่สามารถเปิดไฟล์ได้")
@@ -104,15 +102,6 @@ class MainActivity : FlutterActivity() {
                             putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("video/*", "audio/*"))
                         }
                         startActivityForResult(intent, PICK_MEDIA_REQUEST)
-                    }
-                    "pickCookieFile" -> {
-                        pendingPickResult = result
-                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                            type = "*/*"
-                            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/plain", "text/*", "application/octet-stream"))
-                        }
-                        startActivityForResult(intent, PICK_COOKIE_REQUEST)
                     }
                     "saveToDownloads" -> {
                         val source = call.argument<String>("sourcePath")
