@@ -91,9 +91,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = '${{ github.ref_name }}'
-          gh release view $tag 2>$null
+          # อัปโหลด assets ของ PC ไปที่ release ของเวอร์ชัน PC เสมอ (v<__version__>)
+          # ไม่ใช่ tag ที่ trigger งานนี้ เพราะ tag v1.0.1 เป็นของแอปมือถือแล้ว
+          $version = python -c 'from clipora import __version__; print(__version__)'
+          $releaseTag = "v$version"
+          gh release view $releaseTag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --title "Clipora $tag" --generate-notes
+            gh release create $releaseTag --title "Clipora PC $releaseTag" --generate-notes
           }
-          gh release upload $tag dist/installer/Clipora-Setup-*-x64.exe dist/installer/Clipora-Setup-*-x64.exe.sha256 --clobber
+          gh release upload $releaseTag dist/installer/Clipora-Setup-*-x64.exe dist/installer/Clipora-Setup-*-x64.exe.sha256 --clobber
