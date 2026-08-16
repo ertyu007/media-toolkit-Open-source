@@ -21,6 +21,9 @@ class AppState extends ChangeNotifier {
   bool initialized = false;
   String? initError;
 
+  /// path ของไฟล์คุกกี้ (Netscape format) ที่ผู้ใช้ import ไว้ จะเป็น `null` ถ้ายังไม่มี
+  String? cookiesPath;
+
   final Map<String, FfmpegRun> _ffmpegRuns = {};
 
   Future<void> init() async {
@@ -30,6 +33,44 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       initError = 'ไม่สามารถเริ่มต้นระบบได้: ${e.toString()}';
     }
+    await refreshCookies();
+    notifyListeners();
+  }
+
+  Future<String> _cookiesFile() async {
+    final dir = Directory('${await _appDir()}/clipora');
+    await dir.create(recursive: true);
+    return '${dir.path}/cookies.txt';
+  }
+
+  /// อัปเดต `cookiesPath` จากไฟล์คุกกี้ที่เก็บไว้ (ถ้ามี)
+  Future<void> refreshCookies() async {
+    final path = await _cookiesFile();
+    cookiesPath = File(path).existsSync() ? path : null;
+  }
+
+  /// นำเข้าไฟล์คุกกี้ที่ผู้ใช้เลือก (คัดลอกไปยังตำแหน่งถาวร) คืน path ถ้าสำเร็จ
+  Future<String?> importCookies(String pickedPath) async {
+    try {
+      final src = File(pickedPath);
+      if (!src.existsSync()) return null;
+      final dest = await _cookiesFile();
+      await src.copy(dest);
+      cookiesPath = dest;
+      notifyListeners();
+      return dest;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// ลบไฟล์คุกกี้ที่ import ไว้
+  Future<void> clearCookies() async {
+    try {
+      final f = File(await _cookiesFile());
+      if (f.existsSync()) await f.delete();
+    } catch (_) {}
+    cookiesPath = null;
     notifyListeners();
   }
 
@@ -80,6 +121,10 @@ class AppState extends ChangeNotifier {
         options.addAll(['-f', buildVideoFormat(quality, fps)]);
       }
       options.add('--no-playlist');
+      // ใช้คุกกี้ที่ผู้ใช้ import เพื่อเลี่ยงการบล็อก (YouTube/TikTok/Facebook/IG)
+      if (cookiesPath != null) {
+        options.addAll(['--cookies', cookiesPath!]);
+      }
 
       final ok = await _runYtDlp(job, url, outputTemplate, options);
       if (!ok) {

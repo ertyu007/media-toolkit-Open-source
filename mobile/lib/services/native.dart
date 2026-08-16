@@ -13,6 +13,13 @@ class NativeService {
     return path as String?;
   }
 
+  /// เปิดตัวเลือกไฟล์คุกกี้ (Netscape format) คัดลอกไปยังแคช แล้วคืน path
+  /// คืน `null` ถ้าผู้ใช้ยกเลิก
+  Future<String?> pickCookieFile() async {
+    final path = await _channel.invokeMethod('pickCookieFile');
+    return path as String?;
+  }
+
   /// บันทึกไฟล์ไปยังโฟลเดอร์ Downloads/Clipora สาธารณะ คืน content Uri
   Future<String> saveToDownloads(
     String sourcePath,
