@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
@@ -24,6 +25,47 @@ class AppState extends ChangeNotifier {
   /// path ของไฟล์คุกกี้ (Netscape format) ที่ผู้ใช้ import ไว้ จะเป็น `null` ถ้ายังไม่มี
   String? cookiesPath;
 
+  /// การตั้งค่าที่ผู้ใช้เลือกไว้ล่าสุด (เก็บเป็น JSON ข้ามครั้ง)
+  final Map<String, dynamic> settings = {};
+
+  Future<String> _settingsFile() async {
+    final dir = Directory('${await _appDir()}/clipora');
+    await dir.create(recursive: true);
+    return '${dir.path}/settings.json';
+  }
+
+  Future<void> loadSettings() async {
+    try {
+      final f = File(await _settingsFile());
+      if (f.existsSync()) {
+        final json = jsonDecode(f.readAsStringSync());
+        if (json is Map<String, dynamic>) {
+          settings
+            ..clear()
+            ..addAll(json);
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> saveSettings() async {
+    try {
+      final f = File(await _settingsFile());
+      await f.writeAsString(jsonEncode(settings));
+    } catch (_) {}
+  }
+
+  String setting(String key, String fallback) =>
+      settings[key] is String ? settings[key] as String : fallback;
+
+  bool settingBool(String key, bool fallback) =>
+      settings[key] is bool ? settings[key] as bool : fallback;
+
+  void setSetting(String key, Object value) {
+    settings[key] = value;
+    saveSettings();
+  }
+
   final Map<String, FfmpegRun> _ffmpegRuns = {};
 
   Future<void> init() async {
@@ -34,6 +76,7 @@ class AppState extends ChangeNotifier {
       initError = 'ไม่สามารถเริ่มต้นระบบได้: ${e.toString()}';
     }
     await refreshCookies();
+    await loadSettings();
     notifyListeners();
   }
 
@@ -132,8 +175,15 @@ class AppState extends ChangeNotifier {
     required String quality,
     required String fps,
     required String audioFormat,
+    bool playlist = false,
   }) async {
     final job = _addJob(JobKind.url, mode, url);
+    job.retryUrl = url;
+    job.retryVideoFormat = videoFormat;
+    job.retryQuality = quality;
+    job.retryFps = fps;
+    job.retryAudioFormat = audioFormat;
+    job.retryPlaylist = playlist;
     try {
       final baseDir = Directory('${await _appDir()}/clipora/dl/${job.id}');
       await baseDir.create(recursive: true);
@@ -147,7 +197,9 @@ class AppState extends ChangeNotifier {
       } else {
         options.addAll(['-f', buildVideoFormat(quality, fps)]);
       }
-      options.add('--no-playlist');
+      if (!playlist) {
+        options.add('--no-playlist');
+      }
       // ใช้คุกกี้ที่ผู้ใช้ import เพื่อเลี่ยงการบล็อก (YouTube/TikTok/Facebook/IG)
       if (cookiesPath != null) {
         options.addAll(['--cookies', cookiesPath!]);
@@ -195,6 +247,7 @@ class AppState extends ChangeNotifier {
           final raw = (event['progress'] as num?)?.toDouble() ?? 0;
           final p = raw.clamp(0.0, 1.0);
           job.progress = p * 0.85;
+          job.etaSeconds = (event['eta'] as num?)?.toInt();
           job.message = 'กำลังดาวน์โหลด… ${(p * 100).toStringAsFixed(0)}%';
           notifyListeners();
           break;
@@ -301,6 +354,7 @@ class AppState extends ChangeNotifier {
     }
     job.message = 'กำลังประมวลผล…';
     job.progress = 0.85;
+    job.etaSeconds = null;
     notifyListeners();
 
     File finalFile;
@@ -430,6 +484,11 @@ class AppState extends ChangeNotifier {
       await workDir.create(recursive: true);
       final workFile =
           File('${workDir.path}/source${_extensionOf(source.path)}');
+      job.retrySourcePath = workFile.path;
+      job.retryVideoFormat = videoFormat;
+      job.retryQuality = quality;
+      job.retryFps = fps;
+      job.retryAudioFormat = audioFormat;
       job.message = 'กำลังคัดลอกไฟล์…';
       notifyListeners();
       await source.copy(workFile.path);
@@ -515,6 +574,39 @@ class AppState extends ChangeNotifier {
     }
     job.status = JobStatus.cancelled;
     notifyListeners();
+  }
+
+  /// ลองทำงานที่ล้มเหลวใหม่ด้วยพารามิเตอร์เดิม (ลบงานเก่าแล้วสร้างงานใหม่)
+  Future<void> retryJob(Job job) async {
+    final url = job.retryUrl;
+    final src = job.retrySourcePath;
+    final mode = job.mode;
+    final vf = job.retryVideoFormat ?? 'mp4';
+    final q = job.retryQuality ?? (job.kind == JobKind.url ? 'สูงสุด' : 'Balanced');
+    final f = job.retryFps ?? 'สูงสุด';
+    final af = job.retryAudioFormat ?? 'mp3';
+    final playlist = job.retryPlaylist;
+    removeJob(job);
+    if (job.kind == JobKind.url && url != null) {
+      await startUrlDownload(
+        url: url,
+        mode: mode,
+        videoFormat: vf,
+        quality: q,
+        fps: f,
+        audioFormat: af,
+        playlist: playlist,
+      );
+    } else if (src != null) {
+      await startFileJob(
+        source: File(src),
+        mode: mode,
+        videoFormat: vf,
+        quality: q,
+        fps: f,
+        audioFormat: af,
+      );
+    }
   }
 
   Future<void> shareJob(Job job) async {

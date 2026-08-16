@@ -60,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _fps = 'สูงสุด';
   String _audioFormat = 'mp3';
   bool _authorized = false;
+  bool _playlists = false;
   String _url = '';
 
   // file mode
@@ -92,6 +93,23 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _ready = true;
       _initError = app.initError;
+      // กู้คืนการตั้งค่าล่าสุดที่ผู้ใช้เคยเลือก
+      _urlTab = app.settingBool('urlTab', true);
+      _urlMode = app.setting('urlMode', 'video') == 'audio'
+          ? JobMode.audio
+          : JobMode.video;
+      _urlFormat = app.setting('urlFormat', 'mp4');
+      _quality = app.setting('quality', 'สูงสุด');
+      _fps = app.setting('fps', 'สูงสุด');
+      _audioFormat = app.setting('audioFormat', 'mp3');
+      _playlists = app.settingBool('playlists', false);
+      _fileMode = app.setting('fileMode', 'video') == 'audio'
+          ? JobMode.audio
+          : JobMode.video;
+      _fileFormat = app.setting('fileFormat', 'mp4');
+      _fileQuality = app.setting('fileQuality', 'Balanced');
+      _fileFps = app.setting('fileFps', 'สูงสุด');
+      _fileAudioFormat = app.setting('fileAudioFormat', 'mp3');
     });
   }
 
@@ -99,6 +117,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final text = _url.trim();
     if (text.isEmpty) {
       _toast('กรุณาวางลิงก์ก่อน');
+      return;
+    }
+    final uri = Uri.tryParse(text);
+    if (uri == null ||
+        !uri.hasScheme ||
+        !(uri.scheme == 'http' || uri.scheme == 'https')) {
+      _toast('กรุณาวางลิงก์ที่ถูกต้อง (ขึ้นต้นด้วย http:// หรือ https://)',
+          bad: true);
       return;
     }
     if (!_authorized) {
@@ -117,6 +143,7 @@ class _HomeScreenState extends State<HomeScreen> {
       quality: _quality,
       fps: _fps,
       audioFormat: _audioFormat,
+      playlist: _playlists,
     );
   }
 
@@ -197,6 +224,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return unit == 0 ? '$bytes B' : '${value.toStringAsFixed(1)} ${units[unit]}';
   }
 
+  String _formatEta(int seconds) {
+    if (seconds <= 0) return '';
+    final m = (seconds ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return 'เหลือประมาณ $m:$s';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -251,11 +285,17 @@ class _HomeScreenState extends State<HomeScreen> {
     return Row(
       children: [
         Expanded(
-          child: _segButton('ลิงก์', _urlTab, () => setState(() => _urlTab = true)),
+          child: _segButton('ลิงก์', _urlTab, () {
+            setState(() => _urlTab = true);
+            app.setSetting('urlTab', true);
+          }),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: _segButton('ไฟล์', !_urlTab, () => setState(() => _urlTab = false)),
+          child: _segButton('ไฟล์', !_urlTab, () {
+            setState(() => _urlTab = false);
+            app.setSetting('urlTab', false);
+          }),
         ),
       ],
     );
@@ -297,6 +337,28 @@ class _HomeScreenState extends State<HomeScreen> {
         Expanded(
           child: _miniButton('เสียง', mode == JobMode.audio,
               () => onChanged(JobMode.audio)),
+        ),
+      ],
+    );
+  }
+
+  Widget _checkRow({
+    required bool value,
+    required String label,
+    required ValueChanged<bool?> onChanged,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Checkbox(value: value, onChanged: onChanged),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13, color: Colors.white70),
+            ),
+          ),
         ),
       ],
     );
@@ -363,7 +425,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return _card(Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _modeToggles(_urlMode, (mode) => setState(() => _urlMode = mode)),
+        _modeToggles(_urlMode, (mode) {
+          setState(() => _urlMode = mode);
+          app.setSetting('urlMode', mode.name);
+        }),
         _fieldLabel('ลิงก์สาธารณะ'),
         TextField(
           controller: _urlController,
@@ -384,41 +449,47 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         _cookiesRow(),
+        _checkRow(
+          value: _playlists,
+          label: 'โหลดทั้งเพลย์ลิสต์ (ถ้าลิงก์เป็นเพลย์ลิสต์)',
+          onChanged: (v) {
+            setState(() => _playlists = v ?? false);
+            app.setSetting('playlists', _playlists);
+          },
+        ),
         if (_urlMode == JobMode.video) ...[
           _fieldLabel('รูปแบบไฟล์'),
           _dropdown<String>(_urlFormat, const ['mp4', 'mov'], (v) {
             setState(() => _urlFormat = v);
+            app.setSetting('urlFormat', v);
           }),
           _fieldLabel('ระดับคุณภาพ'),
           _dropdown<String>(_quality, const [
             'สูงสุด', '2160p', '1080p', '720p', '480p', '360p'
-          ], (v) => setState(() => _quality = v)),
+          ], (v) {
+            setState(() => _quality = v);
+            app.setSetting('quality', v);
+          }),
           _fieldLabel('เฟรมเรต'),
           _dropdown<String>(_fps, const ['สูงสุด', '60', '30'],
-              (v) => setState(() => _fps = v)),
+              (v) {
+            setState(() => _fps = v);
+            app.setSetting('fps', v);
+          }),
         ] else ...[
           _fieldLabel('รูปแบบเสียง'),
-          _dropdown<String>(_audioFormat, const ['mp3', 'm4a', 'wav', 'flac', 'opus'],
-              (v) => setState(() => _audioFormat = v)),
+          _dropdown<String>(_audioFormat,
+              const ['mp3', 'm4a', 'wav', 'flac', 'opus'],
+              (v) {
+            setState(() => _audioFormat = v);
+            app.setSetting('audioFormat', v);
+          }),
         ],
         const SizedBox(height: 12),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Checkbox(
-              value: _authorized,
-              onChanged: (v) => setState(() => _authorized = v ?? false),
-            ),
-            const Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(top: 10),
-                child: Text(
-                  'ฉันยืนยันว่ามีสิทธิ์ดาวน์โหลดสื่อนี้',
-                  style: TextStyle(fontSize: 13, color: Colors.white70),
-                ),
-              ),
-            ),
-          ],
+        _checkRow(
+          value: _authorized,
+          label: 'ฉันยืนยันว่ามีสิทธิ์ดาวน์โหลดสื่อนี้',
+          onChanged: (v) => setState(() => _authorized = v ?? false),
         ),
         const SizedBox(height: 8),
         FilledButton.icon(
@@ -508,7 +579,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return _card(Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _modeToggles(_fileMode, (mode) => setState(() => _fileMode = mode)),
+        _modeToggles(_fileMode, (mode) {
+          setState(() => _fileMode = mode);
+          app.setSetting('fileMode', mode.name);
+        }),
         _fieldLabel('เลือกวิดีโอในเครื่อง'),
         GestureDetector(
           onTap: _fileBusy ? null : _pickFile,
@@ -558,18 +632,28 @@ class _HomeScreenState extends State<HomeScreen> {
           _fieldLabel('รูปแบบไฟล์'),
           _dropdown<String>(_fileFormat, const ['mp4', 'mov'], (v) {
             setState(() => _fileFormat = v);
+            app.setSetting('fileFormat', v);
           }),
           _fieldLabel('ระดับคุณภาพ'),
           _dropdown<String>(_fileQuality, const ['High', 'Balanced', 'Small'],
-              (v) => setState(() => _fileQuality = v)),
+              (v) {
+            setState(() => _fileQuality = v);
+            app.setSetting('fileQuality', v);
+          }),
           _fieldLabel('เฟรมเรต'),
           _dropdown<String>(_fileFps, const ['สูงสุด', '60', '30'],
-              (v) => setState(() => _fileFps = v)),
+              (v) {
+            setState(() => _fileFps = v);
+            app.setSetting('fileFps', v);
+          }),
         ] else ...[
           _fieldLabel('รูปแบบเสียง'),
           _dropdown<String>(_fileAudioFormat,
               const ['mp3', 'm4a', 'wav', 'flac', 'opus'],
-              (v) => setState(() => _fileAudioFormat = v)),
+              (v) {
+            setState(() => _fileAudioFormat = v);
+            app.setSetting('fileAudioFormat', v);
+          }),
         ],
         const SizedBox(height: 16),
         FilledButton.icon(
@@ -601,6 +685,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // ---------------- jobs ----------------
 
   Widget _jobsSection() {
+    final jobs = app.jobs;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -609,7 +694,16 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Text('รายการงาน',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
         ),
-        ...app.jobs.map(_jobCard),
+        if (jobs.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              'ยังไม่มีงาน — วางลิงก์หรือเลือกไฟล์เพื่อเริ่ม',
+              style: TextStyle(fontSize: 12, color: Colors.white38),
+            ),
+          )
+        else
+          ...jobs.map(_jobCard),
       ],
     );
   }
@@ -672,6 +766,11 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(job.message,
                 style: const TextStyle(fontSize: 12, color: Colors.white54)),
           ],
+          if (job.etaSeconds != null && job.etaSeconds! > 0) ...[
+            const SizedBox(height: 2),
+            Text(_formatEta(job.etaSeconds!),
+                style: const TextStyle(fontSize: 11, color: Colors.white38)),
+          ],
           if (job.error != null && job.status == JobStatus.failed) ...[
             const SizedBox(height: 4),
             Text(job.error!,
@@ -696,6 +795,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 _jobAction('เล่น', Icons.play_circle_outline,
                     () => _preview(job)),
                 _jobAction('แชร์', Icons.share, () => app.shareJob(job)),
+              ] else if (job.status == JobStatus.failed) ...[
+                _jobAction('ลองใหม่', Icons.refresh, () => app.retryJob(job)),
+                _jobAction('ลบ', Icons.delete_outline,
+                    () => app.removeJob(job)),
               ] else
                 _jobAction('ลบ', Icons.delete_outline, () => app.removeJob(job)),
             ],

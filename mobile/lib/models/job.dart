@@ -14,6 +14,18 @@ class Job {
   String? error;
   final DateTime createdAt;
 
+  /// เวลาที่เหลือในการดาวน์โหลด (วินาที) จาก yt-dlp, `null` ถ้ายังไม่รู้
+  int? etaSeconds;
+
+  // ---- ข้อมูลสำหรับกด "ลองใหม่" (retry) ----
+  String? retryUrl;
+  String? retrySourcePath;
+  String? retryVideoFormat;
+  String? retryQuality;
+  String? retryFps;
+  String? retryAudioFormat;
+  bool retryPlaylist = false;
+
   Job({
     required this.id,
     required this.kind,
