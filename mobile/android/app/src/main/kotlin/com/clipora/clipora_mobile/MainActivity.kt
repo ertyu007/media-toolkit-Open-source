@@ -170,11 +170,16 @@ class MainActivity : FlutterActivity() {
 
         // เก็บ log ระดับ ERROR/WARNING ไว้แสดง error ที่แท้จริง
         val errorLog = StringBuilder()
-        val logCallback = LogCallback { level, message ->
-            if (level == "ERROR" || level == "WARNING") {
-                errorLog.append(message).append('\n')
-                if (errorLog.length > 4000) {
-                    errorLog.delete(0, errorLog.length - 4000)
+        // ใช้ explicit anonymous object (ไม่ใช่ Kotlin SAM lambda) เพราะ Chaquopy
+        // ฝั่ง Python เรียก method ของ callback ผ่าน Java reflection — SAM lambda
+        // ที่ compile ด้วย invokedynamic จะไม่ expose `onLog` ให้ Python เรียกได้
+        val logCallback = object : LogCallback {
+            override fun onLog(level: String, message: String) {
+                if (level == "ERROR" || level == "WARNING") {
+                    errorLog.append(message).append('\n')
+                    if (errorLog.length > 4000) {
+                        errorLog.delete(0, errorLog.length - 4000)
+                    }
                 }
             }
         }
