@@ -50,18 +50,45 @@ class AppState extends ChangeNotifier {
   }
 
   /// นำเข้าไฟล์คุกกี้ที่ผู้ใช้เลือก (คัดลอกไปยังตำแหน่งถาวร) คืน path ถ้าสำเร็จ
+  /// ตรวจสอบว่าเป็นไฟล์คุกกี้แบบ Netscape format ที่ yt-dlp อ่านได้จริงก่อน
   Future<String?> importCookies(String pickedPath) async {
     try {
       final src = File(pickedPath);
       if (!src.existsSync()) return null;
       final dest = await _cookiesFile();
       await src.copy(dest);
+      if (!looksLikeNetscapeCookies(File(dest))) {
+        await File(dest).delete();
+        return null;
+      }
       cookiesPath = dest;
       notifyListeners();
       return dest;
     } catch (_) {
       return null;
     }
+  }
+
+  /// ตรวจสอบว่าไฟล์เป็น Netscape cookie file (แบบที่ "Get cookies.txt LOCALLY"
+  /// ส่งออก) — ต้องมี header หรือมีบรรทัดคุกกี้ 7 ช่อง คั่นด้วย tab
+  @visibleForTesting
+  static bool looksLikeNetscapeCookies(File file) {
+    try {
+      final lines = file.readAsLinesSync();
+      if (lines.any((l) => l.contains('# Netscape HTTP Cookie File'))) {
+        return true;
+      }
+      for (final l in lines) {
+        final t = l.trim();
+        if (t.isEmpty || t.startsWith('#')) continue;
+        final parts = t.split('\t');
+        // domain, flag, path, secure, expiry, name, value
+        if (parts.length >= 7 && (parts[1] == 'TRUE' || parts[1] == 'FALSE')) {
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
   }
 
   /// ลบไฟล์คุกกี้ที่ import ไว้
@@ -188,11 +215,20 @@ class AppState extends ChangeNotifier {
       }
     });
 
-    await YtDlpService.instance.download(job.id, url, outputTemplate, options);
+    try {
+      await YtDlpService.instance.download(job.id, url, outputTemplate, options);
+    } catch (e) {
+      sub.cancel();
+      job.error = e.toString();
+      if (!completer.isCompleted) completer.complete(false);
+      return false;
+    }
     try {
       return await completer.future.timeout(const Duration(minutes: 60));
     } on TimeoutException {
       sub.cancel();
+      // ต้องยกเลิกงานฝั่ง native ด้วย ไม่งั้น yt-dlp ยังดาวน์โหลดค้างอยู่เบื้องหลัง
+      await YtDlpService.instance.cancel(job.id);
       job.error = 'หมดเวลาดาวน์โหลด';
       return false;
     }
@@ -494,7 +530,17 @@ class AppState extends ChangeNotifier {
 
   void removeJob(Job job) {
     _jobs.removeWhere((j) => j.id == job.id);
+    // ลบไฟล์งานออกจากเครื่องด้วย ไม่ให้เหลือขยะสะสมในเครื่อง
+    _deleteJobDir(job);
     notifyListeners();
+  }
+
+  Future<void> _deleteJobDir(Job job) async {
+    try {
+      final sub = job.kind == JobKind.url ? 'dl' : 'work';
+      final dir = Directory('${await _appDir()}/clipora/$sub/${job.id}');
+      if (dir.existsSync()) await dir.delete(recursive: true);
+    } catch (_) {}
   }
 
   String _uniquePath(String base, String ext) {
