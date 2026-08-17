@@ -1,0 +1,73 @@
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+from clipora.ffmpeg import tools_available, probe
+from clipora.separator import (
+    CancellationToken,
+    OutputExistsError,
+    separate_audio,
+    separator_installed,
+)
+
+
+@unittest.skipUnless(
+    tools_available() and separator_installed(),
+    'FFmpeg and the Demucs separator toolchain are required',
+)
+class SeparatorIntegrationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        with tempfile.TemporaryDirectory() as directory:
+            cls.source = Path(directory) / 'sample audio.wav'
+            creation = subprocess.run(
+                [
+                    'ffmpeg',
+                    '-y',
+                    '-loglevel',
+                    'error',
+                    '-f',
+                    'lavfi',
+                    '-i',
+                    'sine=frequency=440:duration=6',
+                    '-c:a',
+                    'pcm_s16le',
+                    str(cls.source),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert creation.returncode == 0, creation.stderr
+
+    def test_separates_vocals_and_instrumental(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory)
+            outputs = separate_audio(
+                self.source,
+                destination,
+                'mp3',
+                ('vocals', 'instrumental'),
+                cancellation=CancellationToken(),
+            )
+            self.assertEqual(
+                sorted(path.name for path in outputs),
+                ['sample audio_instrumental.mp3', 'sample audio_vocals.mp3'],
+            )
+            for path in outputs:
+                self.assertGreater(path.stat().st_size, 0)
+                info = probe(path)
+                self.assertTrue(info.has_audio)
+                self.assertFalse(info.has_video)
+
+    def test_existing_output_is_rejected_without_overwrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory)
+            (destination / 'sample audio_vocals.mp3').write_bytes(b'occupied')
+            with self.assertRaises(OutputExistsError):
+                separate_audio(self.source, destination, 'mp3', ('vocals',))
+
+
+if __name__ == '__main__':
+    unittest.main()

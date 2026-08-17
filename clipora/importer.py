@@ -456,3 +456,29 @@ def import_url(
         return finalize_import_output(completed, spec.destination)
     finally:
         cleanup_import_workspace(workspace, spec.destination)
+
+
+def import_audio_for_processing(
+    spec: ImportSpec,
+    on_progress: Callable[[float], None],
+    cancellation: CancellationToken | None = None,
+    tool_command: Sequence[str] | None = None,
+) -> tuple[Path, Path]:
+    """Download audio into a workspace without finalizing it.
+
+    Returns ``(completed, workspace)``. The caller owns the workspace and must
+    call ``cleanup_import_workspace(workspace, spec.destination)`` when done.
+    """
+    validate_url(spec.url)
+    command_prefix = list(tool_command) if tool_command is not None else find_ytdlp_command()
+    if not command_prefix:
+        raise URLImportError('ไม่พบ yt-dlp กรุณาติดตั้งแล้วเปิด Clipora ใหม่')
+    token = cancellation or CancellationToken()
+    workspace = create_import_workspace(spec.destination)
+    try:
+        command = build_import_command(command_prefix, spec, workspace)
+        completed = _run_import_process(command, workspace, on_progress, token)
+        return completed, workspace
+    except BaseException:
+        cleanup_import_workspace(workspace, spec.destination)
+        raise

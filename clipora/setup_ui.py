@@ -8,9 +8,10 @@ from typing import Callable
 from .dependencies import (
     DependencyInstallCancelled,
     DependencySpec,
+    SEPARATOR_DEPENDENCIES,
     WINDOWS_X64_DEPENDENCIES,
     dependencies_to_install,
-    install_windows_toolchain,
+    install_toolchains,
 )
 
 
@@ -34,6 +35,7 @@ class ToolSetupDialog(tk.Toplevel):
         parent: tk.Misc,
         repair_mode: bool = False,
         first_run: bool = False,
+        separator: bool = False,
         on_ready: Callable[[], None] | None = None,
         on_cancelled: Callable[[], None] | None = None,
     ) -> None:
@@ -48,13 +50,15 @@ class ToolSetupDialog(tk.Toplevel):
 
         self._repair_mode = repair_mode
         self._first_run = first_run
+        self._separator = separator
         self._on_ready = on_ready
         self._on_cancelled = on_cancelled
-        self._selected = (
-            WINDOWS_X64_DEPENDENCIES
-            if repair_mode
-            else dependencies_to_install(force=False)
-        )
+        if repair_mode:
+            self._selected = WINDOWS_X64_DEPENDENCIES
+        else:
+            self._selected = dependencies_to_install(force=False)
+        if separator:
+            self._selected = self._selected + SEPARATOR_DEPENDENCIES
         self._step = 0
         self._running = False
         self._closing = False
@@ -170,6 +174,12 @@ class ToolSetupDialog(tk.Toplevel):
             text=(
                 'ตัวช่วยนี้จะเตรียม FFmpeg, yt-dlp และ Deno สำหรับดาวน์โหลด '
                 'แยกเสียง และแปลงวิดีโอบนเครื่องของคุณ'
+                + (
+                    '\nและจะติดตั้งเครื่องมือแยกสเต็มเสียง AI (Demucs + PyTorch) '
+                    'สำหรับแยกเสียงร้องและดนตรีประกอบ'
+                    if self._separator
+                    else ''
+                )
             ),
             style='Card.TLabel',
             wraplength=570,
@@ -244,7 +254,9 @@ class ToolSetupDialog(tk.Toplevel):
             card,
             text=(
                 f'ดาวน์โหลดประมาณ {total_download_mb(self._selected)} MB\n'
-                'ตำแหน่งติดตั้ง: %LOCALAPPDATA%\\Clipora\\tools\n'
+                'ตำแหน่งติดตั้ง: %LOCALAPPDATA%\\Clipora\\tools'
+                + ('\\separator' if self._separator else '')
+                + '\n'
                 'ไฟล์เดิมที่ใช้งานได้จะไม่ถูกลบหากดาวน์โหลดล้มเหลวหรือยกเลิก'
             ),
             style='CardMuted.TLabel',
@@ -328,10 +340,11 @@ class ToolSetupDialog(tk.Toplevel):
 
     def _install_worker(self) -> None:
         try:
-            install_windows_toolchain(
+            install_toolchains(
                 on_progress=self._report_from_worker,
                 cancel_event=self._cancel_event,
                 force=self._repair_mode,
+                include_separator=self._separator,
             )
         except DependencyInstallCancelled:
             self.after(0, self._cancelled)

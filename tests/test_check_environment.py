@@ -2,7 +2,7 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-from scripts.check_environment import check_javascript_runtime, check_tool, check_ytdlp
+from scripts.check_environment import check_javascript_runtime, check_separator, check_tool, check_ytdlp
 
 
 class EnvironmentCheckTests(unittest.TestCase):
@@ -78,6 +78,18 @@ class EnvironmentCheckTests(unittest.TestCase):
         result = check_javascript_runtime()
         self.assertFalse(result.ok)
         self.assertIn('Deno', result.detail)
+
+    @patch('clipora.separator.separator_installed', return_value=True)
+    def test_separator_installed_reports_ready(self, _installed):
+        result = check_separator()
+        self.assertTrue(result.ok)
+        self.assertIn('Demucs', result.detail)
+
+    @patch('clipora.separator.separator_installed', return_value=False)
+    def test_separator_missing_is_optional(self, _installed):
+        result = check_separator()
+        self.assertTrue(result.ok)
+        self.assertIn('ยังไม่ได้ติดตั้ง', result.detail)
 
 
 if __name__ == '__main__':

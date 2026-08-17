@@ -27,14 +27,32 @@ from .importer import (
     ImportSpec,
     URLImportError,
     VIDEO_QUALITIES,
+    cleanup_import_workspace,
+    import_audio_for_processing,
     import_url,
     url_summary,
     validate_url,
     ytdlp_available,
 )
+from .separator import (
+    SELECTABLE_STEMS,
+    STEM_LABELS,
+    SeparatorError,
+    separate_audio,
+    separate_output_paths,
+    separator_installed,
+)
+from .dependencies import DependencyInstallError
 from .legal import DMCA_EMAIL, DMCA_NOTE, DISCLAIMER_TEXT, build_dmca_mailto
 from .setup_ui import ToolSetupDialog
 from .tools import missing_required_tools
+from .ytdlp_update import (
+    YtDlpUpdateError,
+    installed_ytdlp_version,
+    is_newer_available,
+    latest_ytdlp_version,
+    update_ytdlp,
+)
 
 
 BG = '#090d15'
@@ -109,6 +127,11 @@ class CliporaApp(tk.Tk):
         self.input_kind = tk.StringVar(value='url')
         self.destination = tk.StringVar(value=str(Path.home() / 'Downloads'))
         self.mode = tk.StringVar(value='video')
+        self.stem_vars = {
+            stem: tk.BooleanVar(value=stem in ('vocals', 'instrumental'))
+            for stem in SELECTABLE_STEMS
+        }
+        self._stems_options: ttk.Frame | None = None
         self.audio_format = tk.StringVar(value='MP3')
         self.video_format = tk.StringVar(value=VIDEO_FORMAT_LABELS[0])
         self.fps = tk.StringVar(value=FPS_LABELS[0])
@@ -126,12 +149,14 @@ class CliporaApp(tk.Tk):
         self._progress_action = 'กำลังประมวลผล'
         self._input_widgets: list[ttk.Widget] = []
         self._setup_dialog: ToolSetupDialog | None = None
+        self._ytdlp_checking = False
         self._build()
         self.source.trace_add('write', self._on_source_changed)
         self.bind_all('<Control-KeyPress>', self._on_control_keypress, add='+')
         self.bind_all('<Shift-Insert>', self._on_paste_shortcut, add='+')
         self.after_idle(self.source_entry.focus_set)
         self.after(120, self._maybe_offer_tool_setup)
+        self.after(3000, self._maybe_check_ytdlp_update)
         self.protocol('WM_DELETE_WINDOW', self._on_close)
 
     def _create_icon(self) -> tk.PhotoImage:
@@ -387,6 +412,18 @@ class CliporaApp(tk.Tk):
             rowspan=2,
             sticky='e',
         )
+        ttk.Button(
+            header,
+            text='อัปเดต yt-dlp',
+            style='Header.TButton',
+            command=lambda: self._check_ytdlp_update(auto=False),
+        ).grid(
+            row=0,
+            column=4,
+            rowspan=2,
+            padx=(8, 0),
+            sticky='e',
+        )
 
         card_scroll = ttk.Frame(main, style='TFrame')
         card_scroll.grid(row=1, column=0, sticky='nsew')
@@ -604,6 +641,15 @@ class CliporaApp(tk.Tk):
             style='Segment.TRadiobutton',
         )
         self.video_radio.pack(side='left', padx=(6, 0))
+        self.stems_radio = ttk.Radiobutton(
+            mode_options,
+            text='แยกสเต็มเสียง',
+            variable=self.mode,
+            value='stems',
+            command=self._sync_options,
+            style='Segment.TRadiobutton',
+        )
+        self.stems_radio.pack(side='left', padx=(6, 0))
 
         result_options = ttk.Frame(options, style='Card.TFrame')
         result_options.grid(row=0, column=1, sticky='e')
@@ -655,6 +701,29 @@ class CliporaApp(tk.Tk):
         )
         self.fps_box.grid(row=0, column=3, sticky='w')
 
+        stems_options = ttk.Frame(options, style='Card.TFrame')
+        stems_options.grid(row=2, column=0, columnspan=2, sticky='ew', pady=(10, 0))
+        stems_options.columnconfigure(0, weight=1)
+        self._stems_options = stems_options
+        ttk.Label(
+            stems_options,
+            text='สเต็มที่ต้องการ',
+            style='CardMuted.TLabel',
+        ).grid(row=0, column=0, sticky='w')
+        self._stem_check_widgets: list[ttk.Checkbutton] = []
+        stem_row = ttk.Frame(stems_options, style='Card.TFrame')
+        stem_row.grid(row=1, column=0, sticky='w', pady=(6, 0))
+        for stem in SELECTABLE_STEMS:
+            check = ttk.Checkbutton(
+                stem_row,
+                text=STEM_LABELS[stem],
+                variable=self.stem_vars[stem],
+                style='TCheckbutton',
+            )
+            check.pack(side='left', padx=(0, 14))
+            self._stem_check_widgets.append(check)
+        stems_options.grid_remove()
+
         action_card = ttk.Frame(main, style='Action.TFrame', padding=(20, 14))
         action_card.grid(row=2, column=0, sticky='ew', pady=(14, 8))
         action_card.columnconfigure(0, weight=1)
@@ -702,10 +771,12 @@ class CliporaApp(tk.Tk):
             self.destination_button,
             self.audio_radio,
             self.video_radio,
+            self.stems_radio,
             self.format_box,
             self.video_format_box,
             self.quality_box,
             self.fps_box,
+            *self._stem_check_widgets,
         ]
         self._sync_source_kind()
         self._sync_options()
@@ -720,6 +791,7 @@ class CliporaApp(tk.Tk):
         self,
         repair_mode: bool = False,
         first_run: bool = False,
+        separator: bool = False,
     ) -> None:
         if self._cancellation is not None:
             messagebox.showwarning(
@@ -741,6 +813,7 @@ class CliporaApp(tk.Tk):
             self,
             repair_mode=repair_mode,
             first_run=first_run,
+            separator=separator,
             on_ready=self._tools_ready,
             on_cancelled=self._setup_cancelled if first_run else None,
         )
@@ -755,6 +828,128 @@ class CliporaApp(tk.Tk):
     def _setup_cancelled(self) -> None:
         if self._first_run_setup:
             self.destroy()
+
+    def _maybe_check_ytdlp_update(self) -> None:
+        self._check_ytdlp_update(auto=True)
+
+    def _check_ytdlp_update(self, auto: bool = False) -> None:
+        if self._ytdlp_checking:
+            return
+        if self._cancellation is not None:
+            if not auto:
+                messagebox.showwarning(
+                    'กำลังทำงาน',
+                    'รอให้งานปัจจุบันเสร็จหรือยกเลิกก่อนอัปเดต yt-dlp',
+                    parent=self,
+                )
+            return
+        if self._setup_dialog is not None:
+            try:
+                if self._setup_dialog.winfo_exists():
+                    if not auto:
+                        messagebox.showinfo(
+                            'เครื่องมือ',
+                            'ปิดหน้าต่างติดตั้งเครื่องมือก่อนตรวจสอบอัปเดต yt-dlp',
+                            parent=self,
+                        )
+                    return
+            except tk.TclError:
+                pass
+        self._ytdlp_checking = True
+        threading.Thread(target=self._ytdlp_check_worker, args=(auto,), daemon=True).start()
+
+    def _ytdlp_check_worker(self, auto: bool) -> None:
+        installed: str | None = None
+        latest = ''
+        needs_update = False
+        error = ''
+        try:
+            installed = installed_ytdlp_version()
+            latest = latest_ytdlp_version()
+            needs_update = is_newer_available(latest, installed)
+        except (YtDlpUpdateError, OSError) as exc:
+            error = str(exc)
+        self.after(0, self._ytdlp_check_done, auto, installed, latest, needs_update, error)
+
+    def _ytdlp_check_done(
+        self,
+        auto: bool,
+        installed: str | None,
+        latest: str,
+        needs_update: bool,
+        error: str,
+    ) -> None:
+        self._ytdlp_checking = False
+        if error:
+            if not auto:
+                messagebox.showerror('ตรวจสอบอัปเดตไม่สำเร็จ', error, parent=self)
+            return
+        if installed is None:
+            if not auto:
+                messagebox.showinfo(
+                    'อัปเดต yt-dlp',
+                    'ยังไม่พบ yt-dlp ที่ติดตั้งไว้\nกดปุ่ม "เครื่องมือ" เพื่อติดตั้งก่อน',
+                    parent=self,
+                )
+            return
+        if not needs_update:
+            if not auto:
+                messagebox.showinfo(
+                    'อัปเดต yt-dlp',
+                    f'yt-dlp เป็นเวอร์ชันล่าสุดแล้ว ({latest})',
+                    parent=self,
+                )
+            return
+        if not messagebox.askyesno(
+            'อัปเดต yt-dlp',
+            f'พบ yt-dlp เวอร์ชันใหม่ {latest}'
+            + f'\nเวอร์ชันที่ติดตั้ง: {installed}'
+            + '\n\nต้องการอัปเดตตอนนี้หรือไม่?',
+            parent=self,
+        ):
+            return
+        self._start_ytdlp_update(latest)
+
+    def _start_ytdlp_update(self, latest: str) -> None:
+        cancellation = CancellationToken()
+        self._begin_job(cancellation, f'กำลังอัปเดต yt-dlp เป็น {latest}…', 'กำลังอัปเดต yt-dlp')
+        threading.Thread(
+            target=self._ytdlp_update_worker,
+            args=(latest, cancellation),
+            daemon=True,
+        ).start()
+
+    def _ytdlp_update_worker(self, latest: str, cancellation: CancellationToken) -> None:
+        error = ''
+        try:
+            update_ytdlp(
+                lambda value, message: self.after(0, self._set_progress, value, cancellation)
+                and self.after(0, self.status.set, message),
+                lambda: cancellation.cancelled,
+            )
+        except (YtDlpUpdateError, DependencyInstallError, OSError) as exc:
+            error = str(exc)
+        if cancellation.cancelled:
+            self.after(0, self._cancelled, cancellation)
+            return
+        self.after(0, self._ytdlp_update_done, latest, error, cancellation)
+
+    def _ytdlp_update_done(
+        self,
+        latest: str,
+        error: str,
+        cancellation: CancellationToken,
+    ) -> None:
+        if not self._finish_job(cancellation):
+            return
+        if error:
+            self.status.set('อัปเดต yt-dlp ไม่สำเร็จ')
+            messagebox.showerror('อัปเดตไม่สำเร็จ', error[-1200:], parent=self)
+            return
+        self.progress['value'] = 100
+        self.progress_text.set('100%')
+        self.status.set(f'อัปเดต yt-dlp เป็น {latest} แล้ว')
+        messagebox.showinfo('สำเร็จ', f'อัปเดต yt-dlp เป็น {latest} เรียบร้อย', parent=self)
 
     def _open_disclaimer(self) -> None:
         DisclaimerDialog(self)
@@ -773,17 +968,32 @@ class CliporaApp(tk.Tk):
 
     def _sync_options(self) -> None:
         is_url = self.input_kind.get() == 'url'
-        if self.mode.get() == 'audio':
+        if self.mode.get() == 'stems':
             self.video_format_box.grid_remove()
             self.quality_label.grid_remove()
             self.quality_box.grid_remove()
             self.fps_label.grid_remove()
             self.fps_box.grid_remove()
+            if self._stems_options is not None:
+                self._stems_options.grid()
+            self.format_box.grid()
+            self.option_label.configure(text='รูปแบบเสียง')
+            action_text = 'ดาวน์โหลดและแยกสเต็ม' if is_url else 'เริ่มแยกสเต็ม'
+        elif self.mode.get() == 'audio':
+            self.video_format_box.grid_remove()
+            self.quality_label.grid_remove()
+            self.quality_box.grid_remove()
+            self.fps_label.grid_remove()
+            self.fps_box.grid_remove()
+            if self._stems_options is not None:
+                self._stems_options.grid_remove()
             self.format_box.grid()
             self.option_label.configure(text='รูปแบบเสียง')
             action_text = 'เริ่มดาวน์โหลดเสียง' if is_url else 'เริ่มแยกเสียง'
         else:
             self.format_box.grid_remove()
+            if self._stems_options is not None:
+                self._stems_options.grid_remove()
             self.video_format_box.grid()
             self.option_label.configure(text='รูปแบบไฟล์')
             self.quality_label.grid()
@@ -820,6 +1030,7 @@ class CliporaApp(tk.Tk):
             self.source_button_text.set('วางจากคลิปบอร์ด')
             self.audio_radio.configure(text='ดาวน์โหลดเฉพาะเสียง')
             self.video_radio.configure(text='ดาวน์โหลดวิดีโอ')
+            self.stems_radio.configure(text='ดาวน์โหลดและแยกสเต็ม')
             self.rights_row.grid()
             self.dmca_row.grid()
         else:
@@ -827,6 +1038,7 @@ class CliporaApp(tk.Tk):
             self.source_button_text.set('เลือกไฟล์')
             self.audio_radio.configure(text='แยกเสียง')
             self.video_radio.configure(text='แปลงเป็นวิดีโอ')
+            self.stems_radio.configure(text='แยกสเต็มเสียง')
             self.rights_row.grid_remove()
             self.dmca_row.grid_remove()
         self._on_source_changed()
@@ -901,6 +1113,12 @@ class CliporaApp(tk.Tk):
     def _start(self) -> None:
         if self._cancellation is not None:
             return
+        if self.mode.get() == 'stems':
+            if self.input_kind.get() == 'url':
+                self._start_stems_url()
+            else:
+                self._start_stems_local()
+            return
         if self.input_kind.get() == 'url':
             self._start_url()
         else:
@@ -951,6 +1169,173 @@ class CliporaApp(tk.Tk):
             args=(job, target, cancellation),
             daemon=True,
         ).start()
+
+    def _selected_stems(self) -> tuple[str, ...]:
+        return tuple(stem for stem in SELECTABLE_STEMS if self.stem_vars[stem].get())
+
+    def _report_stems_phase(self, message: str) -> None:
+        try:
+            self.after(0, self.status.set, message)
+        except tk.TclError:
+            pass
+
+    def _start_stems_local(self) -> None:
+        try:
+            destination = destination_path(self.destination.get())
+        except ValueError as exc:
+            messagebox.showwarning('ไม่พบโฟลเดอร์', str(exc))
+            return
+        source = Path(self.source.get())
+        if not source.is_file():
+            messagebox.showwarning('ยังไม่มีไฟล์', 'กรุณาเลือกไฟล์วิดีโอหรือเสียงก่อน')
+            return
+        if not destination.is_dir():
+            messagebox.showwarning('ไม่พบโฟลเดอร์', 'กรุณาเลือกโฟลเดอร์บันทึกที่มีอยู่')
+            return
+        if not tools_available():
+            self.status.set('ต้องติดตั้งเครื่องมือก่อนเริ่มงาน')
+            self._open_tool_setup()
+            return
+        if not separator_installed():
+            self.status.set('ต้องติดตั้งเครื่องมือแยกสเต็มก่อนเริ่มงาน')
+            self._open_tool_setup(separator=True)
+            return
+        stems = self._selected_stems()
+        if not stems:
+            messagebox.showwarning('ยังไม่ได้เลือกสเต็ม', 'เลือกสเต็มอย่างน้อยหนึ่งรายการก่อนเริ่มงาน')
+            return
+        audio_format = self._audio_format_value()
+        expected = separate_output_paths(source, destination, audio_format, stems)
+        existing = [target for target in expected if target.exists()]
+        overwrite = False
+        if existing and not messagebox.askyesno(
+            'ไฟล์มีอยู่แล้ว',
+            'มีไฟล์ผลลัพธ์บางไฟล์อยู่แล้ว\n\n'
+            + '\n'.join(target.name for target in existing[:5])
+            + '\n\nต้องการเขียนทับหรือไม่?',
+        ):
+            return
+        if existing:
+            overwrite = True
+        cancellation = CancellationToken()
+        self._begin_job(cancellation, 'กำลังตรวจสอบไฟล์…', 'กำลังแยกสเต็ม')
+        threading.Thread(
+            target=self._run_stems_local,
+            args=(source, destination, audio_format, stems, overwrite, cancellation),
+            daemon=True,
+        ).start()
+
+    def _run_stems_local(
+        self,
+        source: Path,
+        destination: Path,
+        audio_format: str,
+        stems: tuple[str, ...],
+        overwrite: bool,
+        cancellation: CancellationToken,
+    ) -> None:
+        try:
+            outputs = separate_audio(
+                source,
+                destination,
+                audio_format,
+                stems,
+                self._report_stems_phase,
+                lambda value: self.after(0, self._set_progress, value, cancellation),
+                cancellation,
+                overwrite=overwrite,
+            )
+        except ConversionCancelled:
+            self.after(0, self._cancelled, cancellation)
+        except (SeparatorError, FFmpegError, OSError, ValueError) as exc:
+            self.after(0, self._failed, str(exc), cancellation)
+        else:
+            self.after(0, self._done_stems, outputs, cancellation)
+
+    def _start_stems_url(self) -> None:
+        try:
+            destination = destination_path(self.destination.get())
+        except ValueError as exc:
+            messagebox.showwarning('ไม่พบโฟลเดอร์', str(exc))
+            return
+        if not destination.is_dir():
+            messagebox.showwarning('ไม่พบโฟลเดอร์', 'กรุณาเลือกโฟลเดอร์บันทึกที่มีอยู่')
+            return
+        try:
+            url = validate_url(self.source.get())
+        except ValueError as exc:
+            messagebox.showwarning('ลิงก์ไม่ถูกต้อง', str(exc))
+            return
+        if not self.authorized.get():
+            messagebox.showwarning(
+                'กรุณายืนยันสิทธิ์',
+                'ทำเครื่องหมายว่าคุณเป็นเจ้าของหรือได้รับอนุญาตให้ดาวน์โหลดสื่อนี้',
+            )
+            return
+        if not tools_available():
+            self.status.set('ต้องติดตั้งเครื่องมือก่อนเริ่มงาน')
+            self._open_tool_setup()
+            return
+        if not ytdlp_available():
+            self.status.set('ต้องติดตั้งเครื่องมือก่อนเริ่มงาน')
+            self._open_tool_setup()
+            return
+        if not separator_installed():
+            self.status.set('ต้องติดตั้งเครื่องมือแยกสเต็มก่อนเริ่มงาน')
+            self._open_tool_setup(separator=True)
+            return
+        stems = self._selected_stems()
+        if not stems:
+            messagebox.showwarning('ยังไม่ได้เลือกสเต็ม', 'เลือกสเต็มอย่างน้อยหนึ่งรายการก่อนเริ่มงาน')
+            return
+        spec = ImportSpec(
+            url=url,
+            destination=destination,
+            mode='audio',
+            quality=self.quality.get(),
+            audio_format=self._audio_format_value(),
+        )
+        cancellation = CancellationToken()
+        self._begin_job(cancellation, 'กำลังตรวจสอบลิงก์…', 'กำลังแยกสเต็ม')
+        threading.Thread(
+            target=self._run_stems_url,
+            args=(spec, stems, cancellation),
+            daemon=True,
+        ).start()
+
+    def _run_stems_url(
+        self,
+        spec: ImportSpec,
+        stems: tuple[str, ...],
+        cancellation: CancellationToken,
+    ) -> None:
+        try:
+            completed, workspace = import_audio_for_processing(
+                spec,
+                lambda value: self.after(0, self._set_progress, value * 0.5, cancellation),
+                cancellation,
+            )
+            try:
+                outputs = separate_audio(
+                    completed,
+                    spec.destination,
+                    spec.audio_format,
+                    stems,
+                    self._report_stems_phase,
+                    lambda value: self.after(
+                        0, self._set_progress, 0.5 + value * 0.5, cancellation
+                    ),
+                    cancellation,
+                    collision_free=True,
+                )
+            finally:
+                cleanup_import_workspace(workspace, spec.destination)
+        except ConversionCancelled:
+            self.after(0, self._cancelled, cancellation)
+        except (SeparatorError, URLImportError, FFmpegError, OSError, ValueError) as exc:
+            self.after(0, self._failed, str(exc), cancellation)
+        else:
+            self.after(0, self._done_stems, outputs, cancellation)
 
     def _start_url(self) -> None:
         try:
@@ -1079,7 +1464,8 @@ class CliporaApp(tk.Tk):
             return
         self.progress['value'] = value * 100
         self.progress_text.set(f'{value * 100:.0f}%')
-        self.status.set(f'{self._progress_action}… {value * 100:.0f}%')
+        if self.mode.get() != 'stems':
+            self.status.set(f'{self._progress_action}… {value * 100:.0f}%')
 
     def _finish_job(self, cancellation: CancellationToken) -> bool:
         if cancellation is not self._cancellation:
@@ -1107,6 +1493,22 @@ class CliporaApp(tk.Tk):
             f'บันทึกไฟล์แล้ว\n{target}\n\nเปิดโฟลเดอร์หรือไม่?',
         ):
             os.startfile(target.parent)
+
+    def _done_stems(self, outputs: list[Path], cancellation: CancellationToken) -> None:
+        if not self._finish_job(cancellation):
+            return
+        self.progress['value'] = 100
+        self.progress_text.set('100%')
+        self.status.set(f'เสร็จแล้ว: {len(outputs)} ไฟล์')
+        if self.input_kind.get() == 'url':
+            self.authorized.set(False)
+        lines = '\n'.join(str(path) for path in outputs[:20])
+        extra = '' if len(outputs) <= 20 else f'\nและอีก {len(outputs) - 20} ไฟล์'
+        if messagebox.askyesno(
+            'สำเร็จ',
+            f'แยกสเต็มเสร็จแล้ว {len(outputs)} ไฟล์\n\n{lines}{extra}\n\nเปิดโฟลเดอร์หรือไม่?',
+        ):
+            os.startfile(outputs[0].parent)
 
     def _cancelled(self, cancellation: CancellationToken) -> None:
         if not self._finish_job(cancellation):

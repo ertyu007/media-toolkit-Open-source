@@ -10,6 +10,7 @@ dist/
 .coverage
 htmlcov/
 *.log
+*.rar
 *.tmp
 *.part
 *.mp3

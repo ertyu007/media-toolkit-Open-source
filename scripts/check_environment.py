@@ -117,6 +117,14 @@ def check_javascript_runtime() -> CheckResult:
     )
 
 
+def check_separator() -> CheckResult:
+    from clipora.separator import separator_installed
+
+    if separator_installed():
+        return CheckResult('สเต็มเสียง (Demucs)', True, 'พร้อมใช้งาน (Demucs 4.1.0)')
+    return CheckResult('สเต็มเสียง (Demucs)', True, 'ยังไม่ได้ติดตั้ง (ไม่บังคับ)')
+
+
 def run_checks() -> list[CheckResult]:
     return [
         check_python(),
@@ -125,6 +133,7 @@ def run_checks() -> list[CheckResult]:
         check_tool('ffprobe'),
         check_ytdlp(),
         check_javascript_runtime(),
+        check_separator(),
     ]
 
 

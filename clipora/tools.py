@@ -12,6 +12,7 @@ TOOL_ENVIRONMENT_VARIABLES = {
     'yt-dlp': 'CLIPORA_YTDLP',
     'deno': 'CLIPORA_DENO',
     'node': 'CLIPORA_NODE',
+    'separator-python': 'CLIPORA_SEPARATOR_PYTHON',
 }
 
 
@@ -38,6 +39,10 @@ def _bundled_tool_directories() -> tuple[Path, ...]:
     if getattr(sys, 'frozen', False):
         directories.append(Path(sys.executable).resolve().parent / 'tools')
     return tuple(dict.fromkeys(directories))
+
+
+def bundled_tool_directories() -> tuple[Path, ...]:
+    return _bundled_tool_directories()
 
 
 def _candidate_paths(name: str) -> tuple[Path, ...]:
