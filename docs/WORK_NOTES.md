@@ -1,13 +1,29 @@
 # บันทึกงาน (Work Notes) — ฟีเจอร์แยกสเต็มเสียง (Stem Separation) + อัปเดต yt-dlp
 
-อัปเดตล่าสุด: 2026-08-16
+อัปเดตล่าสุด: 2026-08-17
 
 ## สถานะโดยรวม
 
 - ฟีเจอร์ **แยกสเต็มเสียง (stems)** ผ่านการ implement ครบและทดสอบผ่านแล้ว
 - ฟีเจอร์ **อัปเดต yt-dlp** (ปุ่มในแอป + ตรวจอัตโนมัติตอนเปิดแอป) implement ครบและทดสอบผ่านแล้ว
-- ชุดเทสต์เต็ม: **129 tests ผ่าน** (skipped 4 = 2 network + 2 separator-integration) — รัน 3 ครั้งติดต่อกันได้ผลเดิม
+- ชุดเทสต์เต็ม: **132 tests ผ่าน** (skipped 4 = 2 network + 2 separator-integration ไม่ติดตั้งเครื่องมือ) — รันบน Python 3.13 (venv สร้างใหม่)
 - ทดสอบจริง end-to-end ฟีเจอร์ stems แล้ว (Demucs บน CPU, เอาต์พุต `_vocals.mp3` + `_instrumental.mp3`)
+- **ติดตั้งเครื่องมือ separator จริงแล้ว** — `%LOCALAPPDATA%\Clipora\tools\separator` (~209 MB), `test_separator_integration.py` รันผ่าน 2/2
+- **ทดสอบจริง flow อัปเดต yt-dlp แล้ว** — วาง exe รุ่น 2026.06.09 ลง managed tools แล้ว `update_ytdlp()` อัปเดตเป็น 2026.07.04 ผ่าน (download → checksum → atomic replace → record)
+- **อัปเดต docs แล้ว** — `THIRD_PARTY_NOTICES.md` (เพิ่ม separator toolchain + wheel table), `README.md`, `docs/USER_GUIDE.md`
+
+## ทำวันนี้ (2026-08-17)
+
+- แก้ venv เสีย (ชี้ไป Python 3.9 ของ user อื่น) → สร้างใหม่ด้วย Python 3.13 + `requirements-dev.txt`
+- แก้ bug ใน `tests/test_separator_integration.py`: `setUpClass` ใช้ `with tempfile.TemporaryDirectory()` ซึ่งลบไฟล์ source ก่อน test รัน → เปลี่ยนเป็นเก็บ tempdir ใน class และ `tearDownClass` cleanup
+
+## ฟีเจอร์โดเนท PromptPay (เพิ่ม 2026-08-17)
+
+- ปุ่ม **โดเนท** ที่ header (คอลัมน์ 5) → เปิด `DonateDialog` แสดง QR PromptPay + ข้อความ
+- `clipora/donate.py` (ใหม่): `donate_image_path()` ค้นหา `donate-qr.png` จาก `_MEIPASS` / หลัง exe / `assets/` (source)
+- QR asset: วางต้นฉบับที่ `assets/pay/promptpayQr.jpg` แล้วแปลงเป็น `assets/donate-qr.png` (Tk อ่าน PNG/GIF ได้ ไม่รองรับ JPG, runtime stdlib-only) ขนาด 320x428
+- `packaging/clipora.spec`: เพิ่ม `assets/donate-qr.png` เข้า `datas` (ถ้ามีไฟล์)
+- `tests/test_donate.py` (ใหม่): 3 tests ค้นหา asset / ไม่เจอคืน None / bundled มี priority
 
 ## ฟีเจอร์อัปเดต yt-dlp (เพิ่ม 2026-08-16)
 
@@ -71,17 +87,8 @@ python -m compileall -q app.py clipora tests scripts
 python -m unittest discover -s tests -v
 ```
 
-## งานต่อ (ยังไม่ทำ) — ทำพรุ่งนี้
+## งานต่อ (ยังไม่ทำ)
 
-- [ ] **ติดตั้ง separator จริงลง `%LOCALAPPDATA%\Clipora\tools\separator`** ผ่าน `install_separator_toolchain()`
-      (ดาวน์โหลด ~209 MB) แล้วรัน `tests/test_separator_integration.py` ให้ไม่ skip
-      — ตรวจสอบ `python.exe`, `site-packages/demucs`, `models/htdemucs_6s.th` และ `import site` ใน `._pth`
-- [ ] **ทดสอบจริงของปุ่มอัปเดต yt-dlp** — หลังติดตั้งเครื่องมือจริง: กด "อัปเดต yt-dlp" ในแอป เช็ค flow
-      (ตรวจ/ถาม/ดาวน์โหลด/verify/แทนที่), ตรวจ autocheck ตอนเปิดแอป (guard กับงานที่กำลังรัน),
-      ทดสอบรุ่นเก่าจริงโดยวาง `yt-dlp.exe` รุ่นเก่าลง `managed_tools_dir()` ก่อน
-- [ ] **อัปเดต `THIRD_PARTY_NOTICES.md`** — เพิ่ม dependencies ใหม่ (PyTorch, demucs, numpy, torch deps,
-      embedded Python ฯลฯ) พร้อม license/source ตามกติกาใน `docs/DEVELOPMENT.md` ข้อ 8
-- [ ] **อัปเดต README.md + docs/USER_GUIDE.md** ให้กล่าวถึงฟีเจอร์แยกสเต็มเสียง + ปุ่มอัปเดต yt-dlp
 - [ ] **Manual GUI smoke test** — สลับโหมด audio/video/stems, ติ๊กสเต็ม, overwrite prompt,
       ปุ่มติดตั้งเมื่อยังไม่ติดตั้ง separator, ปุ่ม "อัปเดต yt-dlp" (ตอนยังไม่ติดตั้ง/ติดตั้งแล้ว/อัปเดตล่าสุด),
       ข้อความไทย, scale 100/125/150%

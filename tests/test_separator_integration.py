@@ -19,27 +19,31 @@ from clipora.separator import (
 class SeparatorIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        with tempfile.TemporaryDirectory() as directory:
-            cls.source = Path(directory) / 'sample audio.wav'
-            creation = subprocess.run(
-                [
-                    'ffmpeg',
-                    '-y',
-                    '-loglevel',
-                    'error',
-                    '-f',
-                    'lavfi',
-                    '-i',
-                    'sine=frequency=440:duration=6',
-                    '-c:a',
-                    'pcm_s16le',
-                    str(cls.source),
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            assert creation.returncode == 0, creation.stderr
+        cls._temporary_directory = tempfile.TemporaryDirectory()
+        cls.source = Path(cls._temporary_directory.name) / 'sample audio.wav'
+        creation = subprocess.run(
+            [
+                'ffmpeg',
+                '-y',
+                '-loglevel',
+                'error',
+                '-f',
+                'lavfi',
+                '-i',
+                'sine=frequency=440:duration=6',
+                '-c:a',
+                'pcm_s16le',
+                str(cls.source),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert creation.returncode == 0, creation.stderr
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._temporary_directory.cleanup()
 
     def test_separates_vocals_and_instrumental(self):
         with tempfile.TemporaryDirectory() as directory:

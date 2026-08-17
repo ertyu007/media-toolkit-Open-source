@@ -43,6 +43,7 @@ from .separator import (
     separator_installed,
 )
 from .dependencies import DependencyInstallError
+from .donate import DONATE_BODY, DONATE_HEADING, DONATE_NOTE, donate_image_path
 from .legal import DMCA_EMAIL, DMCA_NOTE, DISCLAIMER_TEXT, build_dmca_mailto
 from .setup_ui import ToolSetupDialog
 from .tools import missing_required_tools
@@ -420,6 +421,18 @@ class CliporaApp(tk.Tk):
         ).grid(
             row=0,
             column=4,
+            rowspan=2,
+            padx=(8, 0),
+            sticky='e',
+        )
+        ttk.Button(
+            header,
+            text='โดเนท',
+            style='Header.TButton',
+            command=self._open_donate_dialog,
+        ).grid(
+            row=0,
+            column=5,
             rowspan=2,
             padx=(8, 0),
             sticky='e',
@@ -956,6 +969,9 @@ class CliporaApp(tk.Tk):
 
     def _open_dmca(self) -> None:
         DmcaDialog(self)
+
+    def _open_donate_dialog(self) -> None:
+        DonateDialog(self)
 
     def _audio_format_value(self) -> str:
         return AUDIO_FORMAT_VALUES.get(self.audio_format.get(), 'mp3')
@@ -1591,6 +1607,70 @@ class DisclaimerDialog(tk.Toplevel):
         close.grid(row=3, column=0, sticky='e', pady=(16, 0))
         self.grab_set()
         close.focus_set()
+
+
+class DonateDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent)
+        self.title('โดเนท')
+        self.geometry('440x680')
+        self.minsize(400, 560)
+        self.configure(bg=BG)
+        self.transient(parent)
+        self.resizable(True, True)
+        self.protocol('WM_DELETE_WINDOW', self.destroy)
+
+        shell = ttk.Frame(self, padding=(28, 22, 28, 20))
+        shell.pack(fill='both', expand=True)
+        shell.columnconfigure(0, weight=1)
+
+        ttk.Label(shell, text=DONATE_HEADING, style='Heading.TLabel').grid(
+            row=0, column=0, sticky='w'
+        )
+        ttk.Label(
+            shell,
+            text=DONATE_BODY,
+            style='Muted.TLabel',
+            wraplength=360,
+        ).grid(row=1, column=0, sticky='w', pady=(2, 16))
+
+        image_path = donate_image_path()
+        if image_path is not None:
+            try:
+                image = tk.PhotoImage(file=str(image_path))
+            except tk.TclError:
+                image = None
+            if image is not None:
+                label = ttk.Label(shell, image=image, style='Card.TFrame')
+                label.image = image
+                label.grid(row=2, column=0, sticky='ew', pady=(0, 16))
+            else:
+                ttk.Label(
+                    shell,
+                    text='ไม่พบไฟล์ QR โดเนท',
+                    style='CardMuted.TLabel',
+                ).grid(row=2, column=0, sticky='w', pady=(0, 16))
+        else:
+            ttk.Label(
+                shell,
+                text='ไม่พบไฟล์ QR โดเนท',
+                style='CardMuted.TLabel',
+            ).grid(row=2, column=0, sticky='w', pady=(0, 16))
+
+        ttk.Label(
+            shell,
+            text=DONATE_NOTE,
+            style='CardMuted.TLabel',
+            wraplength=360,
+        ).grid(row=3, column=0, sticky='w')
+        ttk.Button(
+            shell,
+            text='ปิด',
+            style='Accent.TButton',
+            command=self.destroy,
+        ).grid(row=4, column=0, sticky='e', pady=(16, 0))
+        self.grab_set()
+        self.after_idle(self.focus_set)
 
 
 class DmcaDialog(tk.Toplevel):

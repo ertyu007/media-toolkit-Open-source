@@ -5,15 +5,20 @@ project_root = Path(SPECPATH).parent
 icon_path = project_root / 'assets' / 'clipora.ico'
 version_path = project_root / 'packaging' / 'version_info.txt'
 manifest_path = project_root / 'packaging' / 'clipora.manifest'
+donate_qr_path = project_root / 'assets' / 'donate-qr.png'
+
+datas = [
+    (str(project_root / 'LICENSE'), '.'),
+    (str(project_root / 'README.md'), '.'),
+]
+if donate_qr_path.is_file():
+    datas.append((str(donate_qr_path), '.'))
 
 a = Analysis(
     [str(project_root / 'app.py')],
     pathex=[str(project_root)],
     binaries=[],
-    datas=[
-        (str(project_root / 'LICENSE'), '.'),
-        (str(project_root / 'README.md'), '.'),
-    ],
+    datas=datas,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

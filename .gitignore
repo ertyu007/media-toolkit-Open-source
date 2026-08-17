@@ -21,3 +21,5 @@ htmlcov/
 *.avi
 *.webm
 assets/clipora.ico
+assets/donate-qr.png
+assets/pay/
