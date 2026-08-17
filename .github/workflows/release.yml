@@ -32,19 +32,6 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Generate application icon
         run: python scripts/generate_icon.py
-      - name: Decode donate QR from secret
-        shell: pwsh
-        env:
-          DONATE_QR_BASE64: ${{ secrets.CLIPORA_DONATE_QR_BASE64 }}
-        run: |
-          if ($env:DONATE_QR_BASE64) {
-            New-Item -ItemType Directory -Path assets -Force | Out-Null
-            $bytes = [Convert]::FromBase64String($env:DONATE_QR_BASE64)
-            [IO.File]::WriteAllBytes((Join-Path $env:GITHUB_WORKSPACE 'assets\donate-qr.png'), $bytes)
-            Write-Host "Wrote donate-qr.png ($($bytes.Length) bytes)"
-          } else {
-            Write-Host 'CLIPORA_DONATE_QR_BASE64 not set - donate QR will be omitted from this build.'
-          }
       - name: Build Clipora application
         run: python -m PyInstaller --noconfirm --clean packaging/clipora.spec
       - name: Stage bundled tools for offline installer

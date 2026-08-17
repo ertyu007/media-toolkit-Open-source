@@ -18,7 +18,7 @@
 - แก้ bug ใน `tests/test_separator_integration.py`: `setUpClass` ใช้ `with tempfile.TemporaryDirectory()` ซึ่งลบไฟล์ source ก่อน test รัน → เปลี่ยนเป็นเก็บ tempdir ใน class และ `tearDownClass` cleanup
 - **แยกเวอร์ชัน PC/Mobile**: PC กลับเป็น `0.5.1` (mobile คง `1.0.1`) — แก้ `__init__.py`, UA, iss, version_info, README
 - **แก้ CI ล้ม**: `test_donate.py` เช็ค `assets/` (gitignored ไม่มีใน CI) → ลบ assert นั้น
-- **Donate QR ใน CI build**: เก็บ QR เป็น secret `CLIPORA_DONATE_QR_BASE64` (ฐาน 64) workflow decode ก่อน PyInstaller — เพราะ QR ถูก gitignore แต่ GitHub Actions ใช้ fresh checkout; QR บีบอัด grayscale 56KB→27KB ให้พอดีกับ secret 64KB
+- **Donate QR ใช้ไฟล์ที่ commit ตรง ๆ แล้ว**: เดิมเก็บ QR เป็น secret `CLIPORA_DONATE_QR_BASE64` และ decode ใน CI — เปลี่ยนมา commit `assets/donate-qr.png` ไว้ใน repo (เลิก gitignore, ลบ step decode จาก workflow, ลบ `scripts/print_donate_secret.ps1`) เพื่อให้ทุก build มี QR แน่นอน
 - **แยกสเต็ม → อัด zip**: `separate_audio()` สร้าง `{ชื่อ}_stems.zip` รวมทุกสเต็ม หลังแยกเสร็จ (ไฟล์แยกยังอยู่) — `create_stems_zip()`, `separate_output_zip_path()`, UI เช็ค overwrite zip ด้วย, test 3 ตัวใหม่ + integration อัปเดต (138 tests ผ่าน)
 
 ## ฟีเจอร์โดเนท PromptPay (เพิ่ม 2026-08-17)

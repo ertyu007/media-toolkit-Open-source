@@ -21,6 +21,5 @@ htmlcov/
 *.avi
 *.webm
 assets/clipora.ico
-assets/donate-qr.png
 assets/pay/
 donate_qr_base64.txt
