@@ -122,7 +122,7 @@ class ToolSetupDialog(tk.Toplevel):
         self.next_button = ttk.Button(
             actions,
             text='ถัดไป',
-            style='Accent.TButton',
+            style='DialogAccent.TButton',
             command=self._go_next,
         )
         self.next_button.grid(row=0, column=3, sticky='e')

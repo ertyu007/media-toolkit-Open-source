@@ -197,6 +197,13 @@ class CliporaApp(tk.Tk):
             image.put(TEXT, to=(14, y, 14 + width, y + 1))
         return image
 
+    def _step_header(self, parent: ttk.Frame, number: str, title: str) -> ttk.Frame:
+        """Step heading with a numbered accent badge, e.g. [01] เลือกแหล่งสื่อ."""
+        frame = ttk.Frame(parent, style='Card.TFrame')
+        ttk.Label(frame, text=number, style='Badge.TLabel').pack(side='left', padx=(0, 10))
+        ttk.Label(frame, text=title, style='Step.TLabel').pack(side='left')
+        return frame
+
     def _build(self) -> None:
         style = ttk.Style(self)
         style.theme_use('clam')
@@ -210,22 +217,23 @@ class CliporaApp(tk.Tk):
         style.configure('Action.TFrame', background='#10141f', borderwidth=1, relief='solid')
         style.configure('TLabel', background=BG, foreground=TEXT, font=(self.ui_font, 10))
         style.configure('Card.TLabel', background=CARD, foreground=TEXT, font=(self.ui_font, 10))
-        style.configure('Heading.TLabel', background=BG, foreground=TEXT, font=('Segoe UI Semibold', 26))
+        style.configure('Heading.TLabel', background=BG, foreground=TEXT, font=('Segoe UI Semibold', 28))
         style.configure('Muted.TLabel', background=BG, foreground=MUTED, font=(self.ui_font, 10))
-        style.configure('CardMuted.TLabel', background=CARD, foreground=MUTED, font=(self.ui_font, 9))
+        style.configure('CardMuted.TLabel', background=CARD, foreground=MUTED, font=(self.ui_font, 10))
         style.configure('Section.TLabel', background=CARD, foreground=TEXT, font=(self.ui_font, 10, 'bold'))
         style.configure(
             'Step.TLabel',
             background=CARD,
             foreground='#c4b5fd',
-            font=(self.ui_font, 10, 'bold'),
+            font=(self.ui_font, 11, 'bold'),
         )
         style.configure(
-            'Pill.TLabel',
-            background='#1e1b33',
-            foreground='#c4b5fd',
-            font=(self.ui_font, 8, 'bold'),
-            padding=(10, 5),
+            'Badge.TLabel',
+            background=ACCENT,
+            foreground='#ffffff',
+            font=(self.ui_font, 9, 'bold'),
+            padding=(8, 3),
+            anchor='center',
         )
         style.configure(
             'Header.TButton',
@@ -234,13 +242,20 @@ class CliporaApp(tk.Tk):
             bordercolor=BORDER,
             lightcolor=BORDER,
             darkcolor=BORDER,
-            font=(self.ui_font, 8, 'bold'),
-            padding=(12, 6),
+            font=(self.ui_font, 9, 'bold'),
+            padding=(14, 7),
         )
         style.map(
             'Header.TButton',
             background=[('active', '#242c42')],
             foreground=[('active', TEXT)],
+        )
+        style.configure(
+            'Pill.TLabel',
+            background=ACCENT,
+            foreground='#ffffff',
+            font=(self.ui_font, 9, 'bold'),
+            padding=(10, 4),
         )
         style.configure(
             'Action.TLabel',
@@ -252,14 +267,7 @@ class CliporaApp(tk.Tk):
             'ActionMuted.TLabel',
             background='#10141f',
             foreground=MUTED,
-            font=(self.ui_font, 9),
-        )
-        style.configure(
-            'Pill.TLabel',
-            background=ACCENT,
-            foreground='#ffffff',
-            font=(self.ui_font, 9, 'bold'),
-            padding=(10, 4),
+            font=(self.ui_font, 10),
         )
         style.configure(
             'Dark.TEntry',
@@ -305,6 +313,22 @@ class CliporaApp(tk.Tk):
         )
         style.map(
             'Accent.TButton',
+            background=[('active', ACCENT_HOVER), ('disabled', '#41395f')],
+            bordercolor=[('active', ACCENT_HOVER), ('disabled', '#41395f')],
+            foreground=[('disabled', '#9b94b8')],
+        )
+        style.configure(
+            'DialogAccent.TButton',
+            background=ACCENT,
+            foreground=TEXT,
+            bordercolor=ACCENT,
+            lightcolor=ACCENT,
+            darkcolor=ACCENT,
+            font=(self.ui_font, 10, 'bold'),
+            padding=(14, 8),
+        )
+        style.map(
+            'DialogAccent.TButton',
             background=[('active', ACCENT_HOVER), ('disabled', '#41395f')],
             bordercolor=[('active', ACCENT_HOVER), ('disabled', '#41395f')],
             foreground=[('disabled', '#9b94b8')],
@@ -367,9 +391,11 @@ class CliporaApp(tk.Tk):
             'TCheckbutton',
             background=CARD,
             foreground=MUTED,
-            font=(self.ui_font, 9),
+            font=(self.ui_font, 10),
             indicatorcolor=FIELD,
-            padding=(0, 3),
+            indicatorsize=18,
+            indicatorborderwidth=2,
+            padding=(0, 4),
         )
         style.map(
             'TCheckbutton',
@@ -522,7 +548,7 @@ class CliporaApp(tk.Tk):
         source_header = ttk.Frame(card, style='Card.TFrame')
         source_header.grid(row=0, column=0, sticky='ew')
         source_header.columnconfigure(0, weight=1)
-        ttk.Label(source_header, text='01  เลือกแหล่งสื่อ', style='Step.TLabel').grid(
+        self._step_header(source_header, '01', 'เลือกแหล่งสื่อ').grid(
             row=0,
             column=0,
             sticky='w',
@@ -627,7 +653,7 @@ class CliporaApp(tk.Tk):
 
         ttk.Separator(card, style='Card.TSeparator').grid(row=4, column=0, sticky='ew', pady=(0, 12))
 
-        ttk.Label(card, text='02  เลือกที่บันทึก', style='Step.TLabel').grid(row=5, column=0, sticky='w')
+        self._step_header(card, '02', 'เลือกที่บันทึก').grid(row=5, column=0, sticky='w')
         destination_row = ttk.Frame(card, style='Card.TFrame')
         destination_row.grid(row=6, column=0, sticky='ew', pady=(8, 12))
         destination_row.columnconfigure(0, weight=1)
@@ -655,7 +681,7 @@ class CliporaApp(tk.Tk):
         )
 
         ttk.Separator(card, style='Card.TSeparator').grid(row=7, column=0, sticky='ew', pady=(0, 12))
-        ttk.Label(card, text='03  เลือกรูปแบบผลลัพธ์', style='Step.TLabel').grid(row=8, column=0, sticky='w')
+        self._step_header(card, '03', 'เลือกรูปแบบผลลัพธ์').grid(row=8, column=0, sticky='w')
         options = ttk.Frame(card, style='Card.TFrame')
         options.grid(row=9, column=0, sticky='ew', pady=(5, 0))
         options.columnconfigure(0, weight=1)
@@ -1641,16 +1667,56 @@ class DonateDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.title('โดเนท')
-        self.geometry('460x700')
-        self.minsize(420, 620)
+        self.geometry('440x540')
+        self.minsize(400, 500)
         self.configure(bg=BG)
         self.transient(parent)
         self.resizable(True, True)
         self.protocol('WM_DELETE_WINDOW', self.destroy)
 
-        shell = ttk.Frame(self, padding=(28, 22, 28, 20))
-        shell.pack(fill='both', expand=True)
+        self._dialog_canvas = tk.Canvas(self, bg=BG, highlightthickness=0, borderwidth=0)
+        dialog_scrollbar = ttk.Scrollbar(self, orient='vertical', command=self._dialog_canvas.yview)
+        self._dialog_canvas.grid(row=0, column=0, sticky='nsew')
+        dialog_scrollbar.grid(row=0, column=1, sticky='ns')
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+
+        shell = ttk.Frame(self._dialog_canvas, padding=(24, 18, 24, 16))
+        shell_window = self._dialog_canvas.create_window((0, 0), window=shell, anchor='nw')
         shell.columnconfigure(0, weight=1)
+
+        def _on_dialog_card_configure(_event: tk.Event) -> None:
+            self._dialog_canvas.configure(scrollregion=self._dialog_canvas.bbox('all'))
+
+        def _on_dialog_canvas_configure(_event: tk.Event) -> None:
+            self._dialog_canvas.itemconfigure(shell_window, width=self._dialog_canvas.winfo_width())
+
+        def _on_dialog_scroll(first: str, last: str) -> None:
+            dialog_scrollbar.set(first, last)
+            if float(first) <= 0.0 and float(last) >= 1.0:
+                dialog_scrollbar.grid_remove()
+            else:
+                dialog_scrollbar.grid()
+
+        def _on_dialog_mousewheel(event: tk.Event) -> None:
+            widget = self.winfo_containing(event.x_root, event.y_root)
+            if widget is not None and isinstance(widget, ttk.Combobox):
+                return
+            delta = int(getattr(event, 'delta', 0))
+            if delta:
+                self._dialog_canvas.yview_scroll(int(-delta / 120), 'units')
+
+        shell.bind('<Configure>', _on_dialog_card_configure)
+        self._dialog_canvas.bind('<Configure>', _on_dialog_canvas_configure)
+        self._dialog_canvas.configure(yscrollcommand=_on_dialog_scroll)
+        self._dialog_canvas.bind(
+            '<Enter>',
+            lambda _event: self.bind_all('<MouseWheel>', _on_dialog_mousewheel),
+        )
+        self._dialog_canvas.bind(
+            '<Leave>',
+            lambda _event: self.unbind_all('<MouseWheel>'),
+        )
 
         ttk.Label(shell, text=DONATE_HEADING, style='Heading.TLabel').grid(
             row=0, column=0, sticky='w'
@@ -1659,19 +1725,19 @@ class DonateDialog(tk.Toplevel):
             shell,
             text=DONATE_BODY,
             style='Muted.TLabel',
-            wraplength=380,
-        ).grid(row=1, column=0, sticky='w', pady=(2, 16))
+            wraplength=360,
+        ).grid(row=1, column=0, sticky='w', pady=(2, 12))
 
         image_path = donate_image_path()
         if image_path is not None:
             try:
                 raw = tk.PhotoImage(file=str(image_path))
-                image = fit_photo_image(raw, 360, 420)
+                image = fit_photo_image(raw, 280, 300)
             except tk.TclError:
                 image = None
             if image is not None:
                 frame = ttk.Frame(shell, style='Card.TFrame')
-                frame.grid(row=2, column=0, sticky='ew', pady=(0, 16))
+                frame.grid(row=2, column=0, sticky='ew', pady=(0, 12))
                 frame.columnconfigure(0, weight=1)
                 label = ttk.Label(frame, image=image, style='Card.TLabel')
                 label.image = image
@@ -1681,26 +1747,26 @@ class DonateDialog(tk.Toplevel):
                     shell,
                     text='ไม่พบไฟล์ QR โดเนท',
                     style='CardMuted.TLabel',
-                ).grid(row=2, column=0, sticky='w', pady=(0, 16))
+                ).grid(row=2, column=0, sticky='w', pady=(0, 12))
         else:
             ttk.Label(
                 shell,
                 text='ไม่พบไฟล์ QR โดเนท',
                 style='CardMuted.TLabel',
-            ).grid(row=2, column=0, sticky='w', pady=(0, 16))
+            ).grid(row=2, column=0, sticky='w', pady=(0, 12))
 
         ttk.Label(
             shell,
             text=DONATE_NOTE,
             style='CardMuted.TLabel',
-            wraplength=380,
+            wraplength=360,
         ).grid(row=3, column=0, sticky='w')
         ttk.Button(
             shell,
             text='ปิด',
-            style='Accent.TButton',
+            style='DialogAccent.TButton',
             command=self.destroy,
-        ).grid(row=4, column=0, sticky='e', pady=(16, 0))
+        ).grid(row=4, column=0, sticky='e', pady=(12, 0))
         self.grab_set()
         self.after_idle(self.focus_set)
 
@@ -1821,7 +1887,7 @@ class DmcaDialog(tk.Toplevel):
         ttk.Button(
             shell,
             text='ส่งรายงานทางอีเมล',
-            style='Accent.TButton',
+            style='DialogAccent.TButton',
             command=self._submit,
         ).grid(row=11, column=0, sticky='e')
         self.grab_set()
