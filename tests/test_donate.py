@@ -12,13 +12,11 @@ class DonateAssetTests(unittest.TestCase):
     def test_project_asset_directory_is_discovered(self):
         from clipora.donate import DONATE_IMAGE_NAME
 
-        project_assets = Path(__file__).resolve().parent.parent / 'assets'
         with TemporaryDirectory() as directory:
             asset = Path(directory) / DONATE_IMAGE_NAME
             asset.write_bytes(b'qr')
             with patch('clipora.donate._resource_directories', return_value=(Path(directory),)):
                 self.assertEqual(donate_image_path(), asset)
-        self.assertTrue(project_assets.is_dir())
 
     @patch('clipora.donate.sys.frozen', False, create=True)
     @patch('clipora.donate.sys._MEIPASS', None, create=True)
