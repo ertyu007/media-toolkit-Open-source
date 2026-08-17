@@ -40,6 +40,7 @@ from .separator import (
     SeparatorError,
     separate_audio,
     separate_output_paths,
+    separate_output_zip_path,
     separator_installed,
 )
 from .dependencies import DependencyInstallError
@@ -1221,7 +1222,9 @@ class CliporaApp(tk.Tk):
             messagebox.showwarning('ยังไม่ได้เลือกสเต็ม', 'เลือกสเต็มอย่างน้อยหนึ่งรายการก่อนเริ่มงาน')
             return
         audio_format = self._audio_format_value()
-        expected = separate_output_paths(source, destination, audio_format, stems)
+        expected = separate_output_paths(source, destination, audio_format, stems) + (
+            separate_output_zip_path(source, destination),
+        )
         existing = [target for target in expected if target.exists()]
         overwrite = False
         if existing and not messagebox.askyesno(

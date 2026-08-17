@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 from collections import deque
 from pathlib import Path
 from typing import Callable, Sequence
@@ -174,6 +175,36 @@ def separate_output_paths(
     stems: Sequence[str],
 ) -> tuple[Path, ...]:
     return tuple(separate_output_path(source, destination, audio_format, stem) for stem in stems)
+
+
+def separate_output_zip_path(source: Path, destination: Path) -> Path:
+    return destination / f'{source.stem}_stems.zip'
+
+
+def create_stems_zip(
+    outputs: Sequence[Path],
+    target: Path,
+    on_phase: Callable[[str], None],
+    on_progress: Callable[[float], None],
+    cancellation: CancellationToken,
+) -> Path:
+    temporary = temporary_output_path(target)
+    on_phase('กำลังอัดไฟล์สเต็มเป็น zip…')
+    members = list(outputs)
+    span = (1.0 - _PROGRESS_PHASE_SEPARATE) / max(len(members), 1)
+    try:
+        with zipfile.ZipFile(temporary, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+            for index, member in enumerate(members):
+                if cancellation.cancelled:
+                    raise ConversionCancelled('ยกเลิกงานแล้ว')
+                archive.write(member, arcname=member.name)
+                on_progress(_PROGRESS_PHASE_SEPARATE + (index + 1) * span)
+        finalize_output(temporary, target)
+    except BaseException:
+        if temporary.is_file():
+            temporary.unlink()
+        raise
+    return target
 
 
 def create_workspace(destination: Path) -> Path:
@@ -380,6 +411,7 @@ def separate_audio(
     validate_operation(info, 'audio')
 
     targets = {stem: _resolve_target(source, destination, audio_format, stem, overwrite, collision_free) for stem in selected}
+    zip_target = _resolve_target(source, destination, 'zip', 'stems', overwrite, collision_free)
 
     token = cancellation or CancellationToken()
     workspace = create_workspace(destination)
@@ -390,7 +422,7 @@ def separate_audio(
         on_progress(0.03)
         _run_demucs(build_separate_command(source, demucs_dir), separator_environment(), token, on_phase, on_progress)
         stem_dir = demucs_dir / SEPARATOR_MODEL
-        return _finalize_stems(
+        outputs = _finalize_stems(
             source,
             destination,
             audio_format,
@@ -402,5 +434,15 @@ def separate_audio(
             on_progress,
             token,
         )
+        outputs.append(
+            create_stems_zip(
+                outputs,
+                zip_target,
+                on_phase,
+                on_progress,
+                token,
+            )
+        )
+        return outputs
     finally:
         cleanup_workspace(workspace, destination)

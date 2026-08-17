@@ -6,8 +6,8 @@
 
 - ฟีเจอร์ **แยกสเต็มเสียง (stems)** ผ่านการ implement ครบและทดสอบผ่านแล้ว
 - ฟีเจอร์ **อัปเดต yt-dlp** (ปุ่มในแอป + ตรวจอัตโนมัติตอนเปิดแอป) implement ครบและทดสอบผ่านแล้ว
-- ชุดเทสต์เต็ม: **132 tests ผ่าน** (skipped 4 = 2 network + 2 separator-integration ไม่ติดตั้งเครื่องมือ) — รันบน Python 3.13 (venv สร้างใหม่)
-- ทดสอบจริง end-to-end ฟีเจอร์ stems แล้ว (Demucs บน CPU, เอาต์พุต `_vocals.mp3` + `_instrumental.mp3`)
+- ชุดเทสต์เต็ม: **138 tests ผ่าน** (skipped 2 = network) — รันบน Python 3.13 (venv สร้างใหม่)
+- ทดสอบจริง end-to-end ฟีเจอร์ stems แล้ว (Demucs บน CPU, เอาต์พุต `_vocals.mp3` + `_instrumental.mp3` + `_stems.zip`)
 - **ติดตั้งเครื่องมือ separator จริงแล้ว** — `%LOCALAPPDATA%\Clipora\tools\separator` (~209 MB), `test_separator_integration.py` รันผ่าน 2/2
 - **ทดสอบจริง flow อัปเดต yt-dlp แล้ว** — วาง exe รุ่น 2026.06.09 ลง managed tools แล้ว `update_ytdlp()` อัปเดตเป็น 2026.07.04 ผ่าน (download → checksum → atomic replace → record)
 - **อัปเดต docs แล้ว** — `THIRD_PARTY_NOTICES.md` (เพิ่ม separator toolchain + wheel table), `README.md`, `docs/USER_GUIDE.md`
@@ -16,6 +16,10 @@
 
 - แก้ venv เสีย (ชี้ไป Python 3.9 ของ user อื่น) → สร้างใหม่ด้วย Python 3.13 + `requirements-dev.txt`
 - แก้ bug ใน `tests/test_separator_integration.py`: `setUpClass` ใช้ `with tempfile.TemporaryDirectory()` ซึ่งลบไฟล์ source ก่อน test รัน → เปลี่ยนเป็นเก็บ tempdir ใน class และ `tearDownClass` cleanup
+- **แยกเวอร์ชัน PC/Mobile**: PC กลับเป็น `0.5.1` (mobile คง `1.0.1`) — แก้ `__init__.py`, UA, iss, version_info, README
+- **แก้ CI ล้ม**: `test_donate.py` เช็ค `assets/` (gitignored ไม่มีใน CI) → ลบ assert นั้น
+- **Donate QR ใน CI build**: เก็บ QR เป็น secret `CLIPORA_DONATE_QR_BASE64` (ฐาน 64) workflow decode ก่อน PyInstaller — เพราะ QR ถูก gitignore แต่ GitHub Actions ใช้ fresh checkout; QR บีบอัด grayscale 56KB→27KB ให้พอดีกับ secret 64KB
+- **แยกสเต็ม → อัด zip**: `separate_audio()` สร้าง `{ชื่อ}_stems.zip` รวมทุกสเต็ม หลังแยกเสร็จ (ไฟล์แยกยังอยู่) — `create_stems_zip()`, `separate_output_zip_path()`, UI เช็ค overwrite zip ด้วย, test 3 ตัวใหม่ + integration อัปเดต (138 tests ผ่าน)
 
 ## ฟีเจอร์โดเนท PromptPay (เพิ่ม 2026-08-17)
 

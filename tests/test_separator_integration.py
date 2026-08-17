@@ -1,6 +1,7 @@
 import subprocess
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 from clipora.ffmpeg import tools_available, probe
@@ -57,13 +58,24 @@ class SeparatorIntegrationTests(unittest.TestCase):
             )
             self.assertEqual(
                 sorted(path.name for path in outputs),
-                ['sample audio_instrumental.mp3', 'sample audio_vocals.mp3'],
+                [
+                    'sample audio_instrumental.mp3',
+                    'sample audio_stems.zip',
+                    'sample audio_vocals.mp3',
+                ],
             )
             for path in outputs:
                 self.assertGreater(path.stat().st_size, 0)
+                if path.suffix == '.zip':
+                    continue
                 info = probe(path)
                 self.assertTrue(info.has_audio)
                 self.assertFalse(info.has_video)
+            with zipfile.ZipFile(next(path for path in outputs if path.suffix == '.zip')) as archive:
+                self.assertEqual(
+                    sorted(archive.namelist()),
+                    ['sample audio_instrumental.mp3', 'sample audio_vocals.mp3'],
+                )
 
     def test_existing_output_is_rejected_without_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:

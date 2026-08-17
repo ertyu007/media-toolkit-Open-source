@@ -1,6 +1,7 @@
 import shutil
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,10 +14,12 @@ from clipora.separator import (
     build_instrumental_command,
     build_separate_command,
     cleanup_workspace,
+    create_stems_zip,
     create_workspace,
     parse_demucs_progress,
     separate_output_path,
     separate_output_paths,
+    separate_output_zip_path,
 )
 
 
@@ -91,6 +94,60 @@ class OutputPathTests(unittest.TestCase):
         source = Path('C:/media/song.wav')
         paths = separate_output_paths(source, Path('C:/out'), 'mp3', SELECTABLE_STEMS)
         self.assertEqual(len(paths), len(SELECTABLE_STEMS))
+
+    def test_zip_path_uses_source_stem(self):
+        source = Path('C:/media/เพลง.wav')
+        self.assertEqual(
+            separate_output_zip_path(source, Path('C:/out')),
+            Path('C:/out/เพลง_stems.zip'),
+        )
+
+
+class StemZipTests(unittest.TestCase):
+    def test_creates_zip_containing_all_stems(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stems_dir = root / 'stems'
+            stems_dir.mkdir()
+            stems = [stems_dir / f'{name}.mp3' for name in ('song_vocals', 'song_drums')]
+            for stem in stems:
+                stem.write_bytes(b'audio-data')
+
+            target = root / 'song_stems.zip'
+            result = create_stems_zip(
+                stems,
+                target,
+                lambda _message: None,
+                lambda _value: None,
+                CancellationToken(),
+            )
+
+            self.assertEqual(result, target)
+            self.assertTrue(target.is_file())
+            self.assertGreater(target.stat().st_size, 0)
+            with zipfile.ZipFile(target) as archive:
+                self.assertEqual(
+                    sorted(archive.namelist()),
+                    sorted(stem.name for stem in stems),
+                )
+
+    def test_cancelled_zip_cleans_temporary_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stems = [root / 'a.mp3']
+            stems[0].write_bytes(b'data')
+
+            token = CancellationToken()
+            token.cancel()
+            with self.assertRaises(Exception):
+                create_stems_zip(
+                    stems,
+                    root / 'out.zip',
+                    lambda _message: None,
+                    lambda _value: None,
+                    token,
+                )
+            self.assertFalse((root / 'out.zip').exists())
 
 
 class WorkspaceTests(unittest.TestCase):
