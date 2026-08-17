@@ -5,6 +5,7 @@
 ## ความสามารถ
 
 - **ดาวน์โหลดลิงก์** — วาง URL สาธารณะจาก YouTube, Facebook, Instagram และเว็บที่ yt-dlp รองรับ เลือกดาวน์โหลดวิดีโอ (mp4/mov, คุณภาพสูงสุด-360p, เฟรมเรต) หรือเฉพาะเสียง (mp3/m4a/wav/flac/opus)
+- **นำเข้า Cookies** — ถ้า YouTube/แพลตฟอร์มแจ้ง "ยืนยันว่าคุณไม่ใช่บอท" ให้นำเข้าไฟล์ cookies (Netscape format) จากเบราว์เซอร์ที่ล็อกอินไว้ เพื่อข้ามการตรวจ (เวอร์ชันฟรีไม่มี TLS impersonation จึงต้องใช้วิธีนี้)
 - **แปลงไฟล์ในเครื่อง** — เลือกวิดีโอในโทรศัพท์ แปลงเป็น MP4/MOV (ProRes) หรือแยกเสียง (mp3/m4a/wav/flac/opus)
 - ผลลัพธ์ถูกบันทึกไปยังโฟลเดอร์ **Downloads/Clipora** อัตโนมัติ พร้อมปุ่มแชร์
 - แสดงความคืบหน้าแบบเรียลไทม์ ยกเลิกงานได้
@@ -38,6 +39,7 @@ flutter build apk --release --split-per-abi
 
 - **Android เท่านั้น** — iOS ทำไม่ได้เพราะ Apple ห้ามฝัง Python interpreter ลงแอป
 - **yt-dlp ไม่อัปเดตในแอป** — เว็บเปลี่ยนสัญญาณบ่อย เช็กเวอร์ชันใหม่ได้ด้วย `powershell -ExecutionPolicy Bypass -File tools\check_ytdlp_update.ps1` ถ้ามีเวอร์ชันใหม่ ให้แก้เวอร์ชัน `dev.ffmpegkit-maintained:yt-dlp-android` ใน `android/app/build.gradle.kts` แล้ว build ใหม่
+- **library เวอร์ชันฟรีไม่มี TLS impersonation (curl-cffi)** — เว็บที่ตรวจ TLS fingerprint ของคำขอ (เช่น YouTube) จะบล็อกการดาวน์โหลด ทางแก๊ดฟรีคือนำเข้า Cookies จากเบราว์เซอร์ที่ล็อกอิน (ดู "ความสามารถ" ด้านบน)
 - ใช้สิทธิ์ดาวน์โหลดเฉพาะสื่อที่คุณเป็นเจ้าของ ได้รับอนุญาต หรืออยู่ในสาธารณสมบัติเท่านั้น
 
 ## โครงสร้างโค้ด

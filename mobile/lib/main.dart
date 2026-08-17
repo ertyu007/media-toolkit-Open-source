@@ -62,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _authorized = false;
   bool _playlists = false;
   String _url = '';
+  String? _cookiesPath;
 
   // file mode
   JobMode _fileMode = JobMode.video;
@@ -103,6 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _fps = app.setting('fps', 'สูงสุด');
       _audioFormat = app.setting('audioFormat', 'mp3');
       _playlists = app.settingBool('playlists', false);
+      _cookiesPath = app.activeCookiesPath;
       _fileMode = app.setting('fileMode', 'video') == 'audio'
           ? JobMode.audio
           : JobMode.video;
@@ -456,6 +458,7 @@ class _HomeScreenState extends State<HomeScreen> {
             app.setSetting('playlists', _playlists);
           },
         ),
+        _cookiesSection(),
         if (_urlMode == JobMode.video) ...[
           _fieldLabel('รูปแบบไฟล์'),
           _dropdown<String>(_urlFormat, const ['mp4', 'mov'], (v) {
@@ -517,6 +520,71 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       _toast('ไม่สามารถอ่านคลิปบอร์ดได้', bad: true);
     }
+  }
+
+  Future<void> _importCookies() async {
+    try {
+      final path = await NativeService.instance.pickCookiesFile();
+      if (path == null) return;
+      if (!mounted) return;
+      await app.importCookies(path);
+      if (!mounted) return;
+      setState(() => _cookiesPath = app.activeCookiesPath);
+      _toast('นำเข้า Cookies สำเร็จ');
+    } catch (e) {
+      _toast('นำเข้า Cookies ไม่สำเร็จ: $e', bad: true);
+    }
+  }
+
+  Future<void> _removeCookies() async {
+    await app.clearCookies();
+    if (!mounted) return;
+    setState(() => _cookiesPath = null);
+    _toast('ลบ Cookies แล้ว');
+  }
+
+  Widget _cookiesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _fieldLabel('Cookies (ช่วยข้ามการตรวจบอท)'),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _importCookies,
+                icon: const Icon(Icons.cookie_outlined, size: 18),
+                label: const Text('นำเข้า Cookies'),
+              ),
+            ),
+            if (_cookiesPath != null) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'ลบ Cookies',
+                onPressed: _removeCookies,
+                icon: const Icon(Icons.delete_outline, color: Colors.white54),
+              ),
+            ],
+          ],
+        ),
+        if (_cookiesPath != null)
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text(
+              'เปิดใช้ Cookies แล้ว — จะใช้กับทุกดาวน์โหลดลิงก์',
+              style: TextStyle(fontSize: 12, color: Color(0xFF7CB342)),
+            ),
+          )
+        else
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text(
+              'แนะนำสำหรับ YouTube — ใช้ไฟล์ cookies แบบ Netscape ที่ export จากเบราว์เซอร์ที่ล็อกอินไว้',
+              style: TextStyle(fontSize: 11, color: Colors.white38),
+            ),
+          ),
+      ],
+    );
   }
 
   // ---------------- File panel ----------------

@@ -31,6 +31,7 @@ class MainActivity : FlutterActivity() {
         const val EVENTS = "com.clipora/ytdlp/events"
         const val NATIVE_CHANNEL = "com.clipora/native"
         const val PICK_MEDIA_REQUEST = 9101
+        const val PICK_COOKIES_REQUEST = 9102
     }
 
     private val runningJobs = ConcurrentHashMap<String, Future<YtDlpResponse>>()
@@ -40,7 +41,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != PICK_MEDIA_REQUEST) return
+        if (requestCode != PICK_MEDIA_REQUEST && requestCode != PICK_COOKIES_REQUEST) return
         val result = pendingPickResult
         pendingPickResult = null
         if (result == null) return
@@ -102,6 +103,16 @@ class MainActivity : FlutterActivity() {
                             putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("video/*", "audio/*"))
                         }
                         startActivityForResult(intent, PICK_MEDIA_REQUEST)
+                    }
+                    "pickCookiesFile" -> {
+                        pendingPickResult = result
+                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "*/*"
+                            // ครอบคลุมทั้งไฟล์ .txt (Netscape cookies) และไม่มีนามสกุล
+                            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/plain", "text/*", "application/octet-stream"))
+                        }
+                        startActivityForResult(intent, PICK_COOKIES_REQUEST)
                     }
                     "saveToDownloads" -> {
                         val source = call.argument<String>("sourcePath")
