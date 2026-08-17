@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 1, 0),
-    prodvers=(1, 0, 1, 0),
+    filevers=(0, 5, 1, 0),
+    prodvers=(0, 5, 1, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -16,12 +16,12 @@ VSVersionInfo(
         [
           StringStruct(u'CompanyName', u'ertyu.dev'),
           StringStruct(u'FileDescription', u'Clipora desktop media toolkit'),
-          StringStruct(u'FileVersion', u'1.0.1'),
+          StringStruct(u'FileVersion', u'0.5.1'),
           StringStruct(u'InternalName', u'Clipora'),
           StringStruct(u'LegalCopyright', u'GNU GPL v3'),
           StringStruct(u'OriginalFilename', u'Clipora.exe'),
           StringStruct(u'ProductName', u'Clipora'),
-          StringStruct(u'ProductVersion', u'1.0.1'),
+          StringStruct(u'ProductVersion', u'0.5.1'),
         ],
       )
     ]),

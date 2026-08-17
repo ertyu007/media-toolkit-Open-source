@@ -19,7 +19,7 @@ from .tools import executable_filename, find_executable, managed_tools_dir
 
 ProgressCallback = Callable[[float, str], None]
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
-USER_AGENT = 'Clipora/1.0.1 dependency-setup'
+USER_AGENT = 'Clipora/0.5.1 dependency-setup'
 
 
 class DependencyInstallError(RuntimeError):
