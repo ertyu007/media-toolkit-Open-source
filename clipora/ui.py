@@ -57,15 +57,15 @@ from .ytdlp_update import (
 )
 
 
-BG = '#090d15'
-CARD = '#141a26'
-FIELD = '#0d1320'
-BORDER = '#293348'
-TEXT = '#f7f8fc'
-MUTED = '#96a3b8'
-ACCENT = '#7c5cff'
-ACCENT_HOVER = '#6c4df0'
-DANGER = '#e35d6a'
+BG = '#0c0f16'
+CARD = '#151a24'
+FIELD = '#0e1220'
+BORDER = '#2a3145'
+TEXT = '#f3f5fb'
+MUTED = '#9aa6bd'
+ACCENT = '#8b5cf6'
+ACCENT_HOVER = '#7c4df0'
+DANGER = '#ef5350'
 
 AUDIO_FORMAT_LABELS = ('MP3', 'M4A', 'WAV', 'FLAC', 'OPUS')
 AUDIO_FORMAT_VALUES = {'MP3': 'mp3', 'M4A': 'm4a', 'WAV': 'wav', 'FLAC': 'flac', 'OPUS': 'opus'}
@@ -97,6 +97,31 @@ def destination_path(value: str) -> Path:
     return Path(text)
 
 
+def fit_photo_image(image: tk.PhotoImage, max_width: int, max_height: int) -> tk.PhotoImage:
+    """Scale a PhotoImage to fit inside a bounding box (stdlib only)."""
+    width, height = image.width(), image.height()
+    if width <= max_width and height <= max_height:
+        return image
+    best: tuple[int, int, int, int] | None = None
+    for zoom in range(1, 9):
+        for subsample in range(1, 9):
+            scaled_width = width * zoom // subsample
+            scaled_height = height * zoom // subsample
+            if scaled_width <= max_width and scaled_height <= max_height:
+                if best is None or (scaled_width * scaled_height) > (best[0] * best[1]):
+                    best = (scaled_width, scaled_height, zoom, subsample)
+    if best is None:
+        return image.subsample(max(1, width // max_width), max(1, height // max_height))
+    _scaled_width, _scaled_height, zoom, subsample = best
+    if zoom > 1 and subsample > 1:
+        return image.zoom(zoom).subsample(subsample)
+    if zoom > 1:
+        return image.zoom(zoom)
+    if subsample > 1:
+        return image.subsample(subsample)
+    return image
+
+
 def source_summary(path_value: str) -> str:
     if not path_value.strip():
         return 'ยังไม่ได้เลือกไฟล์'
@@ -113,8 +138,8 @@ class CliporaApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title('Clipora')
-        self.geometry('900x700')
-        self.minsize(660, 480)
+        self.geometry('940x720')
+        self.minsize(680, 480)
         self.configure(bg=BG)
         self._first_run_setup = bool(missing_required_tools())
         if self._first_run_setup:
@@ -162,14 +187,14 @@ class CliporaApp(tk.Tk):
         self.protocol('WM_DELETE_WINDOW', self._on_close)
 
     def _create_icon(self) -> tk.PhotoImage:
-        image = tk.PhotoImage(width=32, height=32)
-        image.put(BG, to=(0, 0, 32, 32))
-        for y in range(4, 28):
-            inset = 2 if y in (4, 5, 26, 27) else 0
-            image.put(ACCENT, to=(4 + inset, y, 28 - inset, y + 1))
-        for y in range(10, 23):
-            width = min(y - 9, 23 - y)
-            image.put(TEXT, to=(12, y, 12 + width, y + 1))
+        image = tk.PhotoImage(width=36, height=36)
+        image.put(BG, to=(0, 0, 36, 36))
+        for y in range(5, 31):
+            inset = 2 if y in (5, 6, 29, 30) else 0
+            image.put(ACCENT, to=(5 + inset, y, 31 - inset, y + 1))
+        for y in range(11, 25):
+            width = min(y - 10, 25 - y)
+            image.put(TEXT, to=(14, y, 14 + width, y + 1))
         return image
 
     def _build(self) -> None:
@@ -182,50 +207,50 @@ class CliporaApp(tk.Tk):
 
         style.configure('TFrame', background=BG)
         style.configure('Card.TFrame', background=CARD)
-        style.configure('Action.TFrame', background='#111827', borderwidth=1, relief='solid')
+        style.configure('Action.TFrame', background='#10141f', borderwidth=1, relief='solid')
         style.configure('TLabel', background=BG, foreground=TEXT, font=(self.ui_font, 10))
         style.configure('Card.TLabel', background=CARD, foreground=TEXT, font=(self.ui_font, 10))
-        style.configure('Heading.TLabel', background=BG, foreground=TEXT, font=('Segoe UI Semibold', 28))
+        style.configure('Heading.TLabel', background=BG, foreground=TEXT, font=('Segoe UI Semibold', 26))
         style.configure('Muted.TLabel', background=BG, foreground=MUTED, font=(self.ui_font, 10))
         style.configure('CardMuted.TLabel', background=CARD, foreground=MUTED, font=(self.ui_font, 9))
         style.configure('Section.TLabel', background=CARD, foreground=TEXT, font=(self.ui_font, 10, 'bold'))
         style.configure(
             'Step.TLabel',
             background=CARD,
-            foreground='#b8aaff',
+            foreground='#c4b5fd',
             font=(self.ui_font, 10, 'bold'),
         )
         style.configure(
             'Pill.TLabel',
-            background='#1d1838',
-            foreground='#c8bcff',
+            background='#1e1b33',
+            foreground='#c4b5fd',
             font=(self.ui_font, 8, 'bold'),
             padding=(10, 5),
         )
         style.configure(
             'Header.TButton',
-            background='#1d1838',
-            foreground='#c8bcff',
-            bordercolor='#302758',
-            lightcolor='#302758',
-            darkcolor='#302758',
+            background='#1a2030',
+            foreground='#c8cfe0',
+            bordercolor=BORDER,
+            lightcolor=BORDER,
+            darkcolor=BORDER,
             font=(self.ui_font, 8, 'bold'),
-            padding=(10, 5),
+            padding=(12, 6),
         )
         style.map(
             'Header.TButton',
-            background=[('active', '#2a2250')],
+            background=[('active', '#242c42')],
             foreground=[('active', TEXT)],
         )
         style.configure(
             'Action.TLabel',
-            background='#111827',
+            background='#10141f',
             foreground=TEXT,
             font=(self.ui_font, 10, 'bold'),
         )
         style.configure(
             'ActionMuted.TLabel',
-            background='#111827',
+            background='#10141f',
             foreground=MUTED,
             font=(self.ui_font, 9),
         )
@@ -254,17 +279,17 @@ class CliporaApp(tk.Tk):
         )
         style.configure(
             'Secondary.TButton',
-            background='#232c3b',
+            background='#1c2434',
             foreground=TEXT,
-            bordercolor=BORDER,
-            lightcolor=BORDER,
-            darkcolor=BORDER,
+            bordercolor='#313a52',
+            lightcolor='#313a52',
+            darkcolor='#313a52',
             font=(self.ui_font, 10, 'bold'),
             padding=(14, 9),
         )
         style.map(
             'Secondary.TButton',
-            background=[('active', '#303b4f'), ('disabled', CARD)],
+            background=[('active', '#28324a'), ('disabled', CARD)],
             foreground=[('disabled', '#626d7f')],
             bordercolor=[('focus', ACCENT)],
         )
@@ -335,7 +360,7 @@ class CliporaApp(tk.Tk):
         )
         style.map(
             'Segment.TRadiobutton',
-            background=[('selected', ACCENT), ('active', '#222b3c'), ('disabled', CARD)],
+            background=[('selected', ACCENT), ('active', '#202a3e'), ('disabled', CARD)],
             foreground=[('selected', TEXT), ('active', TEXT), ('disabled', '#626d7f')],
         )
         style.configure(
@@ -355,12 +380,12 @@ class CliporaApp(tk.Tk):
         style.configure(
             'Dark.TCombobox',
             fieldbackground=FIELD,
-            background='#232c3b',
+            background='#1c2434',
             foreground=TEXT,
             arrowcolor=TEXT,
-            bordercolor=BORDER,
-            lightcolor=BORDER,
-            darkcolor=BORDER,
+            bordercolor='#313a52',
+            lightcolor='#313a52',
+            darkcolor='#313a52',
             padding=(10, 7),
         )
         style.map(
@@ -373,8 +398,8 @@ class CliporaApp(tk.Tk):
         style.configure(
             'Clipora.Horizontal.TProgressbar',
             background=ACCENT,
-            troughcolor='#202838',
-            bordercolor='#202838',
+            troughcolor='#1d2434',
+            bordercolor='#1d2434',
             lightcolor=ACCENT,
             darkcolor=ACCENT,
             thickness=11,
@@ -396,13 +421,6 @@ class CliporaApp(tk.Tk):
             text='แปลงวิดีโอ 360p–4K, แยกเสียง และ ProRes สำหรับ After Effects — บนเครื่องของคุณ',
             style='Muted.TLabel',
         ).grid(row=1, column=1, sticky='w')
-        ttk.Label(header, text='สร้างโดย ertyu.dev', style='Pill.TLabel').grid(
-            row=0,
-            column=2,
-            rowspan=2,
-            padx=(0, 10),
-            sticky='e',
-        )
         ttk.Button(
             header,
             text='เครื่องมือ',
@@ -410,7 +428,7 @@ class CliporaApp(tk.Tk):
             command=lambda: self._open_tool_setup(repair_mode=True),
         ).grid(
             row=0,
-            column=3,
+            column=2,
             rowspan=2,
             sticky='e',
         )
@@ -421,7 +439,7 @@ class CliporaApp(tk.Tk):
             command=lambda: self._check_ytdlp_update(auto=False),
         ).grid(
             row=0,
-            column=4,
+            column=3,
             rowspan=2,
             padx=(8, 0),
             sticky='e',
@@ -433,9 +451,16 @@ class CliporaApp(tk.Tk):
             command=self._open_donate_dialog,
         ).grid(
             row=0,
-            column=5,
+            column=4,
             rowspan=2,
             padx=(8, 0),
+            sticky='e',
+        )
+        ttk.Label(header, text='สร้างโดย ertyu.dev', style='Pill.TLabel').grid(
+            row=0,
+            column=5,
+            rowspan=2,
+            padx=(14, 0),
             sticky='e',
         )
 
@@ -1616,8 +1641,8 @@ class DonateDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent)
         self.title('โดเนท')
-        self.geometry('440x680')
-        self.minsize(400, 560)
+        self.geometry('460x700')
+        self.minsize(420, 620)
         self.configure(bg=BG)
         self.transient(parent)
         self.resizable(True, True)
@@ -1634,19 +1659,23 @@ class DonateDialog(tk.Toplevel):
             shell,
             text=DONATE_BODY,
             style='Muted.TLabel',
-            wraplength=360,
+            wraplength=380,
         ).grid(row=1, column=0, sticky='w', pady=(2, 16))
 
         image_path = donate_image_path()
         if image_path is not None:
             try:
-                image = tk.PhotoImage(file=str(image_path))
+                raw = tk.PhotoImage(file=str(image_path))
+                image = fit_photo_image(raw, 360, 420)
             except tk.TclError:
                 image = None
             if image is not None:
-                label = ttk.Label(shell, image=image, style='Card.TLabel')
+                frame = ttk.Frame(shell, style='Card.TFrame')
+                frame.grid(row=2, column=0, sticky='ew', pady=(0, 16))
+                frame.columnconfigure(0, weight=1)
+                label = ttk.Label(frame, image=image, style='Card.TLabel')
                 label.image = image
-                label.grid(row=2, column=0, sticky='ew', pady=(0, 16))
+                label.grid(row=0, column=0)
             else:
                 ttk.Label(
                     shell,
@@ -1664,7 +1693,7 @@ class DonateDialog(tk.Toplevel):
             shell,
             text=DONATE_NOTE,
             style='CardMuted.TLabel',
-            wraplength=360,
+            wraplength=380,
         ).grid(row=3, column=0, sticky='w')
         ttk.Button(
             shell,
