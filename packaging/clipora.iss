@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.5.3"
+  #define AppVersion "0.5.4"
 #endif
 
 [Setup]
@@ -13,10 +13,10 @@ AppSupportURL=https://github.com/ertyu007/media-toolkit-Open-source/issues
 AppUpdatesURL=https://github.com/ertyu007/media-toolkit-Open-source/releases
 AppCopyright=Copyright (C) ertyu.dev
 AppComments=Download, convert and extract audio from authorized media on your PC
-DefaultDirName={localappdata}\Programs\Clipora
+DefaultDirName={autopf}\Clipora
 DefaultGroupName=Clipora
 DisableProgramGroupPage=yes
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist\installer
@@ -49,4 +49,4 @@ Name: "{autodesktop}\Clipora"; Filename: "{app}\Clipora.exe"; Tasks: desktopicon
 Name: "desktopicon"; Description: "สร้างไอคอนบน Desktop"; GroupDescription: "ไอคอนเพิ่มเติม:"; Flags: unchecked
 
 [Run]
-Filename: "{app}\Clipora.exe"; Description: "เปิด Clipora"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Clipora.exe"; Description: "เปิด Clipora"; Flags: nowait postinstall skipifsilent runascurrentuser
