@@ -31,7 +31,6 @@ class MainActivity : FlutterActivity() {
         const val EVENTS = "com.clipora/ytdlp/events"
         const val NATIVE_CHANNEL = "com.clipora/native"
         const val PICK_MEDIA_REQUEST = 9101
-        const val PICK_COOKIES_REQUEST = 9102
     }
 
     private val runningJobs = ConcurrentHashMap<String, Future<YtDlpResponse>>()
@@ -41,7 +40,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != PICK_MEDIA_REQUEST && requestCode != PICK_COOKIES_REQUEST) return
+        if (requestCode != PICK_MEDIA_REQUEST) return
         val result = pendingPickResult
         pendingPickResult = null
         if (result == null) return
@@ -104,16 +103,6 @@ class MainActivity : FlutterActivity() {
                         }
                         startActivityForResult(intent, PICK_MEDIA_REQUEST)
                     }
-                    "pickCookiesFile" -> {
-                        pendingPickResult = result
-                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                            type = "*/*"
-                            // ครอบคลุมทั้งไฟล์ .txt (Netscape cookies) และไม่มีนามสกุล
-                            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/plain", "text/*", "application/octet-stream"))
-                        }
-                        startActivityForResult(intent, PICK_COOKIES_REQUEST)
-                    }
                     "saveToDownloads" -> {
                         val source = call.argument<String>("sourcePath")
                         val name = call.argument<String>("displayName")
@@ -152,6 +141,37 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /// คัดลอก qjs (QuickJS) ที่ฝังใน assets ไปไว้ใน filesDir แล้วชี้ให้ yt-dlp ใช้
+    /// เป็น JS runtime สำหรับแก้ JS challenge ของ YouTube (จำเป็นต่อการโหลดวิดีโอจริง)
+    private fun ensureJsRuntime(request: YtDlpRequest) {
+        val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull()
+            ?: return
+        val dir = File(filesDir, "jsruntime")
+        val qjs = File(dir, "qjs")
+        if (!qjs.exists() || qjs.length() == 0L) {
+            try {
+                dir.mkdirs()
+                val input = assets.open("qjs/$abi/qjs")
+                val tmp = File(dir, "qjs.tmp")
+                input.use { inp ->
+                    tmp.outputStream().use { out -> inp.copyTo(out) }
+                }
+                if (tmp.length() == 0L) {
+                    tmp.delete()
+                    return
+                }
+                tmp.renameTo(qjs)
+            } catch (e: Exception) {
+                return
+            }
+        }
+        try {
+            qjs.setExecutable(true)
+        } catch (_: Exception) {}
+        request.addOption("--js-runtimes")
+        request.addOption("quickjs:${qjs.absolutePath}")
+    }
+
     private fun handleDownload(call: MethodCall, result: MethodChannel.Result) {
         val id = call.argument<String>("id") ?: throw IllegalArgumentException("missing id")
         val url = call.argument<String>("url") ?: throw IllegalArgumentException("missing url")
@@ -167,6 +187,7 @@ class MainActivity : FlutterActivity() {
         for (option in options) {
             request.addOption(option)
         }
+        ensureJsRuntime(request)
 
         // เก็บ log ระดับ ERROR/WARNING ไว้แสดง error ที่แท้จริง
         val errorLog = StringBuilder()

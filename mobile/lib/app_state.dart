@@ -63,41 +63,6 @@ class AppState extends ChangeNotifier {
     saveSettings();
   }
 
-  // ---------------- Cookies สำหรับข้ามการตรวจบอท ----------------
-
-  String? get activeCookiesPath {
-    final path = settings['cookiesPath'];
-    if (path is String && path.isNotEmpty) {
-      final file = File(path);
-      if (file.existsSync() && file.lengthSync() > 0) return path;
-    }
-    return null;
-  }
-
-  Future<void> importCookies(String pickedPath) async {
-    final source = File(pickedPath);
-    if (!source.existsSync() || source.lengthSync() == 0) {
-      throw StateError('ไฟล์ cookies ว่างเปล่า');
-    }
-    final dir = Directory('${await _appDir()}/clipora');
-    await dir.create(recursive: true);
-    final target = File('${dir.path}/cookies.txt');
-    await source.copy(target.path);
-    setSetting('cookiesPath', target.path);
-  }
-
-  Future<void> clearCookies() async {
-    final path = settings['cookiesPath'];
-    if (path is String && path.isNotEmpty) {
-      try {
-        final file = File(path);
-        if (file.existsSync()) await file.delete();
-      } catch (_) {}
-    }
-    settings.remove('cookiesPath');
-    saveSettings();
-  }
-
   final Map<String, FfmpegRun> _ffmpegRuns = {};
 
   Future<void> init() async {
@@ -166,12 +131,6 @@ class AppState extends ChangeNotifier {
       }
       if (!playlist) {
         options.add('--no-playlist');
-      }
-      // บังคับ TLS impersonation (curl_cffi) เหมือน PC เพื่อเลี่ยงบล็อก bot ของ YouTube/TikTok
-      options.addAll(['--impersonate', 'chrome']);
-      final cookiesPath = activeCookiesPath;
-      if (cookiesPath != null) {
-        options.addAll(['--cookies', cookiesPath]);
       }
 
       final ok = await _runYtDlp(job, url, outputTemplate, options);

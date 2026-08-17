@@ -5,8 +5,6 @@
 ## ความสามารถ
 
 - **ดาวน์โหลดลิงก์** — วาง URL สาธารณะจาก YouTube, Facebook, Instagram และเว็บที่ yt-dlp รองรับ เลือกดาวน์โหลดวิดีโอ (mp4/mov, คุณภาพสูงสุด-360p, เฟรมเรต) หรือเฉพาะเสียง (mp3/m4a/wav/flac/opus)
-- **TLS impersonation ในตัว** — ฝัง curl-cffi ไว้ใน AAR ที่ build เอง เลียนแบบ fingerprint ของ Chrome ให้ข้ามการบล็อก bot ของ YouTube/TikTok/Instagram ได้เหมือนเวอร์ชัน PC (วางลิงก์แล้วโหลดได้เลย ไม่ต้องตั้งค่าอะไร)
-- **นำเข้า Cookies (ทางเลือกเสริม)** — ถ้ายังโดนบล็อก (เช่น ต้องล็อกอินเพื่อยืนยันอายุ) นำเข้าไฟล์ cookies (Netscape format) จากเบราว์เซอร์ที่ล็อกอินไว้ได้
 - **แปลงไฟล์ในเครื่อง** — เลือกวิดีโอในโทรศัพท์ แปลงเป็น MP4/MOV (ProRes) หรือแยกเสียง (mp3/m4a/wav/flac/opus)
 - ผลลัพธ์ถูกบันทึกไปยังโฟลเดอร์ **Downloads/Clipora** อัตโนมัติ พร้อมปุ่มแชร์
 - แสดงความคืบหน้าแบบเรียลไทม์ ยกเลิกงานได้
@@ -17,7 +15,8 @@
 | ไลบรารี | ใช้ทำอะไร |
 |---|---|
 | `ffmpeg_kit_flutter_new` (FFmpeg v8.1.2 Full-GPL) | แปลงไฟล์ / แยกเสียง / ffprobe |
-| `yt-dlp-android` (AAR ที่ build เอง: Python 3.13 + yt-dlp 2026.7.4 + curl-cffi 0.15.0) | ดาวน์โหลดลิงก์ 1,000+ เว็บไซต์ + impersonation แบบ Chrome |
+| `yt-dlp-android` (AAR ที่ build เอง: Python 3.13 + yt-dlp 2026.7.4 + curl-cffi 0.15.0) | ดาวน์โหลดลิงก์ 1,000+ เว็บไซต์ |
+| `quickjs` (qjs arm64 ที่ cross-compile จาก NDK) | JS runtime สำหรับแก้ JS challenge ของ YouTube (จำเป็นต่อการโหลดวิดีโอตัวจริง) |
 
 ทุกอย่างประมวลผลบนเครื่องมือถือ ไม่มีการอัปโหลดไฟล์ไปที่ไหน
 
@@ -40,7 +39,8 @@ flutter build apk --release --split-per-abi
 
 - **Android เท่านั้น** — iOS ทำไม่ได้เพราะ Apple ห้ามฝัง Python interpreter ลงแอป
 - **yt-dlp ไม่อัปเดตในแอป** — เว็บเปลี่ยนสัญญาณบ่อย ถ้าเวอร์ชันเก่าเกินไป ให้ rebuild AAR (ดูด้านล่าง) แล้ว build APK ใหม่
-- **AAR ที่ฝัง curl-cffi build เองจาก [ffmpegkit-maintained/yt-dlp-android](https://github.com/ffmpegkit-maintained/yt-dlp-android) (MIT)** — เพิ่ม `curl-cffi==0.15.0` + `cffi==1.17.1` + `pycparser` + `chaquopy-libffi` ใน pip block ของ `library/build.gradle` (ใช้ `options "--no-deps"` เพราะ mirror ของ Chaquopy ยังไม่มี cffi 2.x) แก้ `ytdlp_runner.py` เพิ่ม flag `--impersonate` แล้วรัน `gradlew :library:assembleRelease` → นำไฟล์ `library-release.aar` ไปวางที่ `android/app/libs/yt-dlp-android-curl.aar`
+- **AAR ที่ฝัง curl-cffi build เองจาก [ffmpegkit-maintained/yt-dlp-android](https://github.com/ffmpegkit-maintained/yt-dlp-android) (MIT)** — เพิ่ม `curl-cffi==0.15.0` + `cffi==1.17.1` + `pycparser` + `chaquopy-libffi` ใน pip block ของ `library/build.gradle` (ใช้ `options "--no-deps"` เพราะ mirror ของ Chaquopy ยังไม่มี cffi 2.x) และแก้ `library/src/main/python/ytdlp_runner.py` ให้ map flag `--impersonate` (แปลงเป็น `ImpersonateTarget`) + `--js-runtimes` แล้วรัน `gradlew :library:assembleRelease` → นำไฟล์ `library-release.aar` ไปวางที่ `android/app/libs/yt-dlp-android-curl.aar`
+- **`qjs` (QuickJS) ที่ฝังใน `assets/qjs/arm64-v8a/`** — cross-compile จาก [bellard/quickjs](https://github.com/bellard/quickjs) ด้วย NDK clang (เช่น `aarch64-linux-android24-clang qjs.c quickjs.c dtoa.c libregexp.c libunicode.c cutils.c quickjs-libc.c -o qjs` + stub `repl`) แล้ว app extract ไปยัง filesDir ผ่าน `MainActivity.ensureJsRuntime()` และส่ง `--js-runtimes quickjs:<path>`
 - ใช้สิทธิ์ดาวน์โหลดเฉพาะสื่อที่คุณเป็นเจ้าของ ได้รับอนุญาต หรืออยู่ในสาธารณสมบัติเท่านั้น
 
 ## โครงสร้างโค้ด
