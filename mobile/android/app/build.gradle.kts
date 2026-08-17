@@ -65,7 +65,7 @@ kotlin {
 }
 
 dependencies {
-    implementation("dev.ffmpegkit-maintained:yt-dlp-android:2.0.2")
+    implementation(files("libs/yt-dlp-android-curl.aar"))
 }
 
 flutter {

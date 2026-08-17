@@ -167,6 +167,8 @@ class AppState extends ChangeNotifier {
       if (!playlist) {
         options.add('--no-playlist');
       }
+      // บังคับ TLS impersonation (curl_cffi) เหมือน PC เพื่อเลี่ยงบล็อก bot ของ YouTube/TikTok
+      options.addAll(['--impersonate', 'chrome']);
       final cookiesPath = activeCookiesPath;
       if (cookiesPath != null) {
         options.addAll(['--cookies', cookiesPath]);
