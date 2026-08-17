@@ -15,7 +15,7 @@ Clipora คือโปรแกรมเดสก์ท็อปโอเพน
 ## ติดตั้งสำหรับผู้ใช้ทั่วไป
 
 1. เปิดหน้า [GitHub Releases](https://github.com/ertyu007/media-toolkit-Open-source/releases)
-2. ดาวน์โหลด `Clipora-Setup-<version>-x64.exe` และไฟล์ `.sha256` ที่อยู่คู่กัน
+2. ดาวน์โหลด `Clipora-Setup-<version>-x64.exe` และไฟล์ `.sha256` ที่อยู่คู่กัน (หรือเลือก `Clipora-<version>-x64.zip` แบบพกพาได้ ไม่ต้องติดตั้ง แค่แกะ zip แล้วรัน `Clipora.exe`)
 3. เปิดตัวติดตั้ง เลือกสร้างไอคอนบน Desktop ได้ตามต้องการ ไม่ต้องใช้สิทธิ์ Administrator
 4. เปิด Clipora แล้วใช้งานได้ทันที ไม่ต้องดาวน์โหลดเครื่องมือเพิ่ม
 

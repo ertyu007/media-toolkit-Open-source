@@ -21,6 +21,7 @@
 - **Donate QR ใช้ไฟล์ที่ commit ตรง ๆ แล้ว**: เดิมเก็บ QR เป็น secret `CLIPORA_DONATE_QR_BASE64` และ decode ใน CI — เปลี่ยนมา commit `assets/donate-qr.png` ไว้ใน repo (เลิก gitignore, ลบ step decode จาก workflow, ลบ `scripts/print_donate_secret.ps1`) เพื่อให้ทุก build มี QR แน่นอน
 - **แยกสเต็ม → อัด zip**: `separate_audio()` สร้าง `{ชื่อ}_stems.zip` รวมทุกสเต็ม หลังแยกเสร็จ (ไฟล์แยกยังอยู่) — `create_stems_zip()`, `separate_output_zip_path()`, UI เช็ค overwrite zip ด้วย, test 3 ตัวใหม่ + integration อัปเดต (138 tests ผ่าน)
 - **แก้ QR โดเนทไม่ขึ้น + ขึ้นเวอร์ชัน 0.5.2**: `DonateDialog` ใช้ `ttk.Label` style `Card.TFrame` (Frame layout ไม่มี label element) ทำให้ label รูป QR หดเหลือ 1x1 → เปลี่ยนเป็น `Card.TLabel`; เปลี่ยน QR จาก CI secret มาเป็นรูป commit ตรง ๆ; bump ทุกที่ (`__init__`, iss, manifest, version_info, UA ×2, README)
+- **เพิ่มตัวโหลดแบบ ZIP (portable) ใน release**: workflow `release.yml` แพ็ค `dist/Clipora` → `Clipora-<ver>-x64.zip` (+ `.sha256`) หลัง build installer แล้วอัปโหลดขึ้น release คู่กับตัวติดตั้ง; อัปเดต README ตอนติดตั้ง
 
 ## ฟีเจอร์โดเนท PromptPay (เพิ่ม 2026-08-17)
 
