@@ -4,7 +4,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from clipora.ffmpeg import tools_available, probe
+from clipora.ffmpeg import tools_available
 from clipora.separator import (
     CancellationToken,
     OutputExistsError,
@@ -56,22 +56,14 @@ class SeparatorIntegrationTests(unittest.TestCase):
                 ('vocals', 'instrumental'),
                 cancellation=CancellationToken(),
             )
+            self.assertEqual([path.name for path in outputs], ['sample audio_stems.zip'])
+            zip_path = outputs[0]
+            self.assertGreater(zip_path.stat().st_size, 0)
             self.assertEqual(
-                sorted(path.name for path in outputs),
-                [
-                    'sample audio_instrumental.mp3',
-                    'sample audio_stems.zip',
-                    'sample audio_vocals.mp3',
-                ],
+                sorted(path.name for path in destination.iterdir()),
+                ['sample audio_stems.zip'],
             )
-            for path in outputs:
-                self.assertGreater(path.stat().st_size, 0)
-                if path.suffix == '.zip':
-                    continue
-                info = probe(path)
-                self.assertTrue(info.has_audio)
-                self.assertFalse(info.has_video)
-            with zipfile.ZipFile(next(path for path in outputs if path.suffix == '.zip')) as archive:
+            with zipfile.ZipFile(zip_path) as archive:
                 self.assertEqual(
                     sorted(archive.namelist()),
                     ['sample audio_instrumental.mp3', 'sample audio_vocals.mp3'],
@@ -80,7 +72,7 @@ class SeparatorIntegrationTests(unittest.TestCase):
     def test_existing_output_is_rejected_without_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory)
-            (destination / 'sample audio_vocals.mp3').write_bytes(b'occupied')
+            (destination / 'sample audio_stems.zip').write_bytes(b'occupied')
             with self.assertRaises(OutputExistsError):
                 separate_audio(self.source, destination, 'mp3', ('vocals',))
 

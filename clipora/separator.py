@@ -410,7 +410,6 @@ def separate_audio(
     info = probe(source)
     validate_operation(info, 'audio')
 
-    targets = {stem: _resolve_target(source, destination, audio_format, stem, overwrite, collision_free) for stem in selected}
     zip_target = _resolve_target(source, destination, 'zip', 'stems', overwrite, collision_free)
 
     token = cancellation or CancellationToken()
@@ -422,9 +421,14 @@ def separate_audio(
         on_progress(0.03)
         _run_demucs(build_separate_command(source, demucs_dir), separator_environment(), token, on_phase, on_progress)
         stem_dir = demucs_dir / SEPARATOR_MODEL
+        stage_dir = workspace / 'outputs'
+        stage_dir.mkdir()
+        targets = {
+            stem: separate_output_path(source, stage_dir, audio_format, stem) for stem in selected
+        }
         outputs = _finalize_stems(
             source,
-            destination,
+            stage_dir,
             audio_format,
             selected,
             stem_dir,
@@ -434,15 +438,7 @@ def separate_audio(
             on_progress,
             token,
         )
-        outputs.append(
-            create_stems_zip(
-                outputs,
-                zip_target,
-                on_phase,
-                on_progress,
-                token,
-            )
-        )
-        return outputs
+        zip_target = create_stems_zip(outputs, zip_target, on_phase, on_progress, token)
+        return [zip_target]
     finally:
         cleanup_workspace(workspace, destination)
