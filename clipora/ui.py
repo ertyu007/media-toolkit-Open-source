@@ -1644,7 +1644,7 @@ class DonateDialog(tk.Toplevel):
             except tk.TclError:
                 image = None
             if image is not None:
-                label = ttk.Label(shell, image=image, style='Card.TFrame')
+                label = ttk.Label(shell, image=image, style='Card.TLabel')
                 label.image = image
                 label.grid(row=2, column=0, sticky='ew', pady=(0, 16))
             else:
