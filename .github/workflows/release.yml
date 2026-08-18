@@ -3,7 +3,7 @@ name: Build Windows release
 on:
   workflow_dispatch:
   push:
-    tags: ['v*']
+    tags: ['pc-v*', 'mobile-v*']
 
 permissions:
   contents: write
@@ -101,12 +101,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # อัปโหลด assets ของ PC ไปที่ release ของเวอร์ชัน PC เสมอ (v<__version__>)
-          # ไม่ใช่ tag ที่ trigger งานนี้ เพราะ tag v1.0.1 เป็นของแอปมือถือแล้ว
+          # อัปโหลด assets ของ PC ไปที่ release ของเวอร์ชัน PC เสมอ (pc-v<__version__>)
+          # ไม่ใช่ tag ที่ trigger งานนี้ เพราะ tag mobile-v* เป็นของแอปมือถือแล้ว
           $version = python -c 'from clipora import __version__; print(__version__)'
-          $releaseTag = "v$version"
+          $releaseTag = "pc-v$version"
           gh release view $releaseTag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $releaseTag --title "Clipora PC $releaseTag" --generate-notes
+            gh release create $releaseTag --title "Clipora PC v$version" --generate-notes
           }
           gh release upload $releaseTag dist/installer/Clipora-Setup-*-x64.exe dist/installer/Clipora-Setup-*-x64.exe.sha256 dist/Clipora-*-x64.zip dist/Clipora-*-x64.zip.sha256 --clobber

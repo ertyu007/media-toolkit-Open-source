@@ -106,7 +106,7 @@ python -m pip install -r requirements-dev.txt
 .\scripts\build_windows.ps1
 ```
 
-ต้องใช้ Python 3.10+ และ Inno Setup 6 ผลลัพธ์อยู่ที่ `dist\installer` การ push tag เช่น `v0.4.1` จะให้ GitHub Actions ทดสอบ สร้าง Setup และแนบ checksum ไปยัง GitHub Release อัตโนมัติ
+ต้องใช้ Python 3.10+ และ Inno Setup 6 ผลลัพธ์อยู่ที่ `dist\installer` การ push tag เช่น `pc-v0.5.5` (PC) หรือ `mobile-v1.0.4` (Android) จะให้ GitHub Actions ทดสอบ สร้าง Setup และแนบ checksum ไปยัง GitHub Release อัตโนมัติ
 
 ## วิธีใช้แบบย่อ
 
