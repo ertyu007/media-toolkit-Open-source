@@ -54,6 +54,9 @@ android {
                 // ถ้ายังไม่มี key.properties ให้ fallback ไป signing ด้วย debug key
                 signingConfig = signingConfigs.getByName("debug")
             }
+            // Chaquopy/Python เรียก method ผ่าน reflection — ต้องไม่ให้ R8
+            // obfuscate คลาส/เมธอดของ yt-dlp AAR และ callback implementations
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
