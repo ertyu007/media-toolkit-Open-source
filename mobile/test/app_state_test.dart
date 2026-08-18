@@ -27,6 +27,23 @@ void main() {
     });
   });
 
+  group('siteWorkaroundHeaders', () {
+    test('adds TikTok referer header for tiktok.com URLs', () {
+      final h = AppState.siteWorkaroundHeaders('https://www.tiktok.com/@x/video/123');
+      expect(h, ['--add-header', 'Referer:https://www.tiktok.com/']);
+    });
+
+    test('adds TikTok referer header for short tiktok URLs', () {
+      final h = AppState.siteWorkaroundHeaders('https://vt.tiktok.com/abc/');
+      expect(h, ['--add-header', 'Referer:https://www.tiktok.com/']);
+    });
+
+    test('returns no extra options for non-TikTok URLs', () {
+      final h = AppState.siteWorkaroundHeaders('https://www.youtube.com/watch?v=abc');
+      expect(h, isEmpty);
+    });
+  });
+
   group('writeMetadataArgs', () {
     test('writes fields with -metadata without re-encoding', () {
       final args = writeMetadataArgs(

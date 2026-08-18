@@ -136,6 +136,7 @@ class AppState extends ChangeNotifier {
           '${baseDir.path}/%(title).160B [%(id)s].%(format_id)s.%(ext)s';
 
       final options = <String>[];
+      options.addAll(siteWorkaroundHeaders(url));
       if (mode == JobMode.audio) {
         options.addAll(['-f', 'bestaudio/best']);
       } else {
@@ -227,6 +228,18 @@ class AppState extends ChangeNotifier {
       job.error = 'หมดเวลาดาวน์โหลด';
       return false;
     }
+  }
+
+  /// เพิ่ม option แก้ปัญหาเฉพาะเว็บไซต์ (workaround ก่อน yt-dlp upstream มี fix)
+  /// TikTok บล็อกการขอหน้าเว็บเมื่อไม่มี Referer header (yt-dlp issue #17403)
+  /// PR #17437 ยังไม่ merge จึงเพิ่ม header เองเฉพาะลิงก์ TikTok
+  @visibleForTesting
+  static List<String> siteWorkaroundHeaders(String url) {
+    final lowerUrl = url.toLowerCase();
+    if (lowerUrl.contains('tiktok.com') || lowerUrl.contains('tiktok')) {
+      return ['--add-header', 'Referer:https://www.tiktok.com/'];
+    }
+    return const [];
   }
 
   @visibleForTesting
