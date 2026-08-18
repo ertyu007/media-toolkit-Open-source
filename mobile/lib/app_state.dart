@@ -7,7 +7,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../models/job.dart';
+import 'models/job.dart';
+import 'models/media_metadata.dart';
 import 'services/media.dart';
 import 'services/native.dart';
 import 'services/ytdlp.dart';
@@ -84,14 +85,24 @@ class AppState extends ChangeNotifier {
   String _newId() =>
       'job-${DateTime.now().millisecondsSinceEpoch}-${_jobs.length}';
 
-  Job _addJob(JobKind kind, JobMode mode, String name) {
+  Job _addJob(
+    JobKind kind,
+    JobMode mode,
+    String name, {
+    String? batchId,
+    int batchIndex = 0,
+    int batchTotal = 1,
+  }) {
     final job = Job(
       id: _newId(),
       kind: kind,
       mode: mode,
-      status: JobStatus.running,
+      status: JobStatus.queued,
       message: kind == JobKind.url ? 'กำลังตรวจสอบลิงก์…' : 'กำลังเตรียมไฟล์…',
       resultName: name,
+      batchId: batchId,
+      batchIndex: batchIndex,
+      batchTotal: batchTotal,
     );
     _jobs.insert(0, job);
     notifyListeners();
@@ -110,6 +121,7 @@ class AppState extends ChangeNotifier {
     bool playlist = false,
   }) async {
     final job = _addJob(JobKind.url, mode, url);
+    job.status = JobStatus.running;
     job.retryUrl = url;
     job.retryVideoFormat = videoFormat;
     job.retryQuality = quality;
@@ -132,6 +144,8 @@ class AppState extends ChangeNotifier {
       if (!playlist) {
         options.add('--no-playlist');
       }
+      // ทนทานขึ้นกับเน็ตไม่เสถียร
+      options.addAll(['--retries', '3', '--fragment-retries', '3']);
 
       final ok = await _runYtDlp(job, url, outputTemplate, options);
       if (!ok) {
@@ -396,8 +410,9 @@ class AppState extends ChangeNotifier {
     throw StateError('ไฟล์นี้ไม่มีเสียงให้แยก');
   }
 
-  // ---------------- File conversion ----------------
+  // ---------------- File conversion (single + batch) ----------------
 
+  /// แปลงไฟล์เดียว
   Future<void> startFileJob({
     required File source,
     required JobMode mode,
@@ -407,6 +422,69 @@ class AppState extends ChangeNotifier {
     required String audioFormat,
   }) async {
     final job = _addJob(JobKind.file, mode, source.uri.pathSegments.last);
+    job.status = JobStatus.running;
+    await _runFileJob(
+      job,
+      source,
+      mode: mode,
+      videoFormat: videoFormat,
+      quality: quality,
+      fps: fps,
+      audioFormat: audioFormat,
+    );
+  }
+
+  /// แปลงหลายไฟล์พร้อมกัน (batch) — รันทีละไฟล์ตามลำดับ
+  /// ทุกไฟล์อยู่ใน batchId เดียวกัน เพื่อให้ UI จัดกลุ่มแสดง
+  Future<void> startFileBatch({
+    required List<File> sources,
+    required JobMode mode,
+    required String videoFormat,
+    required String quality,
+    required String fps,
+    required String audioFormat,
+  }) async {
+    if (sources.isEmpty) return;
+    final batchId = 'batch-${DateTime.now().millisecondsSinceEpoch}';
+    final jobs = <Job>[];
+    for (var i = 0; i < sources.length; i++) {
+      final job = _addJob(
+        JobKind.file,
+        mode,
+        sources[i].uri.pathSegments.last,
+        batchId: batchId,
+        batchIndex: i,
+        batchTotal: sources.length,
+      );
+      job.message = 'รอคิว…';
+      jobs.add(job);
+    }
+    for (var i = 0; i < sources.length; i++) {
+      final job = jobs[i];
+      if (job.status == JobStatus.cancelled) continue;
+      job.status = JobStatus.running;
+      notifyListeners();
+      await _runFileJob(
+        job,
+        sources[i],
+        mode: mode,
+        videoFormat: videoFormat,
+        quality: quality,
+        fps: fps,
+        audioFormat: audioFormat,
+      );
+    }
+  }
+
+  Future<void> _runFileJob(
+    Job job,
+    File source, {
+    required JobMode mode,
+    required String videoFormat,
+    required String quality,
+    required String fps,
+    required String audioFormat,
+  }) async {
     try {
       final workDir = Directory('${await _appDir()}/clipora/work/${job.id}');
       await workDir.create(recursive: true);
@@ -420,6 +498,9 @@ class AppState extends ChangeNotifier {
       job.message = 'กำลังคัดลอกไฟล์…';
       notifyListeners();
       await source.copy(workFile.path);
+      // ไฟล์ต้นทางที่ pick จากแคชไม่จำเป็นแล้ว (คัดลอกเข้า workDir แล้ว)
+      // ลบออกเพื่อไม่ให้สะสมพื้นที่ โดยเฉพาะวิดีโอขนาดหลาย GB
+      _cleanupPickCache(source);
 
       final info = await probeMedia(workFile.path);
       final ext = mode == JobMode.audio ? audioFormat : videoFormat;
@@ -442,6 +523,60 @@ class AppState extends ChangeNotifier {
           job.progress = p;
           notifyListeners();
         });
+      await run.completed;
+      if (run.cancelled) return;
+      await _finalizeJob(job, File(target));
+    } catch (e) {
+      if (job.status != JobStatus.cancelled) {
+        job.status = JobStatus.failed;
+        job.error = e.toString();
+      }
+      notifyListeners();
+    }
+  }
+
+  /// ลบไฟล์ต้นทางที่คัดลอกมาจาก pick cache (เมื่อถูกคัดลอกเข้า workDir แล้ว)
+  /// ไม่ลบไฟล์ที่อยู่ในโฟลเดอร์งาน เพราะอาจเป็น result ของงานอื่น
+  Future<void> _cleanupPickCache(File source) async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final pickDir = Directory('${tempDir.path}/clipora-picks');
+      final sourcePath =
+          source.absolute.path.replaceAll('\\', '/').toLowerCase();
+      if (pickDir.existsSync() &&
+          sourcePath.startsWith(pickDir.absolute.path
+              .replaceAll('\\', '/')
+              .toLowerCase())) {
+        if (source.existsSync()) await source.delete();
+      }
+    } catch (_) {}
+  }
+
+  // ---------------- Metadata editing ----------------
+
+  /// แก้ไข metadata ของไฟล์เสียง (copy stream ไม่ re-encode) แล้วบันทึกผล
+  Future<void> editMetadata({
+    required File source,
+    required MediaMetadata metadata,
+    String? coverPath,
+  }) async {
+    final job = _addJob(JobKind.metadata, JobMode.audio,
+        source.uri.pathSegments.last);
+    job.status = JobStatus.running;
+    job.message = 'กำลังเขียน metadata…';
+    notifyListeners();
+    try {
+      final workDir = Directory('${await _appDir()}/clipora/meta/${job.id}');
+      await workDir.create(recursive: true);
+      final ext = _extensionOf(source.path).toLowerCase();
+      final target = '${workDir.path}/output$ext';
+      final args = writeMetadataArgs(
+        source.path,
+        target,
+        metadata,
+        coverPath: coverPath,
+      );
+      final run = await _trackFfmpeg(job, args);
       await run.completed;
       if (run.cancelled) return;
       await _finalizeJob(job, File(target));
@@ -504,6 +639,30 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// ยกเลิกงานทั้งหมดใน batch ที่ `job` สังกัดอยู่ (ถ้าเป็นงาน batch)
+  Future<void> cancelBatch(Job job) async {
+    final batchId = job.batchId;
+    if (batchId == null) {
+      await cancelJob(job);
+      return;
+    }
+    final group = _jobs.where((j) => j.batchId == batchId).toList();
+    for (final j in group) {
+      if (j.status != JobStatus.running && j.status != JobStatus.queued) {
+        continue;
+      }
+      if (j.kind == JobKind.url) {
+        await YtDlpService.instance.cancel(j.id);
+      }
+      final run = _ffmpegRuns[j.id];
+      if (run?.sessionId != null) {
+        await FFmpegKit.cancel(run!.sessionId);
+      }
+      j.status = JobStatus.cancelled;
+    }
+    notifyListeners();
+  }
+
   /// ลองทำงานที่ล้มเหลวใหม่ด้วยพารามิเตอร์เดิม (ลบงานเก่าแล้วสร้างงานใหม่)
   Future<void> retryJob(Job job) async {
     final url = job.retryUrl;
@@ -555,9 +714,28 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearFinished() {
+    final keep = _jobs.where((j) {
+      final s = j.status;
+      return s == JobStatus.running || s == JobStatus.queued;
+    }).toList();
+    final removed = _jobs.where((j) => !keep.contains(j)).toList();
+    _jobs
+      ..clear()
+      ..addAll(keep);
+    for (final job in removed) {
+      _deleteJobDir(job);
+    }
+    notifyListeners();
+  }
+
   Future<void> _deleteJobDir(Job job) async {
     try {
-      final sub = job.kind == JobKind.url ? 'dl' : 'work';
+      final sub = switch (job.kind) {
+        JobKind.url => 'dl',
+        JobKind.file => 'work',
+        JobKind.metadata => 'meta',
+      };
       final dir = Directory('${await _appDir()}/clipora/$sub/${job.id}');
       if (dir.existsSync()) await dir.delete(recursive: true);
     } catch (_) {}

@@ -1,5 +1,7 @@
-enum JobKind { url, file }
+enum JobKind { url, file, metadata }
+
 enum JobMode { video, audio }
+
 enum JobStatus { queued, running, done, failed, cancelled }
 
 class Job {
@@ -16,6 +18,11 @@ class Job {
 
   /// เวลาที่เหลือในการดาวน์โหลด (วินาที) จาก yt-dlp, `null` ถ้ายังไม่รู้
   int? etaSeconds;
+
+  /// กลุ่มงาน batch — งานในกลุ่มเดียวกันจะแสดงรวมกัน มี `null` ถ้าเป็นงานเดี่ยว
+  final String? batchId;
+  final int batchIndex;
+  final int batchTotal;
 
   // ---- ข้อมูลสำหรับกด "ลองใหม่" (retry) ----
   String? retryUrl;
@@ -37,5 +44,8 @@ class Job {
     this.resultPath,
     this.error,
     DateTime? createdAt,
+    this.batchId,
+    this.batchIndex = 0,
+    this.batchTotal = 1,
   }) : createdAt = createdAt ?? DateTime.now();
 }

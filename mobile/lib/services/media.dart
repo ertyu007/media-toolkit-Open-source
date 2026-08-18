@@ -4,6 +4,8 @@ import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 
+import '../models/media_metadata.dart';
+
 class MediaInfo {
   final double? duration;
   final bool hasVideo;
@@ -59,6 +61,67 @@ Future<MediaInfo> probeMedia(String path) async {
     videoCodec: videoCodec,
     audioCodec: audioCodec,
   );
+}
+
+/// อ่าน metadata (title/artist/album/…) ของไฟล์เสียงผ่าน ffprobe
+Future<MediaMetadata> readMetadata(String path) async {
+  final session = await FFprobeKit.getMediaInformation(path);
+  final info = session.getMediaInformation();
+  final tags = _tagsOf(info?.getTags());
+
+  String? tag(String key) {
+    final v = tags[key];
+    if (v == null || v.toString().isEmpty) return null;
+    return v.toString();
+  }
+
+  var hasCover = false;
+  for (final stream in info?.getStreams() ?? const []) {
+    final type = stream.getType();
+    if (type == 'video') {
+      final codec = stream.getCodec()?.toLowerCase() ?? '';
+      final mimetype = (_tagsOf(stream.getTags())['mimetype'] ?? '').toString();
+      // ภาพหน้าปกที่ฝังในไฟล์เสียงจะเป็น video stream ที่เป็นภาพ (mjpeg/png/…)
+      if (codec.contains('jpeg') ||
+          codec.contains('png') ||
+          codec.contains('bmp') ||
+          mimetype.startsWith('image/')) {
+        hasCover = true;
+        break;
+      }
+    }
+  }
+
+  return MediaMetadata(
+    title: tag('title'),
+    artist: tag('artist'),
+    album: tag('album'),
+    albumArtist: tag('album_artist') ?? tag('albumartist'),
+    genre: tag('genre'),
+    track: _parseTrack(tag('track')),
+    year: _parseYear(tag('date') ?? tag('year')),
+    hasCover: hasCover,
+  );
+}
+
+Map<String, dynamic> _tagsOf(Map<dynamic, dynamic>? tags) {
+  final out = <String, dynamic>{};
+  for (final entry in tags?.entries ?? const <MapEntry>[]) {
+    out[entry.key.toString()] = entry.value;
+  }
+  return out;
+}
+
+int? _parseTrack(String? raw) {
+  if (raw == null) return null;
+  final match = RegExp(r'(\d+)').firstMatch(raw);
+  return match == null ? null : int.tryParse(match.group(1)!);
+}
+
+int? _parseYear(String? raw) {
+  if (raw == null) return null;
+  final match = RegExp(r'^\s*(\d{4})').firstMatch(raw);
+  return match == null ? null : int.tryParse(match.group(1)!);
 }
 
 Future<FfmpegRun> runFfmpeg(
@@ -264,4 +327,75 @@ bool canCopyToMp4(MediaInfo info) {
   final audio = info.audioCodec?.toLowerCase();
   if (audio == null) return true;
   return copySafeAudio.contains(audio);
+}
+
+/// สร้าง ffmpeg args สำหรับเขียน metadata ลงไฟล์เสียง
+/// (copy stream เดิม ไม่ re-encode เปลี่ยนคุณภาพ)
+List<String> writeMetadataArgs(
+  String source,
+  String target,
+  MediaMetadata meta, {
+  String? coverPath,
+}) {
+  final ext = _extOf(target);
+  final args = <String>[
+    '-y',
+    '-loglevel',
+    'error',
+    if (coverPath != null) ...[
+      '-i',
+      coverPath,
+    ],
+    '-i',
+    source,
+  ];
+  if (coverPath != null) {
+    // audio = input 1, cover = input 0
+    args.addAll([
+      '-map', '0:v:0',
+      '-map', '1:a:0?',
+      '-c:v', 'copy',
+      '-c:a', 'copy',
+      '-disposition:v:0', 'attached_pic',
+    ]);
+  } else {
+    args.addAll([
+      '-map', '0:a:0?',
+      '-c:a', 'copy',
+    ]);
+  }
+  if (ext == 'mp3') {
+    args.addAll(['-id3v2_version', '3']);
+  }
+  args.addAll(_metadataArgs(meta, coverPath != null));
+  args.add(target);
+  return args;
+}
+
+List<String> _metadataArgs(MediaMetadata meta, bool hasCoverStream) {
+  final args = <String>[];
+  void put(String key, String? value) {
+    if (value == null || value.trim().isEmpty) return;
+    args.addAll(['-metadata', '$key=${value.trim()}']);
+  }
+
+  put('title', meta.title);
+  put('artist', meta.artist);
+  put('album', meta.album);
+  put('album_artist', meta.albumArtist);
+  put('genre', meta.genre);
+  if (meta.track != null) put('track', meta.track.toString());
+  if (meta.year != null) put('date', meta.year.toString());
+  if (hasCoverStream) {
+    args.addAll([
+      '-metadata:s:v', 'title=Album cover',
+      '-metadata:s:v', 'comment=Cover (front)',
+    ]);
+  }
+  return args;
+}
+
+String _extOf(String path) {
+  final dot = path.lastIndexOf('.');
+  return dot == -1 ? '' : path.substring(dot + 1).toLowerCase();
 }

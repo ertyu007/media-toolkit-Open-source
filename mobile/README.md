@@ -5,9 +5,10 @@
 ## ความสามารถ
 
 - **ดาวน์โหลดลิงก์** — วาง URL สาธารณะจาก YouTube, Facebook, Instagram และเว็บที่ yt-dlp รองรับ เลือกดาวน์โหลดวิดีโอ (mp4/mov, คุณภาพสูงสุด-360p, เฟรมเรต) หรือเฉพาะเสียง (mp3/m4a/wav/flac/opus)
-- **แปลงไฟล์ในเครื่อง** — เลือกวิดีโอในโทรศัพท์ แปลงเป็น MP4/MOV (ProRes) หรือแยกเสียง (mp3/m4a/wav/flac/opus)
+- **แปลงไฟล์ในเครื่อง** — เลือกวิดีโอในโทรศัพท์ **ครั้งละหลายไฟล์ได้ (batch)** แปลงเป็น MP4/MOV (ProRes) หรือแยกเสียง (mp3/m4a/wav/flac/opus)
+- **แก้ไข metadata เพลง** — แก้ชื่อเพลง ศิลปิน อัลบั้ม แนวเพลง ลำดับแทร็ก ปี และแนบ/เปลี่ยนหน้าปกของไฟล์ mp3/m4a/flac/opus โดยไม่ต้องแปลงไฟล์ใหม่ (copy stream)
 - ผลลัพธ์ถูกบันทึกไปยังโฟลเดอร์ **Downloads/Clipora** อัตโนมัติ พร้อมปุ่มแชร์
-- แสดงความคืบหน้าแบบเรียลไทม์ ยกเลิกงานได้
+- แสดงความคืบหน้าแบบเรียลไทม์ ยกเลิกงานได้ (รวมทั้งยกเลิกทั้ง batch)
 - หน้าจอภาษาไทย
 
 ## สิ่งที่ฝังอยู่ในแอป
@@ -47,13 +48,21 @@ flutter build apk --release --split-per-abi
 
 ```text
 lib/
-  main.dart              UI (Material 3 ธีมเข้ม ภาษาไทย)
-  app_state.dart         ควบคุมงานดาวน์โหลด/แปลง + จัดการ state
-  models/job.dart        โมเดลงาน
+  main.dart              entry + theme
+  app_state.dart         ควบคุมงานดาวน์โหลด/แปลง/metadata + จัดการ state
+  models/
+    job.dart             โมเดลงาน (รองรับ batch)
+    media_metadata.dart  โมเดล metadata เพลง
   services/
     ytdlp.dart           MethodChannel เรียก yt-dlp ฝั่ง Android
-    media.dart           ffmpeg/ffprobe (probe, แปลง, merge, remux)
-    native.dart          เลือกไฟล์ + บันทึกลง Downloads
+    media.dart           ffmpeg/ffprobe (probe, แปลง, merge, remux, อ่าน/เขียน metadata)
+    native.dart          เลือกไฟล์ (เดี่ยว/หลายไฟล์/รูป) + บันทึกลง Downloads
+  screens/
+    home_screen.dart     หน้าแรก (ลิงก์ / ไฟล์ / รายการงาน)
+    metadata_editor.dart แก้ไข metadata เพลง
+    video_preview.dart   หน้าตัวอย่างวิดีโอ
+  widgets/
+    ui.dart              คอมโพเนนต์ร่วม (การ์ด, ปุ่ม, dropdown)
 android/app/src/main/kotlin/.../MainActivity.kt
-                          MethodChannel + EventChannel + MediaStore
+                          MethodChannel + EventChannel + MediaStore + pick ไฟล์/รูปหลายแบบ
 ```

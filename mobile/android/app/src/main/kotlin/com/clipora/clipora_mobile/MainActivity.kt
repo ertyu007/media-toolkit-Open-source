@@ -31,37 +31,59 @@ class MainActivity : FlutterActivity() {
         const val EVENTS = "com.clipora/ytdlp/events"
         const val NATIVE_CHANNEL = "com.clipora/native"
         const val PICK_MEDIA_REQUEST = 9101
+        const val PICK_MEDIA_MULTI_REQUEST = 9102
+        const val PICK_IMAGE_REQUEST = 9103
     }
 
     private val runningJobs = ConcurrentHashMap<String, Future<YtDlpResponse>>()
     private val completionExecutor = Executors.newSingleThreadExecutor()
     private var eventSink: EventChannel.EventSink? = null
     private var pendingPickResult: MethodChannel.Result? = null
+    private var pendingPickResultType: Int = PICK_MEDIA_REQUEST
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != PICK_MEDIA_REQUEST) return
         val result = pendingPickResult
+        val type = pendingPickResultType
+        if (result == null || requestCode != type) return
         pendingPickResult = null
-        if (result == null) return
-        val uri = data?.data
-        if (resultCode != Activity.RESULT_OK || uri == null) {
-            result.success(null)
+        if (resultCode != Activity.RESULT_OK || data == null) {
+            result.success(if (type == PICK_MEDIA_MULTI_REQUEST) emptyList<String>() else null)
             return
         }
         try {
             val cacheDir = File(cacheDir, "clipora-picks")
             cacheDir.mkdirs()
-            val name = queryDisplayName(uri) ?: "picked_file"
-            val dest = File(cacheDir, name)
-            contentResolver.openInputStream(uri).use { input ->
-                if (input == null) throw IllegalStateException("ไม่สามารถเปิดไฟล์ได้")
-                dest.outputStream().use { output -> input.copyTo(output) }
+            when (type) {
+                PICK_MEDIA_MULTI_REQUEST -> {
+                    val uris = if (data.clipData != null) {
+                        (0 until data.clipData!!.itemCount).map { data.clipData!!.getItemAt(it).uri }
+                    } else if (data.data != null) {
+                        listOf(data.data!!)
+                    } else emptyList()
+                    val paths = uris.mapNotNull { copyUriToCache(cacheDir, it) }
+                    result.success(paths)
+                }
+                else -> {
+                    val uri = data.data
+                    result.success(uri?.let { copyUriToCache(cacheDir, it) })
+                }
             }
-            result.success(dest.absolutePath)
         } catch (e: Exception) {
             result.error("pick_error", e.message ?: "เลือกไฟล์ไม่สำเร็จ", null)
         }
+    }
+
+    private fun copyUriToCache(cacheDir: File, uri: Uri): String? {
+        val name = queryDisplayName(uri) ?: "picked_${System.currentTimeMillis()}"
+        val dest = File(cacheDir, name)
+        if (!dest.exists() || dest.length() == 0L) {
+            contentResolver.openInputStream(uri).use { input ->
+                if (input == null) return null
+                dest.outputStream().use { output -> input.copyTo(output) }
+            }
+        }
+        return dest.absolutePath
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -96,12 +118,33 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "pickMediaFile" -> {
                         pendingPickResult = result
+                        pendingPickResultType = PICK_MEDIA_REQUEST
                         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                             addCategory(Intent.CATEGORY_OPENABLE)
                             type = "*/*"
                             putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("video/*", "audio/*"))
                         }
                         startActivityForResult(intent, PICK_MEDIA_REQUEST)
+                    }
+                    "pickMultipleMediaFiles" -> {
+                        pendingPickResult = result
+                        pendingPickResultType = PICK_MEDIA_MULTI_REQUEST
+                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "*/*"
+                            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("video/*", "audio/*"))
+                            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                        }
+                        startActivityForResult(intent, PICK_MEDIA_MULTI_REQUEST)
+                    }
+                    "pickImageFile" -> {
+                        pendingPickResult = result
+                        pendingPickResultType = PICK_IMAGE_REQUEST
+                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "image/*"
+                        }
+                        startActivityForResult(intent, PICK_IMAGE_REQUEST)
                     }
                     "saveToDownloads" -> {
                         val source = call.argument<String>("sourcePath")
