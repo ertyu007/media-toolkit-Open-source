@@ -41,6 +41,7 @@ class PackagingConfigurationTests(unittest.TestCase):
     def test_release_workflow_and_build_files_exist(self):
         required = (
             '.github/workflows/release.yml',
+            '.github/workflows/mobile-release.yml',
             'packaging/clipora.spec',
             'packaging/clipora.iss',
             'packaging/clipora.manifest',
