@@ -54,17 +54,51 @@ from .ytdlp_update import (
     latest_ytdlp_version,
     update_ytdlp,
 )
-
-
-BG = '#0c0f16'
-CARD = '#151a24'
-FIELD = '#0e1220'
-BORDER = '#2a3145'
-TEXT = '#f3f5fb'
-MUTED = '#9aa6bd'
-ACCENT = '#8b5cf6'
-ACCENT_HOVER = '#7c4df0'
-DANGER = '#ef5350'
+from .ui_components.dialogs import CANCEL, KEEP, OVERWRITE, OverwriteDialog
+from .ui_components.format import format_file_size
+from .ui_components.theme import (
+    ACCENT,
+    ACCENT_DISABLED_BG,
+    ACCENT_DISABLED_FG,
+    ACCENT_HOVER,
+    ACTION_BG,
+    BG,
+    BORDER,
+    BORDER_LIGHT,
+    BUTTON_BG,
+    BUTTON_BORDER,
+    BUTTON_HOVER,
+    CARD,
+    DANGER,
+    DISABLED_FG,
+    DROPZONE_BG,
+    DROPZONE_HOVER_BG,
+    ERROR,
+    FIELD,
+    MENU_ACTIVE_BG,
+    MENU_ACTIVE_FG,
+    MENU_BG,
+    MUTED,
+    PROGRESS_TROUGH,
+    SECONDARY_BG,
+    SECONDARY_BORDER,
+    SECONDARY_HOVER,
+    SECTION_ACCENT,
+    SUCCESS,
+    TEXT,
+    TOAST_BG,
+    TOP_BAR_BG,
+    TOPBAR_BUTTON_BG,
+    TOPBAR_BUTTON_HOVER,
+    TOPBAR_BUTTON_FG,
+    WARNING,
+)
+from .ui_components.widgets import (
+    InlineError,
+    SegmentedControl,
+    DropZone,
+    ToastManager,
+)
 
 AUDIO_FORMAT_LABELS = ('MP3', 'M4A', 'WAV', 'FLAC', 'OPUS')
 AUDIO_FORMAT_VALUES = {'MP3': 'mp3', 'M4A': 'm4a', 'WAV': 'wav', 'FLAC': 'flac', 'OPUS': 'opus'}
@@ -76,17 +110,19 @@ VIDEO_FORMAT_VALUES = {
 FPS_LABELS = ('สูงสุด', '60fps', '30fps')
 FPS_VALUES = {'สูงสุด': 'สูงสุด', '60fps': '60', '30fps': '30'}
 
+# Progress phases
+PROGRESS_PHASES = {
+    'idle': 'พร้อมเริ่มงาน',
+    'validating': 'กำลังตรวจสอบ…',
+    'downloading': 'กำลังดาวน์โหลด…',
+    'extracting': 'กำลังแยกเสียง…',
+    'converting': 'กำลังแปลงวิดีโอ…',
+    'separating': 'กำลังแยกสเต็ม…',
+    'finalizing': 'กำลังบันทึกไฟล์…',
+    'done': 'เสร็จสิ้น',
+    'error': 'เกิดข้อผิดพลาด',
+}
 
-def format_file_size(size: int) -> str:
-    value = float(max(0, size))
-    units = ('B', 'KB', 'MB', 'GB', 'TB')
-    for unit in units:
-        if value < 1024 or unit == units[-1]:
-            if unit == 'B':
-                return f'{int(value)} {unit}'
-            return f'{value:.1f} {unit}'
-        value /= 1024
-    return '0 B'
 
 
 def destination_path(value: str) -> Path:
@@ -176,7 +212,11 @@ class CliporaApp(tk.Tk):
         self._input_widgets: list[ttk.Widget] = []
         self._setup_dialog: ToolSetupDialog | None = None
         self._ytdlp_checking = False
+        self._recent_destinations: list[str] = []
+        self._result_targets: list[Path] = []
         self._build()
+        self._toast = ToastManager(self, self._menu_btn)
+        self._bind_shortcuts()
         self.source.trace_add('write', self._on_source_changed)
         self.bind_all('<Control-KeyPress>', self._on_control_keypress, add='+')
         self.bind_all('<Shift-Insert>', self._on_paste_shortcut, add='+')
@@ -196,13 +236,6 @@ class CliporaApp(tk.Tk):
             image.put(TEXT, to=(14, y, 14 + width, y + 1))
         return image
 
-    def _step_header(self, parent: ttk.Frame, number: str, title: str) -> ttk.Frame:
-        """Step heading with a numbered accent badge, e.g. [01] เลือกแหล่งสื่อ."""
-        frame = ttk.Frame(parent, style='Card.TFrame')
-        ttk.Label(frame, text=number, style='Badge.TLabel').pack(side='left', padx=(0, 10))
-        ttk.Label(frame, text=title, style='Step.TLabel').pack(side='left')
-        return frame
-
     def _build(self) -> None:
         style = ttk.Style(self)
         style.theme_use('clam')
@@ -211,93 +244,107 @@ class CliporaApp(tk.Tk):
         self.option_add('*TCombobox*Listbox.selectBackground', ACCENT)
         self.option_add('*TCombobox*Listbox.selectForeground', TEXT)
 
+        # ── Base frames / labels ──────────────────────────────────────────────
         style.configure('TFrame', background=BG)
         style.configure('Card.TFrame', background=CARD)
-        style.configure('Action.TFrame', background='#10141f', borderwidth=1, relief='solid')
+        style.configure('CardBorder.TFrame', background=CARD, borderwidth=1, relief='solid')
+        style.configure('TopBar.TFrame', background=TOP_BAR_BG)
+        style.configure('Action.TFrame', background=ACTION_BG, borderwidth=1, relief='solid')
+
         style.configure('TLabel', background=BG, foreground=TEXT, font=(self.ui_font, 10))
         style.configure('Card.TLabel', background=CARD, foreground=TEXT, font=(self.ui_font, 10))
-        style.configure('Heading.TLabel', background=BG, foreground=TEXT, font=('Segoe UI Semibold', 28))
         style.configure('Muted.TLabel', background=BG, foreground=MUTED, font=(self.ui_font, 10))
         style.configure('CardMuted.TLabel', background=CARD, foreground=MUTED, font=(self.ui_font, 10))
-        style.configure('Section.TLabel', background=CARD, foreground=TEXT, font=(self.ui_font, 10, 'bold'))
+
+        # Top bar title
         style.configure(
-            'Step.TLabel',
+            'TopBarTitle.TLabel',
+            background=TOP_BAR_BG,
+            foreground=TEXT,
+            font=(self.ui_font, 12, 'bold'),
+        )
+        style.configure(
+            'TopBarMuted.TLabel',
+            background=TOP_BAR_BG,
+            foreground=MUTED,
+            font=(self.ui_font, 9),
+        )
+
+        # Section headers inside cards — "01  แหล่งสื่อ" style
+        style.configure(
+            'CardSection.TLabel',
             background=CARD,
-            foreground='#c4b5fd',
-            font=(self.ui_font, 11, 'bold'),
+            foreground=SECTION_ACCENT,
+            font=(self.ui_font, 10, 'bold'),
         )
         style.configure(
-            'Badge.TLabel',
+            'CardSectionNum.TLabel',
             background=ACCENT,
-            foreground='#ffffff',
-            font=(self.ui_font, 9, 'bold'),
-            padding=(8, 3),
-            anchor='center',
+            foreground=MENU_ACTIVE_FG,
+            font=(self.ui_font, 8, 'bold'),
+            padding=(5, 2),
         )
-        style.configure(
-            'Header.TButton',
-            background='#1a2030',
-            foreground='#c8cfe0',
-            bordercolor=BORDER,
-            lightcolor=BORDER,
-            darkcolor=BORDER,
-            font=(self.ui_font, 9, 'bold'),
-            padding=(14, 7),
-        )
-        style.map(
-            'Header.TButton',
-            background=[('active', '#242c42')],
-            foreground=[('active', TEXT)],
-        )
-        style.configure(
-            'Pill.TLabel',
-            background=ACCENT,
-            foreground='#ffffff',
-            font=(self.ui_font, 9, 'bold'),
-            padding=(10, 4),
-        )
+        style.configure('Section.TLabel', background=CARD, foreground=TEXT, font=(self.ui_font, 10, 'bold'))
+
+        # Action bar labels
         style.configure(
             'Action.TLabel',
-            background='#10141f',
+            background=ACTION_BG,
             foreground=TEXT,
             font=(self.ui_font, 10, 'bold'),
         )
         style.configure(
             'ActionMuted.TLabel',
-            background='#10141f',
+            background=ACTION_BG,
             foreground=MUTED,
             font=(self.ui_font, 10),
         )
+
+        # ── Buttons ───────────────────────────────────────────────────────────
         style.configure(
-            'Dark.TEntry',
-            fieldbackground=FIELD,
-            foreground=TEXT,
-            insertcolor=TEXT,
-            bordercolor=BORDER,
-            lightcolor=BORDER,
-            darkcolor=BORDER,
-            padding=(12, 9),
+            'TopBar.TButton',
+            background=TOPBAR_BUTTON_BG,
+            foreground=TOPBAR_BUTTON_FG,
+            bordercolor=BORDER_LIGHT,
+            lightcolor=BORDER_LIGHT,
+            darkcolor=BORDER_LIGHT,
+            font=(self.ui_font, 9, 'bold'),
+            padding=(10, 6),
         )
         style.map(
-            'Dark.TEntry',
-            fieldbackground=[('disabled', CARD), ('focus', FIELD)],
-            foreground=[('disabled', MUTED)],
-            bordercolor=[('focus', ACCENT)],
+            'TopBar.TButton',
+            background=[('active', TOPBAR_BUTTON_HOVER)],
+            foreground=[('active', TEXT)],
+        )
+        style.configure(
+            'TopBarAccent.TButton',
+            background=ACCENT,
+            foreground=MENU_ACTIVE_FG,
+            bordercolor=ACCENT,
+            lightcolor=ACCENT,
+            darkcolor=ACCENT,
+            font=(self.ui_font, 9, 'bold'),
+            padding=(10, 6),
+        )
+        style.map(
+            'TopBarAccent.TButton',
+            background=[('active', ACCENT_HOVER)],
+            bordercolor=[('active', ACCENT_HOVER)],
         )
         style.configure(
             'Secondary.TButton',
-            background='#1c2434',
+            background=SECONDARY_BG,
             foreground=TEXT,
-            bordercolor='#313a52',
-            lightcolor='#313a52',
-            darkcolor='#313a52',
+            bordercolor=SECONDARY_BORDER,
+            lightcolor=SECONDARY_BORDER,
+            darkcolor=SECONDARY_BORDER,
             font=(self.ui_font, 10, 'bold'),
             padding=(14, 9),
         )
         style.map(
             'Secondary.TButton',
-            background=[('active', '#28324a'), ('disabled', CARD)],
-            foreground=[('disabled', '#626d7f')],
+            background=[('active', SECONDARY_HOVER), ('disabled', CARD)],
+            foreground=[('disabled', DISABLED_FG)],
             bordercolor=[('focus', ACCENT)],
         )
         style.configure(
@@ -312,9 +359,9 @@ class CliporaApp(tk.Tk):
         )
         style.map(
             'Accent.TButton',
-            background=[('active', ACCENT_HOVER), ('disabled', '#41395f')],
-            bordercolor=[('active', ACCENT_HOVER), ('disabled', '#41395f')],
-            foreground=[('disabled', '#9b94b8')],
+            background=[('active', ACCENT_HOVER), ('disabled', ACCENT_DISABLED_BG)],
+            bordercolor=[('active', ACCENT_HOVER), ('disabled', ACCENT_DISABLED_BG)],
+            foreground=[('disabled', ACCENT_DISABLED_FG)],
         )
         style.configure(
             'DialogAccent.TButton',
@@ -328,9 +375,9 @@ class CliporaApp(tk.Tk):
         )
         style.map(
             'DialogAccent.TButton',
-            background=[('active', ACCENT_HOVER), ('disabled', '#41395f')],
-            bordercolor=[('active', ACCENT_HOVER), ('disabled', '#41395f')],
-            foreground=[('disabled', '#9b94b8')],
+            background=[('active', ACCENT_HOVER), ('disabled', ACCENT_DISABLED_BG)],
+            bordercolor=[('active', ACCENT_HOVER), ('disabled', ACCENT_DISABLED_BG)],
+            foreground=[('disabled', ACCENT_DISABLED_FG)],
         )
         style.configure(
             'Danger.TButton',
@@ -347,6 +394,8 @@ class CliporaApp(tk.Tk):
             background=[('active', '#cc4b59'), ('disabled', '#503036')],
             foreground=[('disabled', '#9d777d')],
         )
+
+        # ── Form controls ─────────────────────────────────────────────────────
         style.configure(
             'TRadiobutton',
             background=CARD,
@@ -358,7 +407,7 @@ class CliporaApp(tk.Tk):
         style.map(
             'TRadiobutton',
             background=[('active', CARD)],
-            foreground=[('disabled', '#626d7f')],
+            foreground=[('disabled', DISABLED_FG)],
             indicatorcolor=[('selected', ACCENT), ('disabled', CARD)],
         )
         style.layout(
@@ -377,14 +426,14 @@ class CliporaApp(tk.Tk):
             'Segment.TRadiobutton',
             background=FIELD,
             foreground=MUTED,
-            font=(self.ui_font, 9, 'bold'),
-            padding=(13, 7),
+            font=(self.ui_font, 10, 'bold'),
+            padding=(14, 9),
             anchor='center',
         )
         style.map(
             'Segment.TRadiobutton',
             background=[('selected', ACCENT), ('active', '#202a3e'), ('disabled', CARD)],
-            foreground=[('selected', TEXT), ('active', TEXT), ('disabled', '#626d7f')],
+            foreground=[('selected', TEXT), ('active', TEXT), ('disabled', DISABLED_FG)],
         )
         style.configure(
             'TCheckbutton',
@@ -399,123 +448,190 @@ class CliporaApp(tk.Tk):
         style.map(
             'TCheckbutton',
             background=[('active', CARD)],
-            foreground=[('active', TEXT), ('disabled', '#626d7f')],
+            foreground=[('active', TEXT), ('disabled', DISABLED_FG)],
             indicatorcolor=[('selected', ACCENT), ('disabled', CARD)],
+        )
+        style.configure(
+            'Dark.TEntry',
+            fieldbackground=FIELD,
+            foreground=TEXT,
+            insertcolor=TEXT,
+            bordercolor=BORDER,
+            lightcolor=BORDER,
+            darkcolor=BORDER,
+            padding=(12, 9),
+        )
+        style.map(
+            'Dark.TEntry',
+            fieldbackground=[('disabled', CARD), ('focus', FIELD)],
+            foreground=[('disabled', MUTED)],
+            bordercolor=[('focus', ACCENT)],
         )
         style.configure(
             'Dark.TCombobox',
             fieldbackground=FIELD,
-            background='#1c2434',
+            background=SECONDARY_BG,
             foreground=TEXT,
             arrowcolor=TEXT,
-            bordercolor='#313a52',
-            lightcolor='#313a52',
-            darkcolor='#313a52',
+            bordercolor=SECONDARY_BORDER,
+            lightcolor=SECONDARY_BORDER,
+            darkcolor=SECONDARY_BORDER,
             padding=(10, 7),
         )
         style.map(
             'Dark.TCombobox',
             fieldbackground=[('readonly', FIELD), ('disabled', CARD)],
-            foreground=[('readonly', TEXT), ('disabled', '#626d7f')],
+            foreground=[('readonly', TEXT), ('disabled', DISABLED_FG)],
             bordercolor=[('focus', ACCENT)],
-            arrowcolor=[('disabled', '#626d7f')],
+            arrowcolor=[('disabled', DISABLED_FG)],
         )
+
+        # ── Progress / separators ─────────────────────────────────────────────
         style.configure(
             'Clipora.Horizontal.TProgressbar',
             background=ACCENT,
-            troughcolor='#1d2434',
-            bordercolor='#1d2434',
+            troughcolor=PROGRESS_TROUGH,
+            bordercolor=PROGRESS_TROUGH,
             lightcolor=ACCENT,
             darkcolor=ACCENT,
-            thickness=11,
+            thickness=5,
         )
         style.configure('Card.TSeparator', background=BORDER)
 
-        main = ttk.Frame(self, padding=(38, 24, 38, 20))
-        main.pack(fill='both', expand=True)
-        main.columnconfigure(0, weight=1)
-        main.rowconfigure(1, weight=1)
+        # ── Stepper ───────────────────────────────────────────────────────────
+        style.configure(
+            'StepperCircleInactive.TLabel',
+            background=CARD,
+            foreground=MUTED,
+            borderwidth=2,
+            relief='solid',
+            bordercolor=SECONDARY_BORDER,
+            font=(self.ui_font, 9, 'bold'),
+            padding=(4, 2),
+            anchor='center',
+            width=2,
+        )
+        style.configure(
+            'StepperCircleActive.TLabel',
+            background=ACCENT,
+            foreground=MENU_ACTIVE_FG,
+            borderwidth=2,
+            relief='solid',
+            bordercolor=ACCENT,
+            font=(self.ui_font, 9, 'bold'),
+            padding=(4, 2),
+            anchor='center',
+            width=2,
+        )
+        style.configure(
+            'StepperCircleDone.TLabel',
+            background=SUCCESS,
+            foreground=MENU_ACTIVE_FG,
+            borderwidth=2,
+            relief='solid',
+            bordercolor=SUCCESS,
+            font=(self.ui_font, 9, 'bold'),
+            padding=(4, 2),
+            anchor='center',
+            width=2,
+        )
+        style.configure(
+            'StepperCaption.TLabel',
+            background=BG,
+            foreground=MUTED,
+            font=(self.ui_font, 9),
+        )
+        style.configure('StepperConnector.TFrame', background=SECONDARY_BORDER)
 
-        header = ttk.Frame(main)
-        header.grid(row=0, column=0, sticky='ew', pady=(0, 14))
-        header.columnconfigure(1, weight=1)
-        ttk.Label(header, image=self._icon).grid(row=0, column=0, rowspan=2, padx=(0, 13))
-        ttk.Label(header, text='Clipora', style='Heading.TLabel').grid(row=0, column=1, sticky='w')
-        ttk.Label(
-            header,
-            text='แปลงวิดีโอ 360p–4K, แยกเสียง และ ProRes สำหรับ After Effects — บนเครื่องของคุณ',
-            style='Muted.TLabel',
-        ).grid(row=1, column=1, sticky='w')
-        ttk.Button(
-            header,
-            text='เครื่องมือ',
-            style='Header.TButton',
-            command=lambda: self._open_tool_setup(repair_mode=True),
-        ).grid(
-            row=0,
-            column=2,
-            rowspan=2,
-            sticky='e',
+        # ── Misc widget styles ────────────────────────────────────────────────
+        style.configure('Error.TLabel', background=CARD, foreground=ERROR, font=(self.ui_font, 9))
+        style.configure('DropZone.TFrame', background=DROPZONE_BG, borderwidth=2, relief='solid', bordercolor=BORDER)
+        style.configure('DropZoneHover.TFrame', background=DROPZONE_HOVER_BG, bordercolor=ACCENT)
+        style.configure('DropZoneLabel.TLabel', background=DROPZONE_BG, foreground=MUTED, font=(self.ui_font, 10), anchor='center')
+        style.configure('DropZoneLabelHover.TLabel', background=DROPZONE_HOVER_BG, foreground=TEXT, font=(self.ui_font, 10), anchor='center')
+        style.configure('Toast.TFrame', background=TOAST_BG, borderwidth=1, relief='solid', bordercolor=BORDER)
+
+        # ── Root layout ───────────────────────────────────────────────────────
+        # Row 0 = top bar, row 1 = scrollable content, row 2 = action bar, row 3 = footer
+        self.rowconfigure(0, weight=0)
+        self.rowconfigure(1, weight=1)
+        self.rowconfigure(2, weight=0)
+        self.rowconfigure(3, weight=0)
+        self.columnconfigure(0, weight=1)
+
+        # ── Top bar ───────────────────────────────────────────────────────────
+        topbar = ttk.Frame(self, style='TopBar.TFrame', padding=(16, 0))
+        topbar.grid(row=0, column=0, sticky='ew')
+        topbar.columnconfigure(1, weight=1)
+
+        ttk.Label(topbar, image=self._icon, background=TOP_BAR_BG).grid(
+            row=0, column=0, padx=(0, 10), pady=10,
         )
-        ttk.Button(
-            header,
-            text='อัปเดต yt-dlp',
-            style='Header.TButton',
-            command=lambda: self._check_ytdlp_update(auto=False),
-        ).grid(
-            row=0,
-            column=3,
-            rowspan=2,
-            padx=(8, 0),
-            sticky='e',
+        ttk.Label(topbar, text='Clipora', style='TopBarTitle.TLabel').grid(
+            row=0, column=1, sticky='w',
         )
+
+        # Right side: Tools | Update | ♥ สนับสนุน
+        topbar_actions = ttk.Frame(topbar, style='TopBar.TFrame')
+        topbar_actions.grid(row=0, column=2, sticky='e', padx=(8, 0))
+
+        self._menu_btn = ttk.Menubutton(
+            topbar_actions, text='☰  เมนู', style='TopBar.TButton', direction='below',
+        )
+        menu = tk.Menu(
+            self._menu_btn, tearoff=0, bg=MENU_BG, fg=TEXT,
+            activebackground=ACCENT, activeforeground=MENU_ACTIVE_FG,
+            font=(self.ui_font, 10),
+        )
+        menu.add_command(label='เครื่องมือ (Ctrl+T)', command=lambda: self._open_tool_setup(repair_mode=True))
+        menu.add_command(label='อัปเดต yt-dlp (Ctrl+U)', command=lambda: self._check_ytdlp_update(auto=False))
+        menu.add_separator()
+        menu.add_command(
+            label='คู่มือผู้ใช้ (F1)',
+            command=lambda: webbrowser.open('https://github.com/ertyu007/media-toolkit-Open-source/blob/main/docs/USER_GUIDE.md'),
+        )
+        menu.add_command(
+            label='รายงานปัญหา',
+            command=lambda: webbrowser.open('https://github.com/ertyu007/media-toolkit-Open-source/issues'),
+        )
+        self._menu_btn.configure(menu=menu)
+        self._menu_btn.pack(side='left', padx=(0, 6))
+
         ttk.Button(
-            header,
-            text='โดเนท',
-            style='Header.TButton',
+            topbar_actions,
+            text='♥  สนับสนุน',
+            style='TopBarAccent.TButton',
             command=self._open_donate_dialog,
-        ).grid(
-            row=0,
-            column=4,
-            rowspan=2,
-            padx=(8, 0),
-            sticky='e',
-        )
-        ttk.Label(header, text='สร้างโดย ertyu.dev', style='Pill.TLabel').grid(
-            row=0,
-            column=5,
-            rowspan=2,
-            padx=(14, 0),
-            sticky='e',
-        )
+        ).pack(side='left')
 
-        card_scroll = ttk.Frame(main, style='TFrame')
-        card_scroll.grid(row=1, column=0, sticky='nsew')
-        card_scroll.rowconfigure(0, weight=1)
-        card_scroll.columnconfigure(0, weight=1)
+        # Thin separator under topbar
+        tk.Frame(self, bg=BORDER, height=1).grid(row=0, column=0, sticky='sew')
+
+        # ── Scrollable content area ───────────────────────────────────────────
+        content_outer = ttk.Frame(self, style='TFrame')
+        content_outer.grid(row=1, column=0, sticky='nsew')
+        content_outer.rowconfigure(0, weight=1)
+        content_outer.columnconfigure(0, weight=1)
+
         self.card_canvas = tk.Canvas(
-            card_scroll,
-            bg=CARD,
-            highlightthickness=0,
-            borderwidth=0,
+            content_outer, bg=BG, highlightthickness=0, borderwidth=0,
         )
         self.card_scrollbar = ttk.Scrollbar(
-            card_scroll,
-            orient='vertical',
-            command=self.card_canvas.yview,
+            content_outer, orient='vertical', command=self.card_canvas.yview,
         )
         self.card_canvas.grid(row=0, column=0, sticky='nsew')
         self.card_scrollbar.grid(row=0, column=1, sticky='ns')
 
-        card = ttk.Frame(self.card_canvas, style='Card.TFrame', padding=(24, 16))
-        card_window = self.card_canvas.create_window((0, 0), window=card, anchor='nw')
-        card.columnconfigure(0, weight=1)
+        # Inner content frame — holds the stepper and the three cards
+        content = ttk.Frame(self.card_canvas, style='TFrame', padding=(28, 16, 28, 16))
+        content_window = self.card_canvas.create_window((0, 0), window=content, anchor='nw')
+        content.columnconfigure(0, weight=1)
 
         def _on_card_configure(_event: tk.Event) -> None:
             self.card_canvas.configure(scrollregion=self.card_canvas.bbox('all'))
 
         def _on_canvas_configure(_event: tk.Event) -> None:
-            self.card_canvas.itemconfigure(card_window, width=self.card_canvas.winfo_width())
+            self.card_canvas.itemconfigure(content_window, width=self.card_canvas.winfo_width())
 
         def _on_scroll_command(first: str, last: str) -> None:
             self.card_scrollbar.set(first, last)
@@ -532,299 +648,300 @@ class CliporaApp(tk.Tk):
             if delta:
                 self.card_canvas.yview_scroll(int(-delta / 120), 'units')
 
-        def _bind_wheel(_event: tk.Event) -> None:
-            self.bind_all('<MouseWheel>', _on_mousewheel)
-
-        def _unbind_wheel(_event: tk.Event) -> None:
-            self.unbind_all('<MouseWheel>')
-
-        card.bind('<Configure>', _on_card_configure)
+        content.bind('<Configure>', _on_card_configure)
         self.card_canvas.bind('<Configure>', _on_canvas_configure)
         self.card_canvas.configure(yscrollcommand=_on_scroll_command)
-        self.card_canvas.bind('<Enter>', _bind_wheel)
-        self.card_canvas.bind('<Leave>', _unbind_wheel)
+        self.card_canvas.bind('<Enter>', lambda _e: self.bind_all('<MouseWheel>', _on_mousewheel))
+        self.card_canvas.bind('<Leave>', lambda _e: self.unbind_all('<MouseWheel>'))
 
-        source_header = ttk.Frame(card, style='Card.TFrame')
-        source_header.grid(row=0, column=0, sticky='ew')
-        source_header.columnconfigure(0, weight=1)
-        self._step_header(source_header, '01', 'เลือกแหล่งสื่อ').grid(
-            row=0,
-            column=0,
-            sticky='w',
-        )
-        source_kind_options = ttk.Frame(source_header, style='Card.TFrame')
-        source_kind_options.grid(row=0, column=1, sticky='e')
+        # ── Stepper — 1 แหล่งสื่อ → 2 ที่บันทึก → 3 รูปแบบ ─────────────────────
+        stepper = ttk.Frame(content, style='TFrame')
+        stepper.grid(row=0, column=0, sticky='ew', pady=(0, 14))
+        for col in range(3):
+            stepper.columnconfigure(col, weight=1)
+        self._stepper_steps: dict[str, tuple[ttk.Label, ttk.Label]] = {}
+        step_titles = ('เลือกแหล่งสื่อ', 'เลือกที่บันทึก', 'ตั้งค่ารูปแบบ')
+        for idx, key in enumerate(('source', 'destination', 'format')):
+            cell = ttk.Frame(stepper, style='TFrame')
+            cell.grid(row=0, column=idx, sticky='ew')
+            circle = ttk.Label(
+                cell, text=str(idx + 1), style='StepperCircleInactive.TLabel',
+            )
+            circle.grid(row=0, column=0)
+            caption = ttk.Label(cell, text=step_titles[idx], style='StepperCaption.TLabel')
+            caption.grid(row=0, column=1, sticky='w', padx=(6, 0))
+            if idx < 2:
+                connector = ttk.Frame(stepper, style='StepperConnector.TFrame', height=2)
+                connector.grid(row=0, column=idx + 1, sticky='ew', padx=(4, 4))
+                stepper.columnconfigure(idx + 1, weight=1)
+            self._stepper_steps[key] = (circle, caption)
+
+        # ── Helper: build a card frame with a section header row ─────────────
+        def _make_card(parent: ttk.Frame, num: str, title: str, row: int) -> ttk.Frame:
+            """Create a bordered card and return its inner frame."""
+            outer = tk.Frame(parent, bg=BORDER, pady=1, padx=1)
+            outer.grid(row=row, column=0, sticky='ew', pady=(0, 10))
+            outer.columnconfigure(0, weight=1)
+
+            inner = ttk.Frame(outer, style='Card.TFrame', padding=(20, 16))
+            inner.grid(row=0, column=0, sticky='ew')
+            inner.columnconfigure(0, weight=1)
+
+            # Section header row
+            hdr = ttk.Frame(inner, style='Card.TFrame')
+            hdr.grid(row=0, column=0, sticky='ew', pady=(0, 14))
+            hdr.columnconfigure(1, weight=1)
+
+            num_lbl = ttk.Label(hdr, text=num, style='CardSectionNum.TLabel')
+            num_lbl.grid(row=0, column=0, padx=(0, 10))
+            ttk.Label(hdr, text=title, style='CardSection.TLabel').grid(row=0, column=1, sticky='w')
+
+            return inner, hdr
+
+        # ── Card 1: Source ────────────────────────────────────────────────────
+        source_card, source_hdr = _make_card(content, '01', 'แหล่งสื่อ', row=1)
+
+        # Source type toggle — right side of header
+        source_kind_frame = ttk.Frame(source_hdr, style='Card.TFrame')
+        source_kind_frame.grid(row=0, column=2, sticky='e')
         self.file_source_radio = ttk.Radiobutton(
-            source_kind_options,
-            text='ไฟล์ในเครื่อง',
-            variable=self.input_kind,
-            value='file',
-            command=self._sync_source_kind,
-            style='Segment.TRadiobutton',
+            source_kind_frame, text='ไฟล์', variable=self.input_kind,
+            value='file', command=self._sync_source_kind, style='Segment.TRadiobutton',
         )
         self.file_source_radio.pack(side='left')
         self.url_source_radio = ttk.Radiobutton(
-            source_kind_options,
-            text='วางลิงก์',
-            variable=self.input_kind,
-            value='url',
-            command=self._sync_source_kind,
-            style='Segment.TRadiobutton',
+            source_kind_frame, text='URL', variable=self.input_kind,
+            value='url', command=self._sync_source_kind, style='Segment.TRadiobutton',
         )
-        self.url_source_radio.pack(side='left', padx=(6, 0))
+        self.url_source_radio.pack(side='left', padx=(3, 0))
+
+        # Hint text
         ttk.Label(
-            card,
-            textvariable=self.source_hint,
-            style='CardMuted.TLabel',
-        ).grid(row=1, column=0, sticky='w', pady=(1, 9))
-        source_row = ttk.Frame(card, style='Card.TFrame')
-        source_row.grid(row=2, column=0, sticky='ew')
+            source_card, textvariable=self.source_hint, style='CardMuted.TLabel',
+        ).grid(row=1, column=0, sticky='w', pady=(0, 8))
+
+        # Inline error
+        self._source_error = InlineError(source_card)
+        self._source_error.grid(row=2, column=0, sticky='ew', pady=(0, 6))
+        self._source_error.grid_remove()
+
+        # Input + button row
+        source_row = ttk.Frame(source_card, style='Card.TFrame')
+        source_row.grid(row=3, column=0, sticky='ew')
         source_row.columnconfigure(0, weight=1)
         self.source_entry = ttk.Entry(source_row, textvariable=self.source, style='Dark.TEntry')
-        self.source_entry.grid(
-            row=0,
-            column=0,
-            sticky='ew',
-            padx=(0, 10),
-        )
+        self.source_entry.grid(row=0, column=0, sticky='ew', padx=(0, 8))
+        self.source_entry.bind('<FocusOut>', lambda _e: self._validate_source())
         self.source_button = ttk.Button(
-            source_row,
-            textvariable=self.source_button_text,
-            style='Secondary.TButton',
-            command=self._source_action,
-            width=18,
+            source_row, textvariable=self.source_button_text,
+            style='Secondary.TButton', command=self._source_action, width=16,
         )
-        self.source_button.grid(
-            row=0,
-            column=1,
+        self.source_button.grid(row=0, column=1)
+
+        # Drop zone
+        self._drop_zone = DropZone(
+            source_card, on_drop=self._handle_drop, on_paste=self._handle_paste,
         )
-        source_meta = ttk.Frame(card, style='Card.TFrame')
-        source_meta.grid(row=3, column=0, sticky='ew', pady=(6, 10))
+        self._drop_zone.grid(row=4, column=0, sticky='ew', pady=(8, 0))
+        self._drop_zone.grid_remove()
+
+        # Source detail + rights rows
+        source_meta = ttk.Frame(source_card, style='Card.TFrame')
+        source_meta.grid(row=5, column=0, sticky='ew', pady=(8, 0))
         source_meta.columnconfigure(0, weight=1)
         ttk.Label(
-            source_meta,
-            textvariable=self.source_detail,
-            style='CardMuted.TLabel',
+            source_meta, textvariable=self.source_detail, style='CardMuted.TLabel',
         ).grid(row=0, column=0, sticky='w')
+
         link_font = (self.ui_font, 9, 'underline')
         self.rights_row = ttk.Frame(source_meta, style='Card.TFrame')
         self.rights_row.grid(row=1, column=0, sticky='w', pady=(6, 0))
         self.rights_check = ttk.Checkbutton(
-            self.rights_row,
-            text='ฉันยืนยันว่าอ่านและยอมรับ',
-            variable=self.authorized,
+            self.rights_row, text='ฉันยืนยันว่าอ่านและยอมรับ', variable=self.authorized,
         )
         self.rights_check.pack(side='left')
         self.disclaimer_link = tk.Label(
-            self.rights_row,
-            text='คำปฏิเสธด้านลิขสิทธิ์',
-            bg=CARD,
-            fg=ACCENT,
-            font=link_font,
-            cursor='hand2',
+            self.rights_row, text='คำปฏิเสธด้านลิขสิทธิ์',
+            bg=CARD, fg=ACCENT, font=link_font, cursor='hand2',
         )
         self.disclaimer_link.pack(side='left')
         self.disclaimer_link.bind('<Button-1>', lambda _event: self._open_disclaimer())
         ttk.Label(
-            self.rights_row,
-            text='แล้ว และจะไม่ดาวน์โหลดเนื้อหาที่มีลิขสิทธิ์',
+            self.rights_row, text='แล้ว และจะไม่ดาวน์โหลดเนื้อหาที่มีลิขสิทธิ์',
             style='CardMuted.TLabel',
         ).pack(side='left')
+
         self.dmca_row = ttk.Frame(source_meta, style='Card.TFrame')
         self.dmca_row.grid(row=2, column=0, sticky='w', pady=(2, 0))
         ttk.Label(
-            self.dmca_row,
-            text='ต้องการบล็อกการดาวน์โหลดวิดีโอที่มีลิขสิทธิ์?',
+            self.dmca_row, text='ต้องการบล็อกการดาวน์โหลดวิดีโอที่มีลิขสิทธิ์?',
             style='CardMuted.TLabel',
         ).pack(side='left')
         self.dmca_link = tk.Label(
-            self.dmca_row,
-            text='รายงานได้ที่นี่',
-            bg=CARD,
-            fg=ACCENT,
-            font=link_font,
-            cursor='hand2',
+            self.dmca_row, text='รายงานได้ที่นี่',
+            bg=CARD, fg=ACCENT, font=link_font, cursor='hand2',
         )
         self.dmca_link.pack(side='left', padx=(4, 0))
         self.dmca_link.bind('<Button-1>', lambda _event: self._open_dmca())
         self.rights_row.grid_remove()
         self.dmca_row.grid_remove()
 
-        ttk.Separator(card, style='Card.TSeparator').grid(row=4, column=0, sticky='ew', pady=(0, 12))
+        # ── Card 2: Destination ───────────────────────────────────────────────
+        dest_card, _ = _make_card(content, '02', 'ที่บันทึก', row=2)
 
-        self._step_header(card, '02', 'เลือกที่บันทึก').grid(row=5, column=0, sticky='w')
-        destination_row = ttk.Frame(card, style='Card.TFrame')
-        destination_row.grid(row=6, column=0, sticky='ew', pady=(8, 12))
-        destination_row.columnconfigure(0, weight=1)
+        self._dest_error = InlineError(dest_card)
+        self._dest_error.grid(row=1, column=0, sticky='ew', pady=(0, 6))
+        self._dest_error.grid_remove()
+
+        dest_row = ttk.Frame(dest_card, style='Card.TFrame')
+        dest_row.grid(row=2, column=0, sticky='ew')
+        dest_row.columnconfigure(0, weight=1)
         self.destination_entry = ttk.Entry(
-            destination_row,
-            textvariable=self.destination,
-            style='Dark.TEntry',
+            dest_row, textvariable=self.destination, style='Dark.TEntry',
         )
-        self.destination_entry.grid(
-            row=0,
-            column=0,
-            sticky='ew',
-            padx=(0, 10),
-        )
+        self.destination_entry.grid(row=0, column=0, sticky='ew', padx=(0, 8))
+        self.destination_entry.bind('<FocusOut>', lambda _e: self._validate_destination())
+        self.destination_entry.bind('<Button-1>', self._show_destination_history)
         self.destination_button = ttk.Button(
-            destination_row,
-            text='เลือกโฟลเดอร์',
-            style='Secondary.TButton',
-            command=self._choose_destination,
-            width=14,
+            dest_row, text='เลือกโฟลเดอร์',
+            style='Secondary.TButton', command=self._choose_destination, width=14,
         )
-        self.destination_button.grid(
-            row=0,
-            column=1,
-        )
+        self.destination_button.grid(row=0, column=1)
 
-        ttk.Separator(card, style='Card.TSeparator').grid(row=7, column=0, sticky='ew', pady=(0, 12))
-        self._step_header(card, '03', 'เลือกรูปแบบผลลัพธ์').grid(row=8, column=0, sticky='w')
-        options = ttk.Frame(card, style='Card.TFrame')
-        options.grid(row=9, column=0, sticky='ew', pady=(5, 0))
-        options.columnconfigure(0, weight=1)
+        # ── Card 3: Format / Options ──────────────────────────────────────────
+        fmt_card, _ = _make_card(content, '03', 'รูปแบบผลลัพธ์', row=3)
 
-        mode_options = ttk.Frame(options, style='Card.TFrame')
-        mode_options.grid(row=0, column=0, sticky='w')
-        self.audio_radio = ttk.Radiobutton(
-            mode_options,
-            text='แยกเสียง',
+        # Segmented mode control — full width
+        self._mode_control = SegmentedControl(
+            fmt_card,
+            options=[
+                ('audio', 'แยกเสียง'),
+                ('video', 'แปลงเป็นวิดีโอ'),
+                ('stems', 'แยกสเต็มเสียง'),
+            ],
             variable=self.mode,
-            value='audio',
-            command=self._sync_options,
-            style='Segment.TRadiobutton',
+            command=self._on_mode_change,
         )
-        self.audio_radio.pack(side='left')
-        self.video_radio = ttk.Radiobutton(
-            mode_options,
-            text='แปลงเป็นวิดีโอ',
-            variable=self.mode,
-            value='video',
-            command=self._sync_options,
-            style='Segment.TRadiobutton',
-        )
-        self.video_radio.pack(side='left', padx=(6, 0))
-        self.stems_radio = ttk.Radiobutton(
-            mode_options,
-            text='แยกสเต็มเสียง',
-            variable=self.mode,
-            value='stems',
-            command=self._sync_options,
-            style='Segment.TRadiobutton',
-        )
-        self.stems_radio.pack(side='left', padx=(6, 0))
+        self._mode_control.grid(row=1, column=0, sticky='ew', pady=(0, 14))
 
-        result_options = ttk.Frame(options, style='Card.TFrame')
-        result_options.grid(row=0, column=1, sticky='e')
+        # Format dropdowns
+        result_options = ttk.Frame(fmt_card, style='Card.TFrame')
+        result_options.grid(row=2, column=0, sticky='ew')
+        result_options.columnconfigure(1, weight=1)
         self.option_label = ttk.Label(result_options, style='CardMuted.TLabel')
         self.option_label.grid(row=0, column=0, padx=(0, 10), sticky='e')
         self.format_box = ttk.Combobox(
-            result_options,
-            textvariable=self.audio_format,
-            values=AUDIO_FORMAT_LABELS,
-            state='readonly',
-            style='Dark.TCombobox',
-            width=12,
+            result_options, textvariable=self.audio_format, values=AUDIO_FORMAT_LABELS,
+            state='readonly', style='Dark.TCombobox', width=12,
         )
-        self.format_box.grid(row=0, column=1)
+        self.format_box.grid(row=0, column=1, sticky='w')
         self.video_format_box = ttk.Combobox(
-            result_options,
-            textvariable=self.video_format,
-            values=VIDEO_FORMAT_LABELS,
-            state='readonly',
-            style='Dark.TCombobox',
-            width=30,
+            result_options, textvariable=self.video_format, values=VIDEO_FORMAT_LABELS,
+            state='readonly', style='Dark.TCombobox', width=30,
         )
-        self.video_format_box.grid(row=0, column=1)
+        self.video_format_box.grid(row=0, column=1, sticky='w')
 
-        detail_options = ttk.Frame(options, style='Card.TFrame')
-        detail_options.grid(row=1, column=0, columnspan=2, sticky='ew', pady=(10, 0))
+        detail_options = ttk.Frame(fmt_card, style='Card.TFrame')
+        detail_options.grid(row=3, column=0, sticky='ew', pady=(10, 0))
         detail_options.columnconfigure(1, weight=1)
         detail_options.columnconfigure(3, weight=1)
         self.quality_label = ttk.Label(detail_options, text='คุณภาพ', style='CardMuted.TLabel')
         self.quality_label.grid(row=0, column=0, padx=(0, 8), sticky='e')
         self.quality_box = ttk.Combobox(
-            detail_options,
-            textvariable=self.quality,
-            values=VIDEO_QUALITY_PRESETS,
-            state='readonly',
-            style='Dark.TCombobox',
-            width=12,
+            detail_options, textvariable=self.quality, values=VIDEO_QUALITY_PRESETS,
+            state='readonly', style='Dark.TCombobox', width=12,
         )
         self.quality_box.grid(row=0, column=1, sticky='w')
         self.fps_label = ttk.Label(detail_options, text='เฟรมเรต', style='CardMuted.TLabel')
         self.fps_label.grid(row=0, column=2, padx=(16, 8), sticky='e')
         self.fps_box = ttk.Combobox(
-            detail_options,
-            textvariable=self.fps,
-            values=FPS_LABELS,
-            state='readonly',
-            style='Dark.TCombobox',
-            width=10,
+            detail_options, textvariable=self.fps, values=FPS_LABELS,
+            state='readonly', style='Dark.TCombobox', width=10,
         )
         self.fps_box.grid(row=0, column=3, sticky='w')
 
-        stems_options = ttk.Frame(options, style='Card.TFrame')
-        stems_options.grid(row=2, column=0, columnspan=2, sticky='ew', pady=(10, 0))
+        stems_options = ttk.Frame(fmt_card, style='Card.TFrame')
+        stems_options.grid(row=4, column=0, sticky='ew', pady=(10, 0))
         stems_options.columnconfigure(0, weight=1)
         self._stems_options = stems_options
-        ttk.Label(
-            stems_options,
-            text='สเต็มที่ต้องการ',
-            style='CardMuted.TLabel',
-        ).grid(row=0, column=0, sticky='w')
+        ttk.Label(stems_options, text='สเต็มที่ต้องการ', style='CardMuted.TLabel').grid(
+            row=0, column=0, sticky='w',
+        )
         self._stem_check_widgets: list[ttk.Checkbutton] = []
         stem_row = ttk.Frame(stems_options, style='Card.TFrame')
-        stem_row.grid(row=1, column=0, sticky='w', pady=(6, 0))
+        stem_row.grid(row=1, column=0, sticky='w', pady=(8, 0))
         for stem in SELECTABLE_STEMS:
             check = ttk.Checkbutton(
-                stem_row,
-                text=STEM_LABELS[stem],
-                variable=self.stem_vars[stem],
-                style='TCheckbutton',
+                stem_row, text=STEM_LABELS[stem],
+                variable=self.stem_vars[stem], style='TCheckbutton',
             )
             check.pack(side='left', padx=(0, 14))
             self._stem_check_widgets.append(check)
         stems_options.grid_remove()
 
-        action_card = ttk.Frame(main, style='Action.TFrame', padding=(20, 14))
-        action_card.grid(row=2, column=0, sticky='ew', pady=(14, 8))
-        action_card.columnconfigure(0, weight=1)
-        progress_header = ttk.Frame(action_card, style='Action.TFrame')
-        progress_header.grid(row=0, column=0, sticky='ew', pady=(0, 8))
-        progress_header.columnconfigure(0, weight=1)
-        ttk.Label(progress_header, textvariable=self.status, style='Action.TLabel').grid(
-            row=0,
-            column=0,
-            sticky='w',
+        # ── Action bar (sticky bottom) ─────────────────────────────────────────
+        action_bar = ttk.Frame(self, style='Action.TFrame', padding=(24, 10))
+        action_bar.grid(row=2, column=0, sticky='ew')
+        action_bar.columnconfigure(0, weight=1)
+
+        # Progress row
+        prog_row = ttk.Frame(action_bar, style='Action.TFrame')
+        prog_row.grid(row=0, column=0, sticky='ew', pady=(0, 6))
+        prog_row.columnconfigure(0, weight=1)
+        ttk.Label(prog_row, textvariable=self.status, style='Action.TLabel').grid(
+            row=0, column=0, sticky='w',
         )
-        ttk.Label(progress_header, textvariable=self.progress_text, style='ActionMuted.TLabel').grid(
-            row=0,
-            column=1,
-            sticky='e',
+        ttk.Label(prog_row, textvariable=self.progress_text, style='ActionMuted.TLabel').grid(
+            row=0, column=1, sticky='e',
         )
+
         self.progress = ttk.Progressbar(
-            action_card,
-            mode='determinate',
-            maximum=100,
+            action_bar, mode='determinate', maximum=100,
             style='Clipora.Horizontal.TProgressbar',
         )
         self.progress.grid(row=1, column=0, sticky='ew')
-        self.start_button = ttk.Button(
-            action_card,
-            text='เริ่มแยกเสียง',
-            style='Accent.TButton',
-            command=self._start,
+
+        # Result panel — shown after a job completes
+        self.result_panel = ttk.Frame(action_bar, style='Action.TFrame')
+        self.result_panel.grid(row=2, column=0, sticky='ew', pady=(10, 0))
+        self.result_panel.columnconfigure(0, weight=1)
+        self.result_summary = ttk.Label(
+            self.result_panel, text='', style='Action.TLabel', wraplength=560,
         )
-        self.start_button.grid(row=2, column=0, sticky='ew', pady=(12, 0))
+        self.result_summary.grid(row=0, column=0, sticky='w')
+        self.result_size = ttk.Label(
+            self.result_panel, text='', style='ActionMuted.TLabel',
+        )
+        self.result_size.grid(row=0, column=1, sticky='e', padx=(10, 0))
+        result_actions = ttk.Frame(self.result_panel, style='Action.TFrame')
+        result_actions.grid(row=1, column=0, columnspan=2, sticky='w', pady=(8, 0))
+        self.open_folder_btn = ttk.Button(
+            result_actions, text='เปิดโฟลเดอร์', style='Secondary.TButton',
+            command=self._open_result_folder, width=14,
+        )
+        self.open_folder_btn.pack(side='left', padx=(0, 8))
+        self.open_file_btn = ttk.Button(
+            result_actions, text='เปิดไฟล์', style='Secondary.TButton',
+            command=self._open_result_file, width=14,
+        )
+        self.open_file_btn.pack(side='left')
+        self.result_panel.grid_remove()
+
+        self.start_button = ttk.Button(
+            action_bar, text='เริ่มแยกเสียง',
+            style='Accent.TButton', command=self._start,
+        )
+        self.start_button.grid(row=3, column=0, sticky='ew', pady=(10, 0))
+
+        # ── Footer ─────────────────────────────────────────────────────────────
         ttk.Label(
-            main,
+            self,
             text='สร้างโดย ertyu.dev  •  ประมวลผลบนเครื่อง  •  ไม่มีโฆษณา  •  ไม่แก้ไขไฟล์ต้นฉบับ',
             style='Muted.TLabel',
             anchor='center',
-        ).grid(row=3, column=0, sticky='ew')
+        ).grid(row=3, column=0, sticky='ew', pady=(4, 8))
 
+        # ── Input widget list (for enable/disable during job) ──────────────────
         self._input_widgets = [
             self.file_source_radio,
             self.url_source_radio,
@@ -833,9 +950,6 @@ class CliporaApp(tk.Tk):
             self.rights_check,
             self.destination_entry,
             self.destination_button,
-            self.audio_radio,
-            self.video_radio,
-            self.stems_radio,
             self.format_box,
             self.video_format_box,
             self.quality_box,
@@ -844,6 +958,7 @@ class CliporaApp(tk.Tk):
         ]
         self._sync_source_kind()
         self._sync_options()
+        self._update_stepper()
 
     def _maybe_offer_tool_setup(self) -> None:
         if self._first_run_setup and missing_required_tools():
@@ -1083,6 +1198,32 @@ class CliporaApp(tk.Tk):
         if self._cancellation is None:
             self.start_button.configure(text=action_text, style='Accent.TButton', command=self._start)
 
+
+    def _on_mode_change(self, value: str) -> None:
+        """Called when segmented control changes mode."""
+        self.mode.set(value)
+        self._sync_options()
+
+    def _update_stepper(self) -> None:
+        """Refresh the 3-step indicator based on the current form state."""
+        if not hasattr(self, '_stepper_steps'):
+            return
+        source_ok = bool(self.source.get().strip())
+        destination_ok = self._destination_is_valid()
+        for key, (circle, caption) in self._stepper_steps.items():
+            if key == 'source':
+                state = 'done' if source_ok else 'inactive'
+            elif key == 'destination':
+                state = 'done' if destination_ok else 'inactive'
+            else:
+                state = 'done' if (source_ok and destination_ok) else 'inactive'
+            circle.configure(style=f'StepperCircle{state.capitalize()}.TLabel')
+            caption.configure(style='StepperCaption.TLabel')
+
+    def _destination_is_valid(self) -> bool:
+        value = self.destination.get().strip()
+        return bool(value) and Path(value).is_dir()
+
     def _sync_source_kind(self) -> None:
         new_kind = self.input_kind.get()
         if new_kind not in {'file', 'url'}:
@@ -1098,19 +1239,15 @@ class CliporaApp(tk.Tk):
                 '• เลือกความละเอียด 360p ถึง 4K ได้'
             )
             self.source_button_text.set('วางจากคลิปบอร์ด')
-            self.audio_radio.configure(text='ดาวน์โหลดเฉพาะเสียง')
-            self.video_radio.configure(text='ดาวน์โหลดวิดีโอ')
-            self.stems_radio.configure(text='ดาวน์โหลดและแยกสเต็ม')
             self.rights_row.grid()
             self.dmca_row.grid()
+            self._drop_zone.grid()  # Show drop zone for URL mode
         else:
             self.source_hint.set('เลือกวิดีโอที่ต้องการประมวลผล')
             self.source_button_text.set('เลือกไฟล์')
-            self.audio_radio.configure(text='แยกเสียง')
-            self.video_radio.configure(text='แปลงเป็นวิดีโอ')
-            self.stems_radio.configure(text='แยกสเต็มเสียง')
             self.rights_row.grid_remove()
             self.dmca_row.grid_remove()
+            self._drop_zone.grid_remove()  # Hide drop zone for file mode (use file dialog)
         self._on_source_changed()
         self._sync_options()
 
@@ -1175,10 +1312,122 @@ class CliporaApp(tk.Tk):
         self._paste_source_from_clipboard(show_warning=False)
         return 'break'
 
+    # Validation methods
+    def _validate_source(self) -> bool:
+        value = self.source.get().strip()
+        if not value:
+            self._source_error.show('กรุณาเลือกไฟล์หรือวางลิงก์')
+            return False
+        if self.input_kind.get() == 'url':
+            try:
+                validate_url(value)
+            except ValueError as exc:
+                self._source_error.show(str(exc))
+                return False
+        else:
+            if not Path(value).is_file():
+                self._source_error.show('ไม่พบไฟล์นี้ กรุณาเลือกไฟล์ใหม่')
+                self._update_stepper()
+                return False
+        self._source_error.hide()
+        self._update_stepper()
+        return True
+
+    def _validate_destination(self) -> bool:
+        value = self.destination.get().strip()
+        if not value:
+            self._dest_error.show('กรุณาเลือกโฟลเดอร์บันทึก')
+            self._update_stepper()
+            return False
+        if not Path(value).is_dir():
+            self._dest_error.show('โฟลเดอร์ไม่มีอยู่จริง')
+            self._update_stepper()
+            return False
+        self._dest_error.hide()
+        self._update_stepper()
+        return True
+
+    def _validate_stems(self) -> bool:
+        if self.mode.get() == 'stems':
+            stems = self._selected_stems()
+            if not stems:
+                return False
+        return True
+
+    def _validate_all(self) -> bool:
+        return self._validate_source() and self._validate_destination() and self._validate_stems()
+
+    # Drop zone handlers
+    def _handle_drop(self, files: list[str]) -> None:
+        if not files:
+            return
+        # Take first valid video/audio file
+        for f in files:
+            path = Path(f)
+            if path.is_file() and path.suffix.lower() in ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.mp3', '.m4a', '.wav', '.flac', '.opus'):
+                self.input_kind.set('file')
+                self._sync_source_kind()
+                self.source.set(str(path))
+                self._validate_source()
+                return
+
+    def _handle_paste(self, text: str) -> None:
+        text = text.strip()
+        if text:
+            self.input_kind.set('url')
+            self._sync_source_kind()
+            self.source.set(text)
+            self._validate_source()
+
+    # Destination history
+    def _show_destination_history(self, _event: tk.Event) -> None:
+        if not hasattr(self, '_recent_destinations'):
+            return
+        if not self._recent_destinations:
+            return
+        # Create a simple popup menu
+        menu = tk.Menu(self, tearoff=0, bg=MENU_BG, fg=TEXT, activebackground=ACCENT, activeforeground=MENU_ACTIVE_FG, font=(self.ui_font, 10))
+        for path in self._recent_destinations[:5]:
+            menu.add_command(label=path, command=lambda p=path: self.destination.set(p))
+        try:
+            menu.tk_popup(self.destination_entry.winfo_rootx(), self.destination_entry.winfo_rooty() + self.destination_entry.winfo_height())
+        finally:
+            menu.grab_release()
+
+    def _add_to_destination_history(self, path: str) -> None:
+        if not hasattr(self, '_recent_destinations'):
+            self._recent_destinations = []
+        if path in self._recent_destinations:
+            self._recent_destinations.remove(path)
+        self._recent_destinations.insert(0, path)
+        self._recent_destinations = self._recent_destinations[:10]
+
+    # Keyboard shortcuts
+    def _bind_shortcuts(self) -> None:
+        self.bind('<Control-t>', lambda _e: self._open_tool_setup(repair_mode=True))
+        self.bind('<Control-u>', lambda _e: self._check_ytdlp_update(auto=False))
+        self.bind('<Control-d>', lambda _e: self._open_donate_dialog())
+        self.bind('<Control-o>', lambda _e: self._choose_source())
+        self.bind('<Control-s>', lambda _e: self._choose_destination())
+        self.bind('<Control-Return>', lambda _e: self._start() if self._cancellation is None else None)
+        self.bind('<Escape>', lambda _e: self._cancel() if self._cancellation is not None else None)
+        self.bind('<F1>', lambda _e: webbrowser.open('https://github.com/ertyu007/media-toolkit-Open-source/blob/main/docs/USER_GUIDE.md'))
+
+    # Phase-aware progress
+    def _set_progress_phase(self, phase: str, percent: float = 0) -> None:
+        """Update progress with phase-aware status."""
+        phase_text = PROGRESS_PHASES.get(phase, phase)
+        self.status.set(phase_text)
+        if percent > 0:
+            self.progress['value'] = percent
+            self.progress_text.set(f'{percent:.0f}%')
+
     def _choose_destination(self) -> None:
         path = filedialog.askdirectory(title='เลือกโฟลเดอร์บันทึก')
         if path:
             self.destination.set(path)
+            self._add_to_destination_history(path)
+            self._validate_destination()
 
     def _start(self) -> None:
         if self._cancellation is not None:
@@ -1195,11 +1444,7 @@ class CliporaApp(tk.Tk):
             self._start_local()
 
     def _start_local(self) -> None:
-        try:
-            destination = destination_path(self.destination.get())
-        except ValueError as exc:
-            messagebox.showwarning('ไม่พบโฟลเดอร์', str(exc))
-            return
+        destination = Path(self.destination.get())
         job = JobSpec(
             source=Path(self.source.get()),
             destination=destination,
@@ -1209,12 +1454,6 @@ class CliporaApp(tk.Tk):
             video_format=self._video_format_value(),
             fps=self._fps_value(),
         )
-        if not job.source.is_file():
-            messagebox.showwarning('ยังไม่มีไฟล์', 'กรุณาเลือกไฟล์วิดีโอก่อน')
-            return
-        if not job.destination.is_dir():
-            messagebox.showwarning('ไม่พบโฟลเดอร์', 'กรุณาเลือกโฟลเดอร์บันทึกที่มีอยู่')
-            return
         if not tools_available():
             self.status.set('ต้องติดตั้งเครื่องมือก่อนเริ่มงาน')
             self._open_tool_setup()
@@ -1227,13 +1466,19 @@ class CliporaApp(tk.Tk):
             job.audio_format,
             job.video_format,
         )
-        if target.exists() and not messagebox.askyesno(
-            'ไฟล์มีอยู่แล้ว',
-            f'{target.name} มีอยู่แล้ว ต้องการเขียนทับหรือไม่?',
-        ):
-            return
+        if target.exists():
+            existing_size = target.stat().st_size if target.is_file() else 0
+            decision = OverwriteDialog(
+                self,
+                target.name,
+                existing_size=existing_size,
+            ).result
+            if decision in (CANCEL, KEEP):
+                return
+        self._add_to_destination_history(str(destination))
         cancellation = CancellationToken()
-        self._begin_job(cancellation, 'กำลังตรวจสอบไฟล์…', 'กำลังประมวลผล')
+        self._begin_job(cancellation, 'กำลังตรวจสอบไฟล์…', 'validating')
+        self._set_progress_phase('validating', 0)
         threading.Thread(
             target=self._run_local,
             args=(job, target, cancellation),
@@ -1250,18 +1495,8 @@ class CliporaApp(tk.Tk):
             pass
 
     def _start_stems_local(self) -> None:
-        try:
-            destination = destination_path(self.destination.get())
-        except ValueError as exc:
-            messagebox.showwarning('ไม่พบโฟลเดอร์', str(exc))
-            return
+        destination = Path(self.destination.get())
         source = Path(self.source.get())
-        if not source.is_file():
-            messagebox.showwarning('ยังไม่มีไฟล์', 'กรุณาเลือกไฟล์วิดีโอหรือเสียงก่อน')
-            return
-        if not destination.is_dir():
-            messagebox.showwarning('ไม่พบโฟลเดอร์', 'กรุณาเลือกโฟลเดอร์บันทึกที่มีอยู่')
-            return
         if not tools_available():
             self.status.set('ต้องติดตั้งเครื่องมือก่อนเริ่มงาน')
             self._open_tool_setup()
@@ -1271,24 +1506,30 @@ class CliporaApp(tk.Tk):
             self._open_tool_setup(separator=True)
             return
         stems = self._selected_stems()
-        if not stems:
-            messagebox.showwarning('ยังไม่ได้เลือกสเต็ม', 'เลือกสเต็มอย่างน้อยหนึ่งรายการก่อนเริ่มงาน')
-            return
         audio_format = self._audio_format_value()
         expected = (separate_output_zip_path(source, destination),)
         existing = [target for target in expected if target.exists()]
         overwrite = False
-        if existing and not messagebox.askyesno(
-            'ไฟล์มีอยู่แล้ว',
-            'มีไฟล์ผลลัพธ์บางไฟล์อยู่แล้ว\n\n'
-            + '\n'.join(target.name for target in existing[:5])
-            + '\n\nต้องการเขียนทับหรือไม่?',
-        ):
-            return
         if existing:
+            first = existing[0]
+            existing_size = first.stat().st_size if first.is_file() else 0
+            decision = OverwriteDialog(
+                self,
+                first.name,
+                existing_size=existing_size,
+                detail=(
+                    'มีไฟล์ผลลัพธ์บางไฟล์อยู่แล้ว'
+                    if len(existing) > 1
+                    else None
+                ),
+            ).result
+            if decision in (CANCEL, KEEP):
+                return
             overwrite = True
+        self._add_to_destination_history(str(destination))
         cancellation = CancellationToken()
-        self._begin_job(cancellation, 'กำลังตรวจสอบไฟล์…', 'กำลังแยกสเต็ม')
+        self._begin_job(cancellation, 'กำลังตรวจสอบไฟล์…', 'validating')
+        self._set_progress_phase('validating', 0)
         threading.Thread(
             target=self._run_stems_local,
             args=(source, destination, audio_format, stems, overwrite, cancellation),
@@ -1310,8 +1551,8 @@ class CliporaApp(tk.Tk):
                 destination,
                 audio_format,
                 stems,
-                self._report_stems_phase,
-                lambda value: self.after(0, self._set_progress, value, cancellation),
+                lambda msg: self.after(0, self._set_progress_phase, 'separating', 0) if 'load' in msg.lower() else None,
+                lambda value: self.after(0, self._set_progress_phase, 'separating', value * 100),
                 cancellation,
                 overwrite=overwrite,
             )
@@ -1320,21 +1561,15 @@ class CliporaApp(tk.Tk):
         except (SeparatorError, FFmpegError, OSError, ValueError) as exc:
             self.after(0, self._failed, str(exc), cancellation)
         else:
+            self.after(0, self._set_progress_phase, 'finalizing', 90)
             self.after(0, self._done_stems, outputs, cancellation)
 
     def _start_stems_url(self) -> None:
-        try:
-            destination = destination_path(self.destination.get())
-        except ValueError as exc:
-            messagebox.showwarning('ไม่พบโฟลเดอร์', str(exc))
-            return
-        if not destination.is_dir():
-            messagebox.showwarning('ไม่พบโฟลเดอร์', 'กรุณาเลือกโฟลเดอร์บันทึกที่มีอยู่')
-            return
+        destination = Path(self.destination.get())
         try:
             url = validate_url(self.source.get())
         except ValueError as exc:
-            messagebox.showwarning('ลิงก์ไม่ถูกต้อง', str(exc))
+            self._source_error.show(str(exc))
             return
         if not self.authorized.get():
             messagebox.showwarning(
@@ -1355,9 +1590,6 @@ class CliporaApp(tk.Tk):
             self._open_tool_setup(separator=True)
             return
         stems = self._selected_stems()
-        if not stems:
-            messagebox.showwarning('ยังไม่ได้เลือกสเต็ม', 'เลือกสเต็มอย่างน้อยหนึ่งรายการก่อนเริ่มงาน')
-            return
         spec = ImportSpec(
             url=url,
             destination=destination,
@@ -1365,8 +1597,10 @@ class CliporaApp(tk.Tk):
             quality=self.quality.get(),
             audio_format=self._audio_format_value(),
         )
+        self._add_to_destination_history(str(destination))
         cancellation = CancellationToken()
-        self._begin_job(cancellation, 'กำลังตรวจสอบลิงก์…', 'กำลังแยกสเต็ม')
+        self._begin_job(cancellation, 'กำลังตรวจสอบลิงก์…', 'validating')
+        self._set_progress_phase('validating', 0)
         threading.Thread(
             target=self._run_stems_url,
             args=(spec, stems, cancellation),
@@ -1380,21 +1614,21 @@ class CliporaApp(tk.Tk):
         cancellation: CancellationToken,
     ) -> None:
         try:
+            self.after(0, self._set_progress_phase, 'downloading', 0)
             completed, workspace = import_audio_for_processing(
                 spec,
-                lambda value: self.after(0, self._set_progress, value * 0.5, cancellation),
+                lambda value: self.after(0, self._set_progress_phase, 'downloading', value * 50),
                 cancellation,
             )
             try:
+                self.after(0, self._set_progress_phase, 'separating', 50)
                 outputs = separate_audio(
                     completed,
                     spec.destination,
                     spec.audio_format,
                     stems,
-                    self._report_stems_phase,
-                    lambda value: self.after(
-                        0, self._set_progress, 0.5 + value * 0.5, cancellation
-                    ),
+                    lambda msg: self.after(0, self._set_progress_phase, 'separating', 50) if 'load' in msg.lower() else None,
+                    lambda value: self.after(0, self._set_progress_phase, 'separating', 50 + value * 50),
                     cancellation,
                     collision_free=True,
                 )
@@ -1405,21 +1639,15 @@ class CliporaApp(tk.Tk):
         except (SeparatorError, URLImportError, FFmpegError, OSError, ValueError) as exc:
             self.after(0, self._failed, str(exc), cancellation)
         else:
+            self.after(0, self._set_progress_phase, 'finalizing', 95)
             self.after(0, self._done_stems, outputs, cancellation)
 
     def _start_url(self) -> None:
-        try:
-            destination = destination_path(self.destination.get())
-        except ValueError as exc:
-            messagebox.showwarning('ไม่พบโฟลเดอร์', str(exc))
-            return
-        if not destination.is_dir():
-            messagebox.showwarning('ไม่พบโฟลเดอร์', 'กรุณาเลือกโฟลเดอร์บันทึกที่มีอยู่')
-            return
+        destination = Path(self.destination.get())
         try:
             url = validate_url(self.source.get())
         except ValueError as exc:
-            messagebox.showwarning('ลิงก์ไม่ถูกต้อง', str(exc))
+            self._source_error.show(str(exc))
             return
         if not self.authorized.get():
             messagebox.showwarning(
@@ -1444,8 +1672,10 @@ class CliporaApp(tk.Tk):
             video_format=self._video_format_value(),
             fps=self._fps_value(),
         )
+        self._add_to_destination_history(str(destination))
         cancellation = CancellationToken()
-        self._begin_job(cancellation, 'กำลังตรวจสอบลิงก์…', 'กำลังดาวน์โหลด')
+        self._begin_job(cancellation, 'กำลังตรวจสอบลิงก์…', 'validating')
+        self._set_progress_phase('validating', 0)
         threading.Thread(
             target=self._run_import,
             args=(job, cancellation),
@@ -1466,6 +1696,9 @@ class CliporaApp(tk.Tk):
         self.progress['value'] = 0
         self.progress_text.set('0%')
         self.status.set(initial_status)
+        if hasattr(self, 'result_panel'):
+            self.result_panel.grid_remove()
+            self._result_targets = []
 
     def _run_local(self, job: JobSpec, target: Path, cancellation: CancellationToken) -> None:
         temporary = temporary_output_path(target)
@@ -1477,7 +1710,7 @@ class CliporaApp(tk.Tk):
             info = probe(job.source)
             validate_operation(info, job.mode)
             if cancellation.cancelled:
-                raise ConversionCancelled('ยกเลิกงานแล้ว')
+                raise ConversionCancelled('ยกเลิกงาน已取消')
             command = build_command(
                 job.source,
                 temporary,
@@ -1487,14 +1720,15 @@ class CliporaApp(tk.Tk):
                 job.video_format,
                 job.fps,
             )
-            self.after(0, self.status.set, 'กำลังประมวลผล…')
+            self.after(0, self._set_progress_phase, 'converting', 0)
             convert(
                 command,
                 temporary,
                 info.duration,
-                lambda value: self.after(0, self._set_progress, value, cancellation),
+                lambda value: self.after(0, self._set_progress_phase, 'converting', value * 100),
                 cancellation,
             )
+            self.after(0, self._set_progress_phase, 'finalizing', 90)
             finalize_output(temporary, target)
         except ConversionCancelled:
             outcome = 'cancelled'
@@ -1515,27 +1749,56 @@ class CliporaApp(tk.Tk):
         else:
             self.after(0, self._failed, detail, cancellation)
 
+    def _ask_overwrite(self, target: Path) -> bool:
+        """Ask on the main thread whether to replace an existing output file.
+
+        Runs inside a worker thread; the Tk dialog is scheduled on the main
+        thread via ``after`` and the worker blocks on an event until answered.
+        Returns True only when the user chose to overwrite.
+        """
+        result: dict[str, str | None] = {'decision': None}
+        ready = threading.Event()
+
+        def ask() -> None:
+            try:
+                existing_size = target.stat().st_size if target.is_file() else 0
+                result['decision'] = OverwriteDialog(
+                    self,
+                    target.name,
+                    existing_size=existing_size,
+                ).result
+            except tk.TclError:
+                result['decision'] = CANCEL
+            finally:
+                ready.set()
+
+        self.after(0, ask)
+        ready.wait()
+        return result['decision'] == OVERWRITE
+
     def _run_import(self, job: ImportSpec, cancellation: CancellationToken) -> None:
+        self.after(0, self._set_progress_phase, 'downloading', 0)
         try:
             target = import_url(
                 job,
-                lambda value: self.after(0, self._set_progress, value, cancellation),
+                lambda value: self.after(0, self._set_progress_phase, 'downloading', value * 100),
                 cancellation,
+                on_conflict=self._ask_overwrite,
             )
         except ConversionCancelled:
             self.after(0, self._cancelled, cancellation)
         except (URLImportError, OSError, ValueError) as exc:
             self.after(0, self._failed, str(exc), cancellation)
         else:
+            self.after(0, self._set_progress_phase, 'finalizing', 90)
             self.after(0, self._done, target, cancellation)
 
     def _set_progress(self, value: float, cancellation: CancellationToken) -> None:
         if cancellation is not self._cancellation or cancellation.cancelled:
             return
-        self.progress['value'] = value * 100
-        self.progress_text.set(f'{value * 100:.0f}%')
-        if self.mode.get() != 'stems':
-            self.status.set(f'{self._progress_action}… {value * 100:.0f}%')
+        percent = value * 100
+        self.progress['value'] = percent
+        self.progress_text.set(f'{percent:.0f}%')
 
     def _finish_job(self, cancellation: CancellationToken) -> bool:
         if cancellation is not self._cancellation:
@@ -1544,6 +1807,7 @@ class CliporaApp(tk.Tk):
         self._set_inputs_enabled(True)
         self._sync_source_kind()
         self._sync_options()
+        self._update_stepper()
         self.start_button.state(['!disabled'])
         if self._closing:
             self.destroy()
@@ -1553,32 +1817,39 @@ class CliporaApp(tk.Tk):
     def _done(self, target: Path, cancellation: CancellationToken) -> None:
         if not self._finish_job(cancellation):
             return
-        self.progress['value'] = 100
-        self.progress_text.set('100%')
-        self.status.set(f'เสร็จแล้ว: {target.name}')
+        self._set_progress_phase('done', 100)
+        self._show_result([target])
         if self.input_kind.get() == 'url':
             self.authorized.set(False)
-        if messagebox.askyesno(
-            'สำเร็จ',
-            f'บันทึกไฟล์แล้ว\n{target}\n\nเปิดโฟลเดอร์หรือไม่?',
-        ):
-            os.startfile(target.parent)
 
     def _done_stems(self, outputs: list[Path], cancellation: CancellationToken) -> None:
         if not self._finish_job(cancellation):
             return
-        self.progress['value'] = 100
-        self.progress_text.set('100%')
-        self.status.set(f'เสร็จแล้ว: {len(outputs)} ไฟล์')
+        self._set_progress_phase('done', 100)
+        self._show_result(outputs)
         if self.input_kind.get() == 'url':
             self.authorized.set(False)
-        lines = '\n'.join(str(path) for path in outputs[:20])
-        extra = '' if len(outputs) <= 20 else f'\nและอีก {len(outputs) - 20} ไฟล์'
-        if messagebox.askyesno(
-            'สำเร็จ',
-            f'แยกสเต็มเสร็จแล้ว {len(outputs)} ไฟล์\n\n{lines}{extra}\n\nเปิดโฟลเดอร์หรือไม่?',
-        ):
-            os.startfile(outputs[0].parent)
+
+    def _show_result(self, targets: list[Path]) -> None:
+        self._result_targets = list(targets)
+        if hasattr(self, '_toast'):
+            names = ' • '.join(target.name for target in targets[:2])
+            if len(targets) > 2:
+                names += f' และอื่น ๆ {len(targets) - 2} ไฟล์'
+            self._toast.show(f'เสร็จแล้ว: {names}', 'success')
+        try:
+            if len(targets) == 1:
+                self.result_summary.configure(text=f'เสร็จแล้ว: {targets[0].name}')
+            else:
+                self.result_summary.configure(text=f'สร้างไฟล์แล้ว {len(targets)} ไฟล์')
+            total = sum(target.stat().st_size for target in targets if target.is_file())
+            self.result_size.configure(text=format_file_size(total))
+            self.open_file_btn.state(['!disabled'])
+            if len(targets) != 1:
+                self.open_file_btn.state(['disabled'])
+            self.result_panel.grid()
+        except OSError:
+            self.status.set('เสร็จแล้ว')
 
     def _cancelled(self, cancellation: CancellationToken) -> None:
         if not self._finish_job(cancellation):
@@ -1587,11 +1858,31 @@ class CliporaApp(tk.Tk):
         self.progress_text.set('0%')
         self.status.set('ยกเลิกงานแล้ว')
 
+    def _open_result_folder(self) -> None:
+        if not self._result_targets:
+            return
+        folder = self._result_targets[0].parent
+        try:
+            os.startfile(str(folder))
+        except OSError as exc:
+            messagebox.showerror('เปิดโฟลเดอร์ไม่สำเร็จ', str(exc), parent=self)
+
+    def _open_result_file(self) -> None:
+        if len(self._result_targets) != 1:
+            return
+        try:
+            os.startfile(str(self._result_targets[0]))
+        except OSError as exc:
+            messagebox.showerror('เปิดไฟล์ไม่สำเร็จ', str(exc), parent=self)
+
     def _failed(self, detail: str, cancellation: CancellationToken) -> None:
         if not self._finish_job(cancellation):
             return
-        self.status.set('เกิดข้อผิดพลาด')
-        messagebox.showerror('ทำรายการไม่สำเร็จ', detail[-1200:])
+        self._set_progress_phase('error', 0)
+        if hasattr(self, '_toast'):
+            self._toast.show(f'ข้อผิดพลาด: {detail[:200]}', 'error', 8000)
+        else:
+            messagebox.showerror('ทำรายการไม่สำเร็จ', detail[-1200:])
 
     def _cancel(self) -> None:
         cancellation = self._cancellation

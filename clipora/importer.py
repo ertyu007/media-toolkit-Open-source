@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import getpass
 import importlib.util
 import ipaddress
 import json
@@ -432,7 +433,40 @@ def cleanup_import_workspace(workspace: Path, destination: Path) -> None:
         shutil.rmtree(workspace)
 
 
-def finalize_import_output(completed: Path, destination: Path) -> Path:
+def normalize_output_permissions(target: Path) -> None:
+    """Ensure the current user has full control over an output file (Windows).
+
+    Downloads are moved out of a temp workspace via a hard link, which keeps
+    the source security descriptor. If that descriptor omits the current user,
+    the file cannot be opened (0x80070005). Grant the current user full control
+    with ``icacls`` so outputs are always readable.
+    """
+    if os.name != 'nt' or not target.is_file():
+        return
+    domain = os.environ.get('USERDOMAIN', '')
+    username = getpass.getuser() or ''
+    if not username:
+        return
+    account = f'{domain}\\{username}' if domain else username
+    try:
+        subprocess.run(
+            ['icacls', str(target), '/grant', f'{account}:(F)'],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=(
+                subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            ),
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def finalize_import_output(
+    completed: Path,
+    destination: Path,
+    on_conflict: Callable[[Path], bool] | None = None,
+) -> Path:
     if not completed.is_file() or completed.stat().st_size == 0:
         raise URLImportError('ไฟล์ดาวน์โหลดไม่สมบูรณ์')
     for index in range(10_000):
@@ -440,10 +474,16 @@ def finalize_import_output(completed: Path, destination: Path) -> Path:
             target = destination / completed.name
         else:
             target = destination / f'{completed.stem} ({index}){completed.suffix}'
+        if target.exists():
+            if index == 0 and on_conflict is not None and on_conflict(target):
+                try:
+                    target.unlink()
+                except OSError:
+                    continue
+            else:
+                continue
         try:
             os.link(completed, target)
-        except FileExistsError:
-            continue
         except OSError:
             try:
                 descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
@@ -460,6 +500,7 @@ def finalize_import_output(completed: Path, destination: Path) -> Path:
                 except OSError:
                     pass
                 raise
+        normalize_output_permissions(target)
         try:
             completed.unlink()
         except OSError as exc:
@@ -629,6 +670,7 @@ def import_url(
     on_progress: Callable[[float], None],
     cancellation: CancellationToken | None = None,
     tool_command: Sequence[str] | None = None,
+    on_conflict: Callable[[Path], bool] | None = None,
 ) -> Path:
     validate_url(spec.url)
     command_prefix = list(tool_command) if tool_command is not None else find_ytdlp_command()
@@ -660,11 +702,11 @@ def import_url(
                 fps=spec.fps,
             )
             completed.unlink()
-            return finalize_import_output(mov_output, spec.destination)
+            return finalize_import_output(mov_output, spec.destination, on_conflict=on_conflict)
         completed = _run_import_with_fallback(
             command_prefix, spec, workspace, on_progress, token
         )
-        return finalize_import_output(completed, spec.destination)
+        return finalize_import_output(completed, spec.destination, on_conflict=on_conflict)
     finally:
         cleanup_import_workspace(workspace, spec.destination)
 

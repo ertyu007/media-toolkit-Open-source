@@ -28,6 +28,7 @@ from clipora.importer import (
     import_url,
     is_block_error,
     is_network_block_error,
+    normalize_output_permissions,
     parse_import_progress,
     parse_reported_output,
     site_workaround_extractor_args,
@@ -535,6 +536,100 @@ class ImportWorkspaceTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), b'downloaded')
             self.assertFalse(completed.exists())
             cleanup_import_workspace(workspace, destination)
+
+    def test_finalize_overwrites_when_conflict_returns_true(self):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+            existing = destination / 'clip.mp4'
+            existing.write_bytes(b'original')
+            workspace = create_import_workspace(destination)
+            completed = workspace / 'clip.mp4'
+            completed.write_bytes(b'downloaded')
+            decisions: list[Path] = []
+
+            target = finalize_import_output(
+                completed, destination,
+                on_conflict=lambda path: decisions.append(path) or True,
+            )
+
+            self.assertEqual(decisions, [existing])
+            self.assertEqual(target, existing)
+            self.assertEqual(target.read_bytes(), b'downloaded')
+            self.assertFalse(completed.exists())
+            cleanup_import_workspace(workspace, destination)
+
+    def test_finalize_keeps_both_when_conflict_returns_false(self):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+            existing = destination / 'clip.mp4'
+            existing.write_bytes(b'original')
+            workspace = create_import_workspace(destination)
+            completed = workspace / 'clip.mp4'
+            completed.write_bytes(b'downloaded')
+
+            target = finalize_import_output(
+                completed, destination, on_conflict=lambda _path: False,
+            )
+
+            self.assertEqual(existing.read_bytes(), b'original')
+            self.assertEqual(target.name, 'clip (1).mp4')
+            self.assertEqual(target.read_bytes(), b'downloaded')
+            cleanup_import_workspace(workspace, destination)
+
+    def test_finalize_falls_back_to_collision_when_overwrite_unlink_fails(self):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+            existing = destination / 'clip.mp4'
+            existing.write_bytes(b'original')
+            workspace = create_import_workspace(destination)
+            completed = workspace / 'clip.mp4'
+            completed.write_bytes(b'downloaded')
+
+            def deny_overwrite(_path: Path) -> bool:
+                existing.unlink()
+                existing.mkdir()
+                return True
+
+            target = finalize_import_output(
+                completed, destination, on_conflict=deny_overwrite,
+            )
+
+            self.assertTrue(existing.is_dir())
+            self.assertEqual(target.name, 'clip (1).mp4')
+            self.assertEqual(target.read_bytes(), b'downloaded')
+            cleanup_import_workspace(workspace, destination)
+
+    def test_normalize_output_permissions_calls_icacls_on_windows(self):
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / 'out.mp4'
+            target.write_bytes(b'data')
+            with patch('clipora.importer.os.name', 'nt'), \
+                    patch('clipora.importer.getpass.getuser', return_value='user'), \
+                    patch('clipora.importer.subprocess.run') as run:
+                normalize_output_permissions(target)
+            args = run.call_args.args[0]
+            self.assertEqual(args[:3], ['icacls', str(target), '/grant'])
+            self.assertTrue(str(target) in args)
+            self.assertTrue(any('user' in arg and 'F' in arg for arg in args))
+            self.assertIn('(F)', ' '.join(args))
+
+    def test_normalize_output_permissions_skips_non_windows(self):
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / 'out.mp4'
+            target.write_bytes(b'data')
+            with patch('clipora.importer.os.name', 'posix'), \
+                    patch('clipora.importer.subprocess.run') as run:
+                normalize_output_permissions(target)
+            run.assert_not_called()
+
+    def test_normalize_output_permissions_ignores_icacls_failure(self):
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / 'out.mp4'
+            target.write_bytes(b'data')
+            with patch('clipora.importer.os.name', 'nt'), \
+                    patch('clipora.importer.getpass.getuser', return_value='user'), \
+                    patch('clipora.importer.subprocess.run', side_effect=OSError('boom')):
+                normalize_output_permissions(target)  # must not raise
 
     def test_falls_back_to_workspace_scan_when_reported_output_is_stale(self):
         with TemporaryDirectory() as directory:

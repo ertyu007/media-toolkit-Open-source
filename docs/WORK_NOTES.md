@@ -15,6 +15,19 @@
 - **ทดสอบจริง flow อัปเดต yt-dlp แล้ว** — วาง exe รุ่น 2026.06.09 ลง managed tools แล้ว `update_ytdlp()` อัปเดตเป็น 2026.07.04 ผ่าน (download → checksum → atomic replace → record)
 - **อัปเดต docs แล้ว** — `THIRD_PARTY_NOTICES.md` (เพิ่ม separator toolchain + wheel table), `README.md`, `docs/USER_GUIDE.md`
 
+## ทำวันนี้ (2026-08-19) — รอบที่ 2
+
+- **PC: แก้ไฟล์ดาวน์โหลดเปิดไม่ได้ error 0x80070005 (E_ACCESSDENIED)** — ผู้ใช้รายงานไฟล์ผลลัพธ์ที่ดาวน์โหลดจาก URL มี ACL ที่ผู้ใช้ปัจจุบันไม่มีสิทธิ์ (owner SID resolve ไม่ได้, `icacls`/`Get-Acl` อ่านไม่ออก, ไม่ใช่ EFS/OneDrive/reparse) — สาเหตุคือ `finalize_import_output` ใช้ `os.link` (hard link) ที่ลอก security descriptor จากไฟล์ต้นทางใน workspace ซึ่งอาจไม่รวมสิทธิ์ผู้ใช้ปัจจุบัน → **แก้**: เพิ่ม `normalize_output_permissions()` (รัน `icacls <file> /grant <user>:(F)` ผ่าน argument list ไม่ใช้ shell, ครอบ try/except, ทำงานเฉพาะ Windows) เรียกหลังสร้าง target ทุกครั้งใน `finalize_import_output`
+- **PC: เพิ่มการถามเขียนทับในโหมดดาวน์โหลด URL** — เดิมเมื่อไฟล์ชื่อเดียวกันมีอยู่ `finalize_import_output` สร้างชื่อ `(N)` ให้อัตโนมัติ → **แก้**: เพิ่มพารามิเตอร์ `on_conflict: Callable[[Path], bool]` ให้ `finalize_import_output`/`import_url`; UI ส่ง callback ที่ถามผ่าน `OverwriteDialog` บน main thread (ใช้ `self.after` + `threading.Event` ตามกติกา worker ต้องไม่แตะ Tk); ถ้าเลือกเขียนทับ → ลบไฟล์เก่าแล้วสร้างใหม่, เลือกเก็บทั้งสองไฟล์/ยกเลิก → คงชื่อ `(N)`
+- **PC: UI/UX ใหม่ 4 ด้าน**:
+  - **Theme/visual**: ย้าย palette ไป `clipora/ui_components/theme.py` (ค่าคงที่แบบมีชื่อ: TOP_BAR_BG, SECONDARY_BG, DISABLED_FG ฯลฯ) — ui.py/widgets.py/dialogs.py อ้างใช้เดียวกัน; ลด hardcoded hex
+  - **Layout**: เพิ่ม **stepper 3 ขั้น** (1 แหล่งสื่อ → 2 ที่บันทึก → 3 รูปแบบ) ด้านบน content, ขยับการ์ดลง 1 แถว; `_update_stepper()` เปลี่ยนสถานะตามการกรอกจริง (inactive/done)
+  - **UX flow**: หลังงานเสร็จ action bar แสดง **result panel** (ชื่อไฟล์ + ขนาดรวม + ปุ่ม "เปิดโฟลเดอร์" / "เปิดไฟล์") แทน toast อย่างเดียว; `_show_result()`/`_open_result_folder()`/`_open_result_file()` ใช้ `os.startfile`
+  - **Dialog เขียนทับ**: สร้าง `clipora/ui_components/dialogs.py` — `OverwriteDialog` (Toplevel ธีมเดียวกับแอป, แสดงชื่อไฟล์ + ขนาดเดิม + ขนาดใหม่, ปุ่ม เขียนทับ/เก็บทั้งสองไฟล์/ยกเลิก) ใช้แทน `messagebox.askyesno` ใน `_start_local`/`_start_stems_local` และ URL conflict
+  - ย้าย `format_file_size` ไป `clipora/ui_components/format.py` (เลี่ยง circular import ระหว่าง ui ↔ dialogs)
+- **Tests**: +7 tests ใน `tests/test_importer.py` (overwrite on_conflict True/False, fallback เมื่อ unlink ล้มเหลว, icacls เรียกบน Windows, ข้ามบน non-Windows, อดทนต่อ icacls ล้มเหลว); `tests/test_ui_helpers.py` ยังผ่าน (format_file_size import จาก path ใหม่)
+- **Release**: ไม่ bump version — ยัง 0.5.6 แล้ว push + `gh workflow run` เพื่อ rebuild และ upload `--clobber` ทับ 4 assets เดิมบน release `pc-v0.5.6`
+
 ## ทำวันนี้ (2026-08-19)
 
 - **PC: แจ้งเตือนเมื่อโดนบล็อกระดับเครือข่าย/ISP** — `URLNetworkBlocked` (subclass ของ `URLImportError`) + `is_network_block_error()` detect `getaddrinfo failed`/`failed to resolve`/`network is unreachable` ฯลฯ → แสดงข้อความชี้ทางแก้ (เปลี่ยน DNS 1.1.1.1/8.8.8.8 หรือใช้ VPN/proxy) และ **ไม่ retry** (DNS แก้ด้วย impersonation ไม่ได้); ตรวจใน `_run_import_process` ก่อน `is_block_error`
