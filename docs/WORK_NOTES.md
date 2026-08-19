@@ -26,7 +26,9 @@
   - **Dialog เขียนทับ**: สร้าง `clipora/ui_components/dialogs.py` — `OverwriteDialog` (Toplevel ธีมเดียวกับแอป, แสดงชื่อไฟล์ + ขนาดเดิม + ขนาดใหม่, ปุ่ม เขียนทับ/เก็บทั้งสองไฟล์/ยกเลิก) ใช้แทน `messagebox.askyesno` ใน `_start_local`/`_start_stems_local` และ URL conflict
   - ย้าย `format_file_size` ไป `clipora/ui_components/format.py` (เลี่ยง circular import ระหว่าง ui ↔ dialogs)
 - **Tests**: +7 tests ใน `tests/test_importer.py` (overwrite on_conflict True/False, fallback เมื่อ unlink ล้มเหลว, icacls เรียกบน Windows, ข้ามบน non-Windows, อดทนต่อ icacls ล้มเหลว); `tests/test_ui_helpers.py` ยังผ่าน (format_file_size import จาก path ใหม่)
-- **Release**: ไม่ bump version — ยัง 0.5.6 แล้ว push + `gh workflow run` เพื่อ rebuild และ upload `--clobber` ทับ 4 assets เดิมบน release `pc-v0.5.6`
+- **Release**: ไม่ bump version — ยัง 0.5.6 แล้ว push (commit `ec43cc9`) + `gh workflow run` (run `32254934177` build-windows ผ่าน) → upload `--clobber` ทับ 4 assets เดิมบน release `pc-v0.5.6` เรียบร้อย (สร้าง 2026-08-19 12:56Z); full suite 161 tests ผ่าน (skipped 4 = network) + `test_packaging` 6/6 ผ่าน
+- **หมายเหตุ**: พบไฟล์ค้างใน working tree ที่ยังไม่เคย commit — `clipora/ui_components/widgets.py` + `__init__.py` (ui.py import อยู่แล้ว) ถูก add เข้า commit ด้วย; ส่วน mobile changes ค้าง (README, app_state.dart, yt-dlp AAR) ถูก stash/restore กลับไว้เฉยๆ ไม่แตะ
+- **หมายเหตุ 2**: ไม่สามารถส่งอีเมลแจ้งผู้ใช้ได้ — Outlook COM มีเฉพาะแอป แต่ไม่มี mail profile/bัญชี configured (CreateItem คืน null, GetNamespace ค้างรอโปรไฟล์) จึงไม่มี SMTP ให้ใช้
 
 ## ทำวันนี้ (2026-08-19)
 
