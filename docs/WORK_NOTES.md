@@ -29,6 +29,7 @@
 - **Release**: ไม่ bump version — ยัง 0.5.6 แล้ว push (commit `ec43cc9`) + `gh workflow run` (run `32254934177` build-windows ผ่าน) → upload `--clobber` ทับ 4 assets เดิมบน release `pc-v0.5.6` เรียบร้อย (สร้าง 2026-08-19 12:56Z); full suite 161 tests ผ่าน (skipped 4 = network) + `test_packaging` 6/6 ผ่าน
 - **หมายเหตุ**: พบไฟล์ค้างใน working tree ที่ยังไม่เคย commit — `clipora/ui_components/widgets.py` + `__init__.py` (ui.py import อยู่แล้ว) ถูก add เข้า commit ด้วย; ส่วน mobile changes ค้าง (README, app_state.dart, yt-dlp AAR) ถูก stash/restore กลับไว้เฉยๆ ไม่แตะ
 - **หมายเหตุ 2**: ไม่สามารถส่งอีเมลแจ้งผู้ใช้ได้ — Outlook COM มีเฉพาะแอป แต่ไม่มี mail profile/bัญชี configured (CreateItem คืน null, GetNamespace ค้างรอโปรไฟล์) จึงไม่มี SMTP ให้ใช้
+- **กู้ไฟล์เดิม ACL แตกสำเร็จ** — ผู้ใช้รัน `icacls /grant` แบบ Administrator เอง (คำสั่งเดิมมี syntax bug `$u:(F)` → PowerShell ตีความเป็น drive reference ต้องใช้ `${u}:(F)`) → ทั้ง `.mp4` (20,740,750 B) และ `.mp3` (7,638,957 B) เปิดอ่านได้แล้ว
 
 ## ทำวันนี้ (2026-08-19)
 
