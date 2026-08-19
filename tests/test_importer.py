@@ -11,9 +11,14 @@ from unittest.mock import patch
 from clipora.ffmpeg import CancellationToken, ConversionCancelled
 from clipora.importer import (
     ImportSpec,
+    URLImportBlocked,
+    URLImportError,
+    URLNetworkBlocked,
     VIDEO_QUALITIES,
     _find_completed_output,
     _run_import_process,
+    _run_import_with_fallback,
+    browser_impersonation_args,
     build_import_command,
     cleanup_import_workspace,
     collision_free_path,
@@ -21,8 +26,12 @@ from clipora.importer import (
     finalize_import_output,
     find_ytdlp_command,
     import_url,
+    is_block_error,
+    is_network_block_error,
     parse_import_progress,
     parse_reported_output,
+    site_workaround_extractor_args,
+    site_workaround_headers,
     url_summary,
     validate_url,
 )
@@ -179,6 +188,298 @@ class ImportCommandTests(unittest.TestCase):
                 self.make_spec(mode='video', video_format='mkv'),
                 Path('temporary'),
             )
+
+
+class WorkaroundHelperTests(unittest.TestCase):
+    def test_site_workaround_headers_apply_to_tiktok_urls(self):
+        self.assertEqual(
+            site_workaround_headers('https://www.tiktok.com/@user/video/123'),
+            ['--add-header', 'Referer:https://www.tiktok.com/'],
+        )
+        self.assertEqual(
+            site_workaround_headers('https://vt.tiktok.com/abc/'),
+            ['--add-header', 'Referer:https://www.tiktok.com/'],
+        )
+
+    def test_site_workaround_headers_are_empty_for_other_sites(self):
+        self.assertEqual(site_workaround_headers('https://youtube.com/watch?v=abc'), [])
+        self.assertEqual(site_workaround_headers(''), [])
+
+    def test_site_workaround_extractor_args_apply_to_youtube_urls(self):
+        expected = [
+            '--extractor-args',
+            'youtube:player_client=android,web_embedded,tv',
+        ]
+        self.assertEqual(site_workaround_extractor_args('https://www.youtube.com/watch?v=abc'), expected)
+        self.assertEqual(site_workaround_extractor_args('https://youtu.be/abc'), expected)
+
+    def test_site_workaround_extractor_args_are_empty_for_other_sites(self):
+        self.assertEqual(site_workaround_extractor_args('https://www.tiktok.com/@user/video/123'), [])
+        self.assertEqual(site_workaround_extractor_args(''), [])
+
+    def test_browser_impersonation_args_are_explicit(self):
+        self.assertEqual(browser_impersonation_args(), ['--impersonate', 'chrome'])
+
+    def test_extra_args_are_injected_before_url_separator(self):
+        command = build_import_command(
+            ['yt-dlp'],
+            ImportSpec(
+                url='https://example.com/watch/123',
+                destination=Path('output'),
+                mode='video',
+                quality='สูงสุด',
+                audio_format='mp3',
+            ),
+            Path('temporary'),
+            extra_args=['--add-header', 'Referer:https://example.com/'],
+        )
+        self.assertEqual(
+            command[-4:],
+            ['--add-header', 'Referer:https://example.com/', '--', 'https://example.com/watch/123'],
+        )
+
+    def test_extra_args_still_never_include_credentials(self):
+        command = build_import_command(
+            ['yt-dlp'],
+            ImportSpec(
+                url='https://example.com/watch/123',
+                destination=Path('output'),
+                mode='video',
+                quality='สูงสุด',
+                audio_format='mp3',
+            ),
+            Path('temporary'),
+            extra_args=['--add-header', 'Referer:https://example.com/'],
+        )
+        for forbidden in ('--cookies', '--cookies-from-browser', '--username', '--password', '--netrc'):
+            self.assertNotIn(forbidden, command)
+
+
+class BlockDetectionTests(unittest.TestCase):
+    def test_detects_http_block_errors(self):
+        blocked = (
+            'ERROR: unable to download video data: HTTP Error 403: Forbidden',
+            'HTTP Error 429: Too Many Requests',
+            "Sign in to confirm you're not a bot",
+            'ERROR: This request has been blocked',
+            'WARNING: unusual traffic detected',
+            'ERROR: [youtube] temporary block',
+        )
+        for line in blocked:
+            with self.subTest(line=line):
+                self.assertTrue(is_block_error([line]))
+
+    def test_ignores_unrelated_failures(self):
+        normal = (
+            'ERROR: video unavailable',
+            'ERROR: This video is private',
+            'ERROR: unable to extract data',
+            'ERROR: HTTP Error 404: Not Found',
+        )
+        for line in normal:
+            with self.subTest(line=line):
+                self.assertFalse(is_block_error([line]))
+
+
+class NetworkBlockDetectionTests(unittest.TestCase):
+    def test_detects_dns_and_network_level_blocks(self):
+        blocked = (
+            "HTTPSConnection(host='www.youtube.com', port=443): Failed to resolve 'www.youtube.com' "
+            "([Errno 11001] getaddrinfo failed)",
+            'ERROR: unable to resolve host',
+            'WARNING: temporary failure in name resolution',
+            'ERROR: network is unreachable',
+            'ERROR: no route to host',
+        )
+        for line in blocked:
+            with self.subTest(line=line):
+                self.assertTrue(is_network_block_error([line]))
+
+    def test_ignores_site_side_blocks_and_other_errors(self):
+        normal = (
+            'HTTP Error 403: Forbidden',
+            'HTTP Error 429: Too Many Requests',
+            'ERROR: video unavailable',
+            'ERROR: unable to extract data',
+        )
+        for line in normal:
+            with self.subTest(line=line):
+                self.assertFalse(is_network_block_error([line]))
+
+    @patch('clipora.importer._run_import_process')
+    def test_network_block_fails_immediately_without_retries(self, run_process):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+            workspace = create_import_workspace(destination)
+            run_process.side_effect = URLNetworkBlocked('getaddrinfo failed')
+
+            with self.assertRaises(URLNetworkBlocked):
+                _run_import_with_fallback(
+                    ['yt-dlp'],
+                    ImportSpec(
+                        url='https://youtube.com/watch?v=abc',
+                        destination=destination,
+                        mode='video',
+                        quality='สูงสุด',
+                        audio_format='mp3',
+                    ),
+                    workspace,
+                    lambda _value: None,
+                    CancellationToken(),
+                )
+            cleanup_import_workspace(workspace, destination)
+
+            self.assertEqual(run_process.call_count, 1)
+
+
+class ImportFallbackTests(unittest.TestCase):
+    def make_spec(self, url='https://www.tiktok.com/@user/video/123'):
+        return ImportSpec(
+            url=url,
+            destination=Path('output'),
+            mode='video',
+            quality='สูงสุด',
+            audio_format='mp3',
+        )
+
+    def _complete(self, workspace, name='clip.mp4'):
+        result = workspace / name
+        result.write_bytes(b'downloaded')
+        return result
+
+    @patch('clipora.importer._run_import_process')
+    @patch('clipora.importer._clear_import_partials')
+    def test_retries_with_headers_then_impersonation_on_block(self, _clear, run_process):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+            workspace = create_import_workspace(destination)
+            attempts = []
+
+            def simulate(command, _workspace, on_progress, _token):
+                attempts.append(command)
+                on_progress(0.5)
+                if len(attempts) == 1:
+                    raise URLImportBlocked('HTTP Error 403: Forbidden')
+                if len(attempts) == 2:
+                    raise URLImportBlocked('HTTP Error 403: Forbidden')
+                return self._complete(_workspace)
+
+            run_process.side_effect = simulate
+            with patch('clipora.importer.ytdlp_supports_impersonation', return_value=True):
+                completed = _run_import_with_fallback(
+                    ['yt-dlp'],
+                    self.make_spec(),
+                    workspace,
+                    lambda _value: None,
+                    CancellationToken(),
+                )
+            cleanup_import_workspace(workspace, destination)
+
+            self.assertEqual(len(attempts), 3)
+            self.assertIn('--add-header', attempts[1])
+            self.assertEqual(
+                attempts[2][-4:],
+                ['--impersonate', 'chrome', '--', 'https://www.tiktok.com/@user/video/123'],
+            )
+            self.assertEqual(completed.name, 'clip.mp4')
+            self.assertEqual(_clear.call_count, 2)
+
+    @patch('clipora.importer._run_import_process')
+    def test_non_block_error_fails_immediately(self, run_process):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+            workspace = create_import_workspace(destination)
+            run_process.side_effect = URLImportError('ERROR: video unavailable')
+
+            with self.assertRaises(URLImportError):
+                _run_import_with_fallback(
+                    ['yt-dlp'],
+                    self.make_spec(url='https://youtube.com/watch?v=abc'),
+                    workspace,
+                    lambda _value: None,
+                    CancellationToken(),
+                )
+            cleanup_import_workspace(workspace, destination)
+
+            self.assertEqual(run_process.call_count, 1)
+
+    @patch('clipora.importer._run_import_process')
+    def test_skips_impersonation_when_unsupported(self, run_process):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+            workspace = create_import_workspace(destination)
+
+            def simulate(command, _workspace, on_progress, _token):
+                raise URLImportBlocked('HTTP Error 403: Forbidden')
+
+            run_process.side_effect = simulate
+            with patch('clipora.importer.ytdlp_supports_impersonation', return_value=False):
+                with self.assertRaises(URLImportBlocked):
+                    _run_import_with_fallback(
+                        ['yt-dlp'],
+                        self.make_spec(url='https://youtube.com/watch?v=abc'),
+                        workspace,
+                        lambda _value: None,
+                        CancellationToken(),
+                    )
+            cleanup_import_workspace(workspace, destination)
+
+            self.assertEqual(run_process.call_count, 2)
+
+    @patch('clipora.importer._run_import_process')
+    def test_youtube_retries_with_extractor_args_then_impersonation(self, run_process):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+            workspace = create_import_workspace(destination)
+            attempts = []
+
+            def simulate(command, _workspace, on_progress, _token):
+                attempts.append(command)
+                if len(attempts) < 3:
+                    raise URLImportBlocked('HTTP Error 403: Forbidden')
+                return self._complete(_workspace)
+
+            run_process.side_effect = simulate
+            with patch('clipora.importer.ytdlp_supports_impersonation', return_value=True):
+                completed = _run_import_with_fallback(
+                    ['yt-dlp'],
+                    self.make_spec(url='https://youtube.com/watch?v=abc'),
+                    workspace,
+                    lambda _value: None,
+                    CancellationToken(),
+                )
+            cleanup_import_workspace(workspace, destination)
+
+            self.assertEqual(len(attempts), 3)
+            self.assertEqual(
+                attempts[1][-4:],
+                ['--extractor-args', 'youtube:player_client=android,web_embedded,tv', '--', 'https://youtube.com/watch?v=abc'],
+            )
+            self.assertEqual(attempts[2][-4:], ['--impersonate', 'chrome', '--', 'https://youtube.com/watch?v=abc'])
+            self.assertEqual(completed.name, 'clip.mp4')
+
+    @patch('clipora.importer._run_import_process')
+    def test_impersonation_appended_only_once_when_all_attempts_blocked(self, run_process):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+            workspace = create_import_workspace(destination)
+
+            def simulate(command, _workspace, on_progress, _token):
+                raise URLImportBlocked('HTTP Error 403: Forbidden')
+
+            run_process.side_effect = simulate
+            with patch('clipora.importer.ytdlp_supports_impersonation', return_value=True):
+                with self.assertRaises(URLImportBlocked):
+                    _run_import_with_fallback(
+                        ['yt-dlp'],
+                        self.make_spec(url='https://youtube.com/watch?v=abc'),
+                        workspace,
+                        lambda _value: None,
+                        CancellationToken(),
+                    )
+            cleanup_import_workspace(workspace, destination)
+
+            self.assertEqual(run_process.call_count, 3)
 
 
 class ImportProgressTests(unittest.TestCase):

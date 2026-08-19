@@ -964,6 +964,9 @@ class CliporaApp(tk.Tk):
                     parent=self,
                 )
             return
+        if auto:
+            self._start_ytdlp_update(latest)
+            return
         if not messagebox.askyesno(
             'อัปเดต yt-dlp',
             f'พบ yt-dlp เวอร์ชันใหม่ {latest}'

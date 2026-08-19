@@ -1,16 +1,38 @@
 # บันทึกงาน (Work Notes) — ฟีเจอร์แยกสเต็มเสียง (Stem Separation) + อัปเดต yt-dlp
 
-อัปเดตล่าสุด: 2026-08-17
+อัปเดตล่าสุด: 2026-08-19
 
 ## สถานะโดยรวม
 
+- **RELEASE PC 0.5.6 เตรียมไว้** — auto-retry fallback (403/429/กัน bot) + auto-update yt-dlp + แจ้งเตือนบล็อกระดับ ISP; 155 tests ผ่าน (skipped 2 = network)
+
 - ฟีเจอร์ **แยกสเต็มเสียง (stems)** ผ่านการ implement ครบและทดสอบผ่านแล้ว
 - ฟีเจอร์ **อัปเดต yt-dlp** (ปุ่มในแอป + ตรวจอัตโนมัติตอนเปิดแอป) implement ครบและทดสอบผ่านแล้ว
+- **PC: auto-retry fallback เมื่อโดนบล็อก (HTTP 403/429/กัน bot)** — implement ครบ 30 tests ผ่าน (รายละเอียดด้านล่าง)
 - ชุดเทสต์เต็ม: **138 tests ผ่าน** (skipped 2 = network) — รันบน Python 3.13 (venv สร้างใหม่)
 - ทดสอบจริง end-to-end ฟีเจอร์ stems แล้ว (Demucs บน CPU, เอาต์พุต `_vocals.mp3` + `_instrumental.mp3` + `_stems.zip`)
 - **ติดตั้งเครื่องมือ separator จริงแล้ว** — `%LOCALAPPDATA%\Clipora\tools\separator` (~209 MB), `test_separator_integration.py` รันผ่าน 2/2
 - **ทดสอบจริง flow อัปเดต yt-dlp แล้ว** — วาง exe รุ่น 2026.06.09 ลง managed tools แล้ว `update_ytdlp()` อัปเดตเป็น 2026.07.04 ผ่าน (download → checksum → atomic replace → record)
 - **อัปเดต docs แล้ว** — `THIRD_PARTY_NOTICES.md` (เพิ่ม separator toolchain + wheel table), `README.md`, `docs/USER_GUIDE.md`
+
+## ทำวันนี้ (2026-08-19)
+
+- **PC: แจ้งเตือนเมื่อโดนบล็อกระดับเครือข่าย/ISP** — `URLNetworkBlocked` (subclass ของ `URLImportError`) + `is_network_block_error()` detect `getaddrinfo failed`/`failed to resolve`/`network is unreachable` ฯลฯ → แสดงข้อความชี้ทางแก้ (เปลี่ยน DNS 1.1.1.1/8.8.8.8 หรือใช้ VPN/proxy) และ **ไม่ retry** (DNS แก้ด้วย impersonation ไม่ได้); ตรวจใน `_run_import_process` ก่อน `is_block_error`
+- **PC: แก้ bug fallback append impersonation ซ้ำไม่รู้จบ** — เดิมถ้าทุกชั้นโดนบล็อก loop จะ append `--impersonate` ทุกครั้ง (index+1 == len) → เพิ่ม flag `impersonation_appended` ป้องกัน; +test  regression (ตอนนี้พยายาม 3 ครั้ง: clean → extractor args → impersonation แล้วหยุด)
+- **PC: auto-update yt-dlp ทันที** — ตรวจอัตโนมัติหลังเปิดแอป 3 วิ ถ้าพบเวอร์ชันใหม่ อัปเดตให้เลยโดยไม่ถาม (ปุ่ม manual ยังถามยืนยันอยู่) — แก้ `ui.py` `_ytdlp_check_done`
+- **PC: เพิ่ม YouTube `player_client` fallback** — `_SITE_EXTRACTOR_ARGS` + `site_workaround_extractor_args()` → `--extractor-args youtube:player_client=android,web_embedded,tv` ใส่เป็นชั้นกลางของ fallback chain (clean → headers → extractor args → impersonation) — workaround ที่รู้จักกันดีของ 403/"not a bot" ของ YouTube โดยไม่ใช้ cookies
+- **PC: auto-retry fallback เมื่อ URL download โดนบล็อก (HTTP 403/429/กัน bot)** — ผู้ใช้รายงาน `HTTP Error 403: Forbidden` (บางเคส DNS resolve ไม่ได้ด้วย → น่าจะถูกบล็อกที่ระดับเครือข่าย/ISP) — เพิ่มใน `clipora/importer.py`:
+  - `URLImportBlocked` (subclass ของ `URLImportError`) — ยกเมื่อ yt-dlp output มี signature บล็อก
+  - `is_block_error()` — detect 403/429/"not a bot"/"unusual traffic"/captcha/robot ฯลฯ
+  - `site_workaround_headers()` — per-site `--add-header` (TikTok → `Referer:https://www.tiktok.com/` mirror จาก mobile)
+  - `browser_impersonation_args()` — `--impersonate chrome`
+  - `ytdlp_supports_impersonation()` — รัน `--list-impersonate-targets` ครั้งเดียวแล้ว cache (กัน pip module ที่ไม่มี curl_cffi; exe ทางการมี curl_cffi ในตัว)
+  - `build_import_command(..., extra_args=())` — ใส่ extra args ก่อน `-- url`
+  - `_run_import_with_fallback()` — ลูป 3 รอบ: clean → +headers → +impersonation; ลบ partial ใน workspace ก่อน retry; non-block error fail ทันที
+  - `import_url()` / `import_audio_for_processing()` — ใช้ fallback chain
+  - UI ไม่เปลี่ยน (retry เงียบ) — ตามที่ผู้ใช้เลือก
+  - Tests: +10 tests ใหม่ใน `tests/test_importer.py` (headers, block detection, impersonation args, extra_args ตำแหน่ง, retry chain, non-block fail, unsupported impersonation)
+  - Docs: `USER_GUIDE.md` (โหมด URL), `TROUBLESHOOTING.md` (หัวข้อโดนบล็อก + เช็ค DNS)
 
 ## ทำวันนี้ (2026-08-17)
 

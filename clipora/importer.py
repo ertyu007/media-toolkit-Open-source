@@ -43,10 +43,65 @@ ALLOWED_OUTPUT_SUFFIXES = {
 VIDEO_QUALITIES = ('สูงสุด', '2160p', '1080p', '720p', '480p', '360p')
 _PROGRESS_PATTERN = re.compile(r'^clipora-progress:\s*([0-9]+(?:\.[0-9]+)?)%')
 _OUTPUT_PREFIX = 'clipora-output:'
+_BLOCK_SIGNATURES = (
+    'http error 403',
+    'http error 429',
+    '403 forbidden',
+    '429 too many requests',
+    "confirm you're not a bot",
+    'unusual traffic',
+    'this request has been blocked',
+    'temporary block',
+    'captcha',
+    'automated access',
+    'robot',
+)
+_NETWORK_BLOCK_SIGNATURES = (
+    'getaddrinfo failed',
+    'failed to resolve',
+    'unable to resolve',
+    'temporary failure in name resolution',
+    'name resolution failed',
+    'network is unreachable',
+    'no route to host',
+    'errno 11001',
+)
+_SITE_WORKAROUND_HEADERS = (
+    ('tiktok', ('--add-header', 'Referer:https://www.tiktok.com/')),
+)
+_SITE_EXTRACTOR_ARGS = (
+    ('youtube.com', ('--extractor-args', 'youtube:player_client=android,web_embedded,tv')),
+    ('youtu.be', ('--extractor-args', 'youtube:player_client=android,web_embedded,tv')),
+)
+_impersonation_available: bool | None = None
 
 
 class URLImportError(RuntimeError):
     pass
+
+
+class URLImportBlocked(URLImportError):
+    """Raised when the target site blocks automated downloads (403/429/bot check)."""
+
+    def __init__(self, detail: str = '') -> None:
+        super().__init__(
+            'เว็บไซต์บล็อกการดาวน์โหลดอัตโนมัติ (HTTP 403/429 หรือกัน bot) — '
+            'ลองอัปเดต yt-dlp หรือใช้ลิงก์อื่น'
+            + (f'\n\n{detail}' if detail else '')
+        )
+        self.detail = detail
+
+
+class URLNetworkBlocked(URLImportError):
+    """Raised when the network/ISP blocks resolution or connection (DNS-level block)."""
+
+    def __init__(self, detail: str = '') -> None:
+        super().__init__(
+            'เครือข่าย/ISP บล็อกการเข้าถึงเว็บไซต์นี้ (resolve โดเมนไม่ได้) — '
+            'ลองเปลี่ยน DNS เป็น 1.1.1.1 หรือ 8.8.8.8 หรือใช้ VPN/proxy แล้วลองใหม่'
+            + (f'\n\n{detail}' if detail else '')
+        )
+        self.detail = detail
 
 
 @dataclass(frozen=True)
@@ -120,6 +175,87 @@ def ytdlp_available() -> bool:
     return find_ytdlp_command() is not None
 
 
+def site_workaround_headers(raw_url: str) -> list[str]:
+    """Extra ``--add-header`` arguments for sites that block header-less requests."""
+    lower_url = raw_url.lower()
+    args: list[str] = []
+    for needle, header_args in _SITE_WORKAROUND_HEADERS:
+        if needle in lower_url:
+            args.extend(header_args)
+    return args
+
+
+def site_workaround_extractor_args(raw_url: str) -> list[str]:
+    """Extra ``--extractor-args`` for sites with known client/player workarounds."""
+    lower_url = raw_url.lower()
+    args: list[str] = []
+    for needle, extractor_args in _SITE_EXTRACTOR_ARGS:
+        if needle in lower_url:
+            args.extend(extractor_args)
+    return args
+
+
+def browser_impersonation_args() -> list[str]:
+    return ['--impersonate', 'chrome']
+
+
+def is_block_error(diagnostics: Sequence[str]) -> bool:
+    """True when captured yt-dlp output looks like a site-side block (403/429/bot)."""
+    for line in diagnostics:
+        lower = line.lower()
+        if any(signature in lower for signature in _BLOCK_SIGNATURES):
+            return True
+    return False
+
+
+def is_network_block_error(diagnostics: Sequence[str]) -> bool:
+    """True when captured yt-dlp output looks like a network/ISP-level block."""
+    for line in diagnostics:
+        lower = line.lower()
+        if any(signature in lower for signature in _NETWORK_BLOCK_SIGNATURES):
+            return True
+    return False
+
+
+def ytdlp_supports_impersonation(
+    tool_command: Sequence[str] | None = None,
+) -> bool:
+    """Whether the resolved yt-dlp build has an impersonate target available.
+
+    Cached for the process lifetime; only the first resolution runs a subprocess.
+    """
+    global _impersonation_available
+    if _impersonation_available is not None:
+        return _impersonation_available
+    command_prefix = list(tool_command) if tool_command is not None else find_ytdlp_command()
+    if not command_prefix:
+        _impersonation_available = False
+        return False
+    try:
+        result = subprocess.run(
+            [*command_prefix, '--list-impersonate-targets'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            timeout=30,
+            creationflags=(
+                subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            ),
+        )
+    except (OSError, subprocess.SubprocessError):
+        _impersonation_available = False
+        return False
+    output = (result.stdout or '').lower()
+    _impersonation_available = (
+        result.returncode == 0
+        and 'curl_cffi' in output
+        and 'unavailable' not in output
+    )
+    return _impersonation_available
+
+
 def find_javascript_runtime() -> str | None:
     for name in ('deno', 'node'):
         executable = find_executable(name)
@@ -132,6 +268,7 @@ def build_import_command(
     tool_command: Sequence[str],
     spec: ImportSpec,
     workspace: Path,
+    extra_args: Sequence[str] = (),
 ) -> list[str]:
     if not tool_command:
         raise ValueError('ไม่พบคำสั่ง yt-dlp')
@@ -227,6 +364,8 @@ def build_import_command(
             '--remux-video',
             'mp4',
         ]
+    if extra_args:
+        command += list(extra_args)
     return [*command, '--', url]
 
 
@@ -409,11 +548,80 @@ def _run_import_process(
         raise ConversionCancelled('ยกเลิกงานแล้ว')
     if return_code != 0:
         detail = '\n'.join(diagnostics)
+        if is_network_block_error(diagnostics):
+            raise URLNetworkBlocked(detail)
+        if is_block_error(diagnostics):
+            raise URLImportBlocked(detail)
         raise URLImportError(
             'ดาวน์โหลดลิงก์ไม่สำเร็จ ลิงก์อาจไม่เป็นสาธารณะหรือเว็บไซต์อาจเปลี่ยนแปลง'
             + (f'\n\n{detail}' if detail else f' (รหัส {return_code})')
         )
     return _find_completed_output(workspace, reported_outputs)
+
+
+def _clear_import_partials(workspace: Path) -> None:
+    for path in workspace.iterdir():
+        if path.is_file():
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+
+def _run_import_with_fallback(
+    command_prefix: Sequence[str],
+    spec: ImportSpec,
+    workspace: Path,
+    on_progress: Callable[[float], None],
+    token: CancellationToken,
+) -> Path:
+    """Run yt-dlp, retrying with escalating workarounds when the site blocks us.
+
+    Attempts: clean command → per-site headers → per-site extractor args
+    (e.g. YouTube player_client) → browser impersonation.
+    Non-block failures raise immediately; partial files are cleared between retries.
+    """
+    headers = site_workaround_headers(spec.url)
+    extractor_args = site_workaround_extractor_args(spec.url)
+    commands = [build_import_command(command_prefix, spec, workspace)]
+    if headers:
+        commands.append(build_import_command(command_prefix, spec, workspace, extra_args=headers))
+    if extractor_args:
+        commands.append(
+            build_import_command(
+                command_prefix, spec, workspace, extra_args=extractor_args
+            )
+        )
+    last_blocked: URLImportBlocked | None = None
+    impersonation_appended = False
+    index = 0
+    while index < len(commands):
+        command = commands[index]
+        if token.cancelled:
+            raise ConversionCancelled('ยกเลิกงานแล้ว')
+        try:
+            return _run_import_process(command, workspace, on_progress, token)
+        except URLImportBlocked as exc:
+            last_blocked = exc
+            if (
+                not impersonation_appended
+                and index + 1 == len(commands)
+                and ytdlp_supports_impersonation(command_prefix)
+            ):
+                commands.append(
+                    build_import_command(
+                        command_prefix,
+                        spec,
+                        workspace,
+                        extra_args=[*headers, *extractor_args, *browser_impersonation_args()],
+                    )
+                )
+                impersonation_appended = True
+            if index + 1 < len(commands):
+                _clear_import_partials(workspace)
+        index += 1
+    assert last_blocked is not None
+    raise last_blocked
 
 
 def import_url(
@@ -429,12 +637,13 @@ def import_url(
     token = cancellation or CancellationToken()
     workspace = create_import_workspace(spec.destination)
     try:
-        command = build_import_command(command_prefix, spec, workspace)
         if spec.video_format == 'mov':
             def download_progress(value: float) -> None:
                 on_progress(value * 0.85)
 
-            completed = _run_import_process(command, workspace, download_progress, token)
+            completed = _run_import_with_fallback(
+                command_prefix, spec, workspace, download_progress, token
+            )
             info = probe(completed)
             validate_operation(info, 'video')
             mov_output = completed.with_suffix('.mov')
@@ -452,7 +661,9 @@ def import_url(
             )
             completed.unlink()
             return finalize_import_output(mov_output, spec.destination)
-        completed = _run_import_process(command, workspace, on_progress, token)
+        completed = _run_import_with_fallback(
+            command_prefix, spec, workspace, on_progress, token
+        )
         return finalize_import_output(completed, spec.destination)
     finally:
         cleanup_import_workspace(workspace, spec.destination)
@@ -476,8 +687,9 @@ def import_audio_for_processing(
     token = cancellation or CancellationToken()
     workspace = create_import_workspace(spec.destination)
     try:
-        command = build_import_command(command_prefix, spec, workspace)
-        completed = _run_import_process(command, workspace, on_progress, token)
+        completed = _run_import_with_fallback(
+            command_prefix, spec, workspace, on_progress, token
+        )
         return completed, workspace
     except BaseException:
         cleanup_import_workspace(workspace, spec.destination)
