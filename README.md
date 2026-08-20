@@ -26,6 +26,8 @@ Clipora ประกอบด้วย **สองผลิตภัณฑ์แ
 > รุ่น 0.5.2 แก้ปุ่มโดเนทให้แสดง QR PromptPay ได้ และใช้รูป QR ที่ commit ใน repo ตรง ๆ (ไม่พึ่ง secret ใน CI)
 >
 > รุ่น 0.5.6 เมื่อโดนบล็อกการดาวน์โหลด (HTTP 403/429 หรือกัน bot) แอปจะลองซ้ำอัตโนมัติด้วยวิธีที่เพิ่มขึ้น (header เฉพาะเว็บ, สลับ player client YouTube, จำลองเบราว์เซอร์) อัปเดต yt-dlp ให้อัตโนมัติตอนเปิดแอป และแจ้งเตือนเมื่อถูกบล็อกระดับเครือข่าย/ISP (เปลี่ยน DNS หรือใช้ VPN)
+>
+> รุ่น 0.6.0 เปลี่ยน UI/UX ครั้งใหญ่ (ธีม Midnight Amethyst, stepper 3 ขั้น, result panel, dialog เขียนทับ) และเพิ่มความปลอดภัย (กัน zip-slip ตอนติดตั้งเครื่องมือ, ยืนยันสิทธิ์สื่อก่อนดาวน์โหลดทุกครั้ง)
 
 ## ติดตั้งสำหรับผู้ใช้ทั่วไป
 
@@ -121,7 +123,7 @@ python -m pip install -r requirements-dev.txt
 .\scripts\build_windows.ps1
 ```
 
-ต้องใช้ Python 3.10+ และ Inno Setup 6 ผลลัพธ์อยู่ที่ `dist\installer` การ push tag เช่น `pc-v0.5.6` (PC) หรือ `mobile-v1.0.4` (Android) จะให้ GitHub Actions ทดสอบ สร้าง Setup และแนบ checksum ไปยัง GitHub Release อัตโนมัติ
+ต้องใช้ Python 3.10+ และ Inno Setup 6 ผลลัพธ์อยู่ที่ `dist\installer` การ push tag เช่น `pc-v0.6.0` (PC) หรือ `mobile-v1.0.4` (Android) จะให้ GitHub Actions ทดสอบ สร้าง Setup และแนบ checksum ไปยัง GitHub Release อัตโนมัติ
 
 ## วิธีใช้แบบย่อ
 

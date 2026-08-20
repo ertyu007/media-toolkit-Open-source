@@ -268,6 +268,36 @@ class SeparatorStagingTests(unittest.TestCase):
             stage_dependency(spec, archive_path, staging)
             self.assertTrue((staging / 'python' / 'site-packages' / 'torch' / '__init__.py').is_file())
 
+    def test_python_embed_rejects_zip_slip_member(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive_path = root / 'python.zip'
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, 'w') as archive:
+                archive.writestr('../evil.txt', b'evil')
+            archive_path.write_bytes(buffer.getvalue())
+            spec = self.make_spec('python-embed', members=(('', 'python'),))
+            staging = root / 'staging'
+            staging.mkdir()
+            with self.assertRaisesRegex(DependencyInstallError, 'ไม่ปลอดภัย'):
+                stage_dependency(spec, archive_path, staging)
+            self.assertFalse((root / 'evil.txt').exists())
+
+    def test_python_wheel_rejects_absolute_path_member(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive_path = root / 'torch.whl'
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, 'w') as archive:
+                archive.writestr('/tmp/evil.txt', b'evil')
+            archive_path.write_bytes(buffer.getvalue())
+            spec = self.make_spec('python-wheel', members=(('', 'python/site-packages'),))
+            staging = root / 'staging'
+            staging.mkdir()
+            with self.assertRaisesRegex(DependencyInstallError, 'ไม่ปลอดภัย'):
+                stage_dependency(spec, archive_path, staging)
+            self.assertFalse((root / 'tmp' / 'evil.txt').exists())
+
 
 class SeparatorToolchainInstallTests(unittest.TestCase):
     def make_fake_download(self, root: Path):

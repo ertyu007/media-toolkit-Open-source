@@ -13,6 +13,14 @@ from .dependencies import (
     dependencies_to_install,
     install_toolchains,
 )
+from .ui_components.theme import (
+    ACCENT,
+    ACCENT_SOFT,
+    BG,
+    CARD,
+    FIELD,
+    TEXT,
+)
 
 
 WIZARD_STEPS = ('ยินดีต้อนรับ', 'ข้อตกลง', 'ตรวจสอบ', 'ติดตั้ง', 'เสร็จสิ้น')
@@ -44,7 +52,7 @@ class ToolSetupDialog(tk.Toplevel):
         self.geometry('680x550')
         self.minsize(620, 520)
         self.resizable(True, True)
-        self.configure(bg='#090d15')
+        self.configure(bg=BG)
         self.transient(parent)
         self.protocol('WM_DELETE_WINDOW', self._request_close)
 
@@ -221,11 +229,11 @@ class ToolSetupDialog(tk.Toplevel):
             text='ฉันเข้าใจและยินยอมให้ดาวน์โหลดและติดตั้งเครื่องมือที่ระบุ',
             variable=self.accepted,
             command=self._sync_consent,
-            bg='#141a26',
-            fg='#f7f8fc',
-            activebackground='#141a26',
-            activeforeground='#f7f8fc',
-            selectcolor='#0d1320',
+            bg=CARD,
+            fg=TEXT,
+            activebackground=CARD,
+            activeforeground=TEXT,
+            selectcolor=FIELD,
             font=('Segoe UI', 10),
             anchor='w',
         )

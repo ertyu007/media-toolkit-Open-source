@@ -54,14 +54,17 @@ class OverwriteDialog(tk.Toplevel):
         ui_font = getattr(parent, 'ui_font', 'Segoe UI')
         shell = ttk.Frame(self, style='Card.TFrame', padding=(24, 20))
         shell.pack(fill='both', expand=True)
-        shell.columnconfigure(0, weight=1)
+        shell.columnconfigure(1, weight=1)
+
+        accent_bar = tk.Frame(shell, bg=ACCENT, width=3, height=200)
+        accent_bar.grid(row=0, column=0, rowspan=5, sticky='ns', padx=(0, 18))
 
         ttk.Label(
             shell,
             text='มีไฟล์ชื่อเดียวกันอยู่แล้ว',
             style='Card.TLabel',
             font=(ui_font, 13, 'bold'),
-        ).grid(row=0, column=0, sticky='w')
+        ).grid(row=0, column=1, sticky='w')
 
         ttk.Label(
             shell,
@@ -70,7 +73,7 @@ class OverwriteDialog(tk.Toplevel):
             font=(ui_font, 10),
             wraplength=420,
             justify='left',
-        ).grid(row=1, column=0, sticky='w', pady=(4, 12))
+        ).grid(row=1, column=1, sticky='w', pady=(4, 12))
 
         if detail:
             ttk.Label(
@@ -80,7 +83,7 @@ class OverwriteDialog(tk.Toplevel):
                 font=(ui_font, 9),
                 wraplength=420,
                 justify='left',
-            ).grid(row=2, column=0, sticky='w', pady=(0, 12))
+            ).grid(row=2, column=1, sticky='w', pady=(0, 12))
 
         # Size comparison
         sizes = f'ขนาดไฟล์เดิม: {format_file_size(existing_size)}'
@@ -93,10 +96,10 @@ class OverwriteDialog(tk.Toplevel):
             font=(ui_font, 9),
             justify='left',
         )
-        size_lbl.grid(row=3, column=0, sticky='w', pady=(0, 18))
+        size_lbl.grid(row=3, column=1, sticky='w', pady=(0, 18))
 
         buttons = ttk.Frame(shell, style='Card.TFrame')
-        buttons.grid(row=4, column=0, sticky='ew')
+        buttons.grid(row=4, column=1, sticky='ew')
         buttons.columnconfigure(0, weight=1)
 
         keep_btn = ttk.Button(

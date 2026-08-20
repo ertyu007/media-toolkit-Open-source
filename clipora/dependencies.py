@@ -575,6 +575,40 @@ def _matching_zip_member(archive: zipfile.ZipFile, suffix: str) -> zipfile.ZipIn
     return member
 
 
+def _safe_extractall(archive: zipfile.ZipFile, destination: Path) -> None:
+    """Extract every member after validating that no path escapes `destination`.
+
+    Guards against zip-slip: member names that are absolute or contain ``..``
+    segments are rejected before extraction (see SECURITY.md). Kept strict
+    because the archives come from the network (only their SHA-256 is pinned).
+    """
+    resolved_destination = destination.resolve()
+    for member in archive.infolist():
+        if member.is_dir():
+            continue
+        raw = member.filename.replace('\\', '/')
+        if raw.startswith('/') or raw.startswith('//'):
+            raise DependencyInstallError(
+                f'ชื่อไฟล์ใน archive ไม่ปลอดภัย: {member.filename}'
+            )
+        parts = [part for part in raw.split('/') if part not in ('', '.')]
+        if '..' in parts:
+            raise DependencyInstallError(
+                f'ชื่อไฟล์ใน archive ไม่ปลอดภัย: {member.filename}'
+            )
+        try:
+            target = (destination / raw).resolve()
+        except OSError as exc:
+            raise DependencyInstallError(
+                f'ชื่อไฟล์ใน archive ไม่ปลอดภัย: {member.filename}'
+            ) from exc
+        if not target.is_relative_to(resolved_destination):
+            raise DependencyInstallError(
+                f'ชื่อไฟล์ใน archive ไม่ปลอดภัย: {member.filename}'
+            )
+    archive.extractall(destination)
+
+
 def stage_dependency(spec: DependencySpec, archive_path: Path, staging: Path) -> None:
     if spec.archive_type == 'raw':
         if len(spec.members) != 1:
@@ -588,7 +622,7 @@ def stage_dependency(spec: DependencySpec, archive_path: Path, staging: Path) ->
         destination.mkdir(parents=True, exist_ok=True)
         try:
             with zipfile.ZipFile(archive_path) as archive:
-                archive.extractall(destination)
+                _safe_extractall(archive, destination)
         except (OSError, zipfile.BadZipFile) as exc:
             raise DependencyInstallError(f'แตกไฟล์ {spec.display_name} ไม่สำเร็จ: {exc}') from exc
         pth_files = list(destination.glob('python3*._pth'))
@@ -611,7 +645,7 @@ def stage_dependency(spec: DependencySpec, archive_path: Path, staging: Path) ->
         destination.mkdir(parents=True, exist_ok=True)
         try:
             with zipfile.ZipFile(archive_path) as archive:
-                archive.extractall(destination)
+                _safe_extractall(archive, destination)
         except (OSError, zipfile.BadZipFile) as exc:
             raise DependencyInstallError(f'แตกไฟล์ {spec.display_name} ไม่สำเร็จ: {exc}') from exc
         return

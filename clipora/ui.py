@@ -60,7 +60,9 @@ from .ui_components.theme import (
     ACCENT,
     ACCENT_DISABLED_BG,
     ACCENT_DISABLED_FG,
+    ACCENT_GLOW,
     ACCENT_HOVER,
+    ACCENT_SOFT,
     ACTION_BG,
     BG,
     BORDER,
@@ -70,11 +72,14 @@ from .ui_components.theme import (
     BUTTON_HOVER,
     CARD,
     DANGER,
+    DISABLED_BG,
     DISABLED_FG,
-    DROPZONE_BG,
-    DROPZONE_HOVER_BG,
     ERROR,
     FIELD,
+    FONT_SIZE_BASE,
+    FONT_SIZE_SMALL,
+    FONT_SIZE_TITLE,
+    FONT_SIZE_TOP,
     MENU_ACTIVE_BG,
     MENU_ACTIVE_FG,
     MENU_BG,
@@ -96,7 +101,6 @@ from .ui_components.theme import (
 from .ui_components.widgets import (
     InlineError,
     SegmentedControl,
-    DropZone,
     ToastManager,
 )
 
@@ -226,14 +230,17 @@ class CliporaApp(tk.Tk):
         self.protocol('WM_DELETE_WINDOW', self._on_close)
 
     def _create_icon(self) -> tk.PhotoImage:
-        image = tk.PhotoImage(width=36, height=36)
-        image.put(BG, to=(0, 0, 36, 36))
-        for y in range(5, 31):
-            inset = 2 if y in (5, 6, 29, 30) else 0
-            image.put(ACCENT, to=(5 + inset, y, 31 - inset, y + 1))
-        for y in range(11, 25):
-            width = min(y - 10, 25 - y)
-            image.put(TEXT, to=(14, y, 14 + width, y + 1))
+        image = tk.PhotoImage(width=40, height=40)
+        image.put(BG, to=(0, 0, 40, 40))
+        for y in range(4, 36):
+            image.put(ACCENT, to=(4, y, 36, y + 1))
+        for y in range(12, 28):
+            width = min(y - 11, 27 - y)
+            image.put(TEXT, to=(16, y, 16 + width, y + 1))
+        image.put(ACCENT_SOFT, to=(4, 0, 5, 40))
+        image.put(ACCENT_SOFT, to=(35, 0, 36, 40))
+        image.put(ACCENT_SOFT, to=(0, 4, 40, 5))
+        image.put(ACCENT_SOFT, to=(0, 35, 40, 36))
         return image
 
     def _build(self) -> None:
@@ -251,23 +258,23 @@ class CliporaApp(tk.Tk):
         style.configure('TopBar.TFrame', background=TOP_BAR_BG)
         style.configure('Action.TFrame', background=ACTION_BG, borderwidth=1, relief='solid')
 
-        style.configure('TLabel', background=BG, foreground=TEXT, font=(self.ui_font, 10))
-        style.configure('Card.TLabel', background=CARD, foreground=TEXT, font=(self.ui_font, 10))
-        style.configure('Muted.TLabel', background=BG, foreground=MUTED, font=(self.ui_font, 10))
-        style.configure('CardMuted.TLabel', background=CARD, foreground=MUTED, font=(self.ui_font, 10))
+        style.configure('TLabel', background=BG, foreground=TEXT, font=(self.ui_font, FONT_SIZE_BASE))
+        style.configure('Card.TLabel', background=CARD, foreground=TEXT, font=(self.ui_font, FONT_SIZE_BASE))
+        style.configure('Muted.TLabel', background=BG, foreground=MUTED, font=(self.ui_font, FONT_SIZE_BASE))
+        style.configure('CardMuted.TLabel', background=CARD, foreground=MUTED, font=(self.ui_font, FONT_SIZE_BASE))
 
         # Top bar title
         style.configure(
             'TopBarTitle.TLabel',
             background=TOP_BAR_BG,
             foreground=TEXT,
-            font=(self.ui_font, 12, 'bold'),
+            font=(self.ui_font, FONT_SIZE_TOP, 'bold'),
         )
         style.configure(
             'TopBarMuted.TLabel',
             background=TOP_BAR_BG,
             foreground=MUTED,
-            font=(self.ui_font, 9),
+            font=(self.ui_font, FONT_SIZE_SMALL),
         )
 
         # Section headers inside cards — "01  แหล่งสื่อ" style
@@ -275,29 +282,29 @@ class CliporaApp(tk.Tk):
             'CardSection.TLabel',
             background=CARD,
             foreground=SECTION_ACCENT,
-            font=(self.ui_font, 10, 'bold'),
+            font=(self.ui_font, FONT_SIZE_BASE, 'bold'),
         )
         style.configure(
             'CardSectionNum.TLabel',
             background=ACCENT,
             foreground=MENU_ACTIVE_FG,
-            font=(self.ui_font, 8, 'bold'),
-            padding=(5, 2),
+            font=(self.ui_font, FONT_SIZE_SMALL, 'bold'),
+            padding=(7, 3),
         )
-        style.configure('Section.TLabel', background=CARD, foreground=TEXT, font=(self.ui_font, 10, 'bold'))
+        style.configure('Section.TLabel', background=CARD, foreground=TEXT, font=(self.ui_font, FONT_SIZE_BASE, 'bold'))
 
         # Action bar labels
         style.configure(
             'Action.TLabel',
             background=ACTION_BG,
             foreground=TEXT,
-            font=(self.ui_font, 10, 'bold'),
+            font=(self.ui_font, FONT_SIZE_BASE, 'bold'),
         )
         style.configure(
             'ActionMuted.TLabel',
             background=ACTION_BG,
             foreground=MUTED,
-            font=(self.ui_font, 10),
+            font=(self.ui_font, FONT_SIZE_BASE),
         )
 
         # ── Buttons ───────────────────────────────────────────────────────────
@@ -308,8 +315,8 @@ class CliporaApp(tk.Tk):
             bordercolor=BORDER_LIGHT,
             lightcolor=BORDER_LIGHT,
             darkcolor=BORDER_LIGHT,
-            font=(self.ui_font, 9, 'bold'),
-            padding=(10, 6),
+            font=(self.ui_font, FONT_SIZE_SMALL, 'bold'),
+            padding=(12, 7),
         )
         style.map(
             'TopBar.TButton',
@@ -323,8 +330,8 @@ class CliporaApp(tk.Tk):
             bordercolor=ACCENT,
             lightcolor=ACCENT,
             darkcolor=ACCENT,
-            font=(self.ui_font, 9, 'bold'),
-            padding=(10, 6),
+            font=(self.ui_font, FONT_SIZE_SMALL, 'bold'),
+            padding=(12, 7),
         )
         style.map(
             'TopBarAccent.TButton',
@@ -338,14 +345,14 @@ class CliporaApp(tk.Tk):
             bordercolor=SECONDARY_BORDER,
             lightcolor=SECONDARY_BORDER,
             darkcolor=SECONDARY_BORDER,
-            font=(self.ui_font, 10, 'bold'),
-            padding=(14, 9),
+            font=(self.ui_font, FONT_SIZE_BASE, 'bold'),
+            padding=(16, 10),
         )
         style.map(
             'Secondary.TButton',
-            background=[('active', SECONDARY_HOVER), ('disabled', CARD)],
+            background=[('active', SECONDARY_HOVER), ('disabled', DISABLED_BG)],
             foreground=[('disabled', DISABLED_FG)],
-            bordercolor=[('focus', ACCENT)],
+            bordercolor=[('focus', ACCENT), ('disabled', SECONDARY_BORDER)],
         )
         style.configure(
             'Accent.TButton',
@@ -354,8 +361,8 @@ class CliporaApp(tk.Tk):
             bordercolor=ACCENT,
             lightcolor=ACCENT,
             darkcolor=ACCENT,
-            font=(self.ui_font, 11, 'bold'),
-            padding=(18, 13),
+            font=(self.ui_font, FONT_SIZE_BASE + 1, 'bold'),
+            padding=(20, 14),
         )
         style.map(
             'Accent.TButton',
@@ -370,8 +377,8 @@ class CliporaApp(tk.Tk):
             bordercolor=ACCENT,
             lightcolor=ACCENT,
             darkcolor=ACCENT,
-            font=(self.ui_font, 10, 'bold'),
-            padding=(14, 8),
+            font=(self.ui_font, FONT_SIZE_BASE, 'bold'),
+            padding=(16, 9),
         )
         style.map(
             'DialogAccent.TButton',
@@ -386,12 +393,12 @@ class CliporaApp(tk.Tk):
             bordercolor=DANGER,
             lightcolor=DANGER,
             darkcolor=DANGER,
-            font=(self.ui_font, 11, 'bold'),
-            padding=(18, 13),
+            font=(self.ui_font, FONT_SIZE_BASE + 1, 'bold'),
+            padding=(20, 14),
         )
         style.map(
             'Danger.TButton',
-            background=[('active', '#cc4b59'), ('disabled', '#503036')],
+            background=[('active', '#d9534f'), ('disabled', '#3a2626')],
             foreground=[('disabled', '#9d777d')],
         )
 
@@ -400,7 +407,7 @@ class CliporaApp(tk.Tk):
             'TRadiobutton',
             background=CARD,
             foreground=TEXT,
-            font=(self.ui_font, 10),
+            font=(self.ui_font, FONT_SIZE_BASE),
             indicatorcolor=FIELD,
             padding=(0, 4),
         )
@@ -426,20 +433,20 @@ class CliporaApp(tk.Tk):
             'Segment.TRadiobutton',
             background=FIELD,
             foreground=MUTED,
-            font=(self.ui_font, 10, 'bold'),
-            padding=(14, 9),
+            font=(self.ui_font, FONT_SIZE_BASE, 'bold'),
+            padding=(14, 10),
             anchor='center',
         )
         style.map(
             'Segment.TRadiobutton',
-            background=[('selected', ACCENT), ('active', '#202a3e'), ('disabled', CARD)],
+            background=[('selected', ACCENT), ('active', SECONDARY_HOVER), ('disabled', DISABLED_BG)],
             foreground=[('selected', TEXT), ('active', TEXT), ('disabled', DISABLED_FG)],
         )
         style.configure(
             'TCheckbutton',
             background=CARD,
             foreground=MUTED,
-            font=(self.ui_font, 10),
+            font=(self.ui_font, FONT_SIZE_BASE),
             indicatorcolor=FIELD,
             indicatorsize=18,
             indicatorborderwidth=2,
@@ -459,11 +466,11 @@ class CliporaApp(tk.Tk):
             bordercolor=BORDER,
             lightcolor=BORDER,
             darkcolor=BORDER,
-            padding=(12, 9),
+            padding=(12, 10),
         )
         style.map(
             'Dark.TEntry',
-            fieldbackground=[('disabled', CARD), ('focus', FIELD)],
+            fieldbackground=[('disabled', DISABLED_BG), ('focus', FIELD)],
             foreground=[('disabled', MUTED)],
             bordercolor=[('focus', ACCENT)],
         )
@@ -476,11 +483,11 @@ class CliporaApp(tk.Tk):
             bordercolor=SECONDARY_BORDER,
             lightcolor=SECONDARY_BORDER,
             darkcolor=SECONDARY_BORDER,
-            padding=(10, 7),
+            padding=(10, 8),
         )
         style.map(
             'Dark.TCombobox',
-            fieldbackground=[('readonly', FIELD), ('disabled', CARD)],
+            fieldbackground=[('readonly', FIELD), ('disabled', DISABLED_BG)],
             foreground=[('readonly', TEXT), ('disabled', DISABLED_FG)],
             bordercolor=[('focus', ACCENT)],
             arrowcolor=[('disabled', DISABLED_FG)],
@@ -492,64 +499,21 @@ class CliporaApp(tk.Tk):
             background=ACCENT,
             troughcolor=PROGRESS_TROUGH,
             bordercolor=PROGRESS_TROUGH,
-            lightcolor=ACCENT,
+            lightcolor=ACCENT_GLOW,
             darkcolor=ACCENT,
-            thickness=5,
+            thickness=6,
         )
         style.configure('Card.TSeparator', background=BORDER)
 
-        # ── Stepper ───────────────────────────────────────────────────────────
-        style.configure(
-            'StepperCircleInactive.TLabel',
-            background=CARD,
-            foreground=MUTED,
-            borderwidth=2,
-            relief='solid',
-            bordercolor=SECONDARY_BORDER,
-            font=(self.ui_font, 9, 'bold'),
-            padding=(4, 2),
-            anchor='center',
-            width=2,
-        )
-        style.configure(
-            'StepperCircleActive.TLabel',
-            background=ACCENT,
-            foreground=MENU_ACTIVE_FG,
-            borderwidth=2,
-            relief='solid',
-            bordercolor=ACCENT,
-            font=(self.ui_font, 9, 'bold'),
-            padding=(4, 2),
-            anchor='center',
-            width=2,
-        )
-        style.configure(
-            'StepperCircleDone.TLabel',
-            background=SUCCESS,
-            foreground=MENU_ACTIVE_FG,
-            borderwidth=2,
-            relief='solid',
-            bordercolor=SUCCESS,
-            font=(self.ui_font, 9, 'bold'),
-            padding=(4, 2),
-            anchor='center',
-            width=2,
-        )
-        style.configure(
-            'StepperCaption.TLabel',
-            background=BG,
-            foreground=MUTED,
-            font=(self.ui_font, 9),
-        )
-        style.configure('StepperConnector.TFrame', background=SECONDARY_BORDER)
-
         # ── Misc widget styles ────────────────────────────────────────────────
-        style.configure('Error.TLabel', background=CARD, foreground=ERROR, font=(self.ui_font, 9))
-        style.configure('DropZone.TFrame', background=DROPZONE_BG, borderwidth=2, relief='solid', bordercolor=BORDER)
-        style.configure('DropZoneHover.TFrame', background=DROPZONE_HOVER_BG, bordercolor=ACCENT)
-        style.configure('DropZoneLabel.TLabel', background=DROPZONE_BG, foreground=MUTED, font=(self.ui_font, 10), anchor='center')
-        style.configure('DropZoneLabelHover.TLabel', background=DROPZONE_HOVER_BG, foreground=TEXT, font=(self.ui_font, 10), anchor='center')
-        style.configure('Toast.TFrame', background=TOAST_BG, borderwidth=1, relief='solid', bordercolor=BORDER)
+        style.configure('Error.TLabel', background=CARD, foreground=ERROR, font=(self.ui_font, FONT_SIZE_SMALL))
+        style.configure('Toast.TFrame', background=TOAST_BG, borderwidth=1, relief='solid', bordercolor=ACCENT)
+        style.configure(
+            'Heading.TLabel',
+            background=BG,
+            foreground=TEXT,
+            font=(self.ui_font, FONT_SIZE_TITLE, 'bold'),
+        )
 
         # ── Root layout ───────────────────────────────────────────────────────
         # Row 0 = top bar, row 1 = scrollable content, row 2 = action bar, row 3 = footer
@@ -560,16 +524,22 @@ class CliporaApp(tk.Tk):
         self.columnconfigure(0, weight=1)
 
         # ── Top bar ───────────────────────────────────────────────────────────
-        topbar = ttk.Frame(self, style='TopBar.TFrame', padding=(16, 0))
+        topbar = ttk.Frame(self, style='TopBar.TFrame', padding=(20, 12, 16, 12))
         topbar.grid(row=0, column=0, sticky='ew')
         topbar.columnconfigure(1, weight=1)
 
-        ttk.Label(topbar, image=self._icon, background=TOP_BAR_BG).grid(
-            row=0, column=0, padx=(0, 10), pady=10,
-        )
-        ttk.Label(topbar, text='Clipora', style='TopBarTitle.TLabel').grid(
-            row=0, column=1, sticky='w',
-        )
+        icon_box = tk.Frame(topbar, bg=ACCENT_SOFT, padx=4, pady=4)
+        icon_box.grid(row=0, column=0, padx=(0, 12), pady=2)
+        ttk.Label(icon_box, image=self._icon, background=ACCENT_SOFT).grid(row=0, column=0)
+
+        brand_col = ttk.Frame(topbar, style='TopBar.TFrame')
+        brand_col.grid(row=0, column=1, sticky='w')
+        ttk.Label(brand_col, text='Clipora', style='TopBarTitle.TLabel').grid(row=0, column=0, sticky='w')
+        ttk.Label(
+            brand_col,
+            text='แปลงวิดีโอ  •  แยกเสียง  •  ดาวน์โหลด',
+            style='TopBarMuted.TLabel',
+        ).grid(row=1, column=0, sticky='w')
 
         # Right side: Tools | Update | ♥ สนับสนุน
         topbar_actions = ttk.Frame(topbar, style='TopBar.TFrame')
@@ -581,7 +551,7 @@ class CliporaApp(tk.Tk):
         menu = tk.Menu(
             self._menu_btn, tearoff=0, bg=MENU_BG, fg=TEXT,
             activebackground=ACCENT, activeforeground=MENU_ACTIVE_FG,
-            font=(self.ui_font, 10),
+            font=(self.ui_font, FONT_SIZE_BASE),
         )
         menu.add_command(label='เครื่องมือ (Ctrl+T)', command=lambda: self._open_tool_setup(repair_mode=True))
         menu.add_command(label='อัปเดต yt-dlp (Ctrl+U)', command=lambda: self._check_ytdlp_update(auto=False))
@@ -622,7 +592,7 @@ class CliporaApp(tk.Tk):
         self.card_canvas.grid(row=0, column=0, sticky='nsew')
         self.card_scrollbar.grid(row=0, column=1, sticky='ns')
 
-        # Inner content frame — holds the stepper and the three cards
+        # Inner content frame — holds the three cards
         content = ttk.Frame(self.card_canvas, style='TFrame', padding=(28, 16, 28, 16))
         content_window = self.card_canvas.create_window((0, 0), window=content, anchor='nw')
         content.columnconfigure(0, weight=1)
@@ -654,37 +624,19 @@ class CliporaApp(tk.Tk):
         self.card_canvas.bind('<Enter>', lambda _e: self.bind_all('<MouseWheel>', _on_mousewheel))
         self.card_canvas.bind('<Leave>', lambda _e: self.unbind_all('<MouseWheel>'))
 
-        # ── Stepper — 1 แหล่งสื่อ → 2 ที่บันทึก → 3 รูปแบบ ─────────────────────
-        stepper = ttk.Frame(content, style='TFrame')
-        stepper.grid(row=0, column=0, sticky='ew', pady=(0, 14))
-        for col in range(3):
-            stepper.columnconfigure(col, weight=1)
-        self._stepper_steps: dict[str, tuple[ttk.Label, ttk.Label]] = {}
-        step_titles = ('เลือกแหล่งสื่อ', 'เลือกที่บันทึก', 'ตั้งค่ารูปแบบ')
-        for idx, key in enumerate(('source', 'destination', 'format')):
-            cell = ttk.Frame(stepper, style='TFrame')
-            cell.grid(row=0, column=idx, sticky='ew')
-            circle = ttk.Label(
-                cell, text=str(idx + 1), style='StepperCircleInactive.TLabel',
-            )
-            circle.grid(row=0, column=0)
-            caption = ttk.Label(cell, text=step_titles[idx], style='StepperCaption.TLabel')
-            caption.grid(row=0, column=1, sticky='w', padx=(6, 0))
-            if idx < 2:
-                connector = ttk.Frame(stepper, style='StepperConnector.TFrame', height=2)
-                connector.grid(row=0, column=idx + 1, sticky='ew', padx=(4, 4))
-                stepper.columnconfigure(idx + 1, weight=1)
-            self._stepper_steps[key] = (circle, caption)
-
         # ── Helper: build a card frame with a section header row ─────────────
         def _make_card(parent: ttk.Frame, num: str, title: str, row: int) -> ttk.Frame:
-            """Create a bordered card and return its inner frame."""
+            """Create a bordered card with a left accent strip and return its inner frame."""
             outer = tk.Frame(parent, bg=BORDER, pady=1, padx=1)
-            outer.grid(row=row, column=0, sticky='ew', pady=(0, 10))
-            outer.columnconfigure(0, weight=1)
+            outer.grid(row=row, column=0, sticky='ew', pady=(0, 12))
+            outer.columnconfigure(1, weight=1)
 
-            inner = ttk.Frame(outer, style='Card.TFrame', padding=(20, 16))
-            inner.grid(row=0, column=0, sticky='ew')
+            accent = tk.Frame(outer, bg=ACCENT, width=3)
+            accent.grid(row=0, column=0, sticky='ns')
+            accent.grid_propagate(False)
+
+            inner = ttk.Frame(outer, style='Card.TFrame', padding=(20, 16, 20, 18))
+            inner.grid(row=0, column=1, sticky='ew')
             inner.columnconfigure(0, weight=1)
 
             # Section header row
@@ -699,7 +651,7 @@ class CliporaApp(tk.Tk):
             return inner, hdr
 
         # ── Card 1: Source ────────────────────────────────────────────────────
-        source_card, source_hdr = _make_card(content, '01', 'แหล่งสื่อ', row=1)
+        source_card, source_hdr = _make_card(content, '01', 'แหล่งสื่อ', row=0)
 
         # Source type toggle — right side of header
         source_kind_frame = ttk.Frame(source_hdr, style='Card.TFrame')
@@ -738,16 +690,9 @@ class CliporaApp(tk.Tk):
         )
         self.source_button.grid(row=0, column=1)
 
-        # Drop zone
-        self._drop_zone = DropZone(
-            source_card, on_drop=self._handle_drop, on_paste=self._handle_paste,
-        )
-        self._drop_zone.grid(row=4, column=0, sticky='ew', pady=(8, 0))
-        self._drop_zone.grid_remove()
-
         # Source detail + rights rows
         source_meta = ttk.Frame(source_card, style='Card.TFrame')
-        source_meta.grid(row=5, column=0, sticky='ew', pady=(8, 0))
+        source_meta.grid(row=4, column=0, sticky='ew', pady=(8, 0))
         source_meta.columnconfigure(0, weight=1)
         ttk.Label(
             source_meta, textvariable=self.source_detail, style='CardMuted.TLabel',
@@ -787,7 +732,7 @@ class CliporaApp(tk.Tk):
         self.dmca_row.grid_remove()
 
         # ── Card 2: Destination ───────────────────────────────────────────────
-        dest_card, _ = _make_card(content, '02', 'ที่บันทึก', row=2)
+        dest_card, _ = _make_card(content, '02', 'ที่บันทึก', row=1)
 
         self._dest_error = InlineError(dest_card)
         self._dest_error.grid(row=1, column=0, sticky='ew', pady=(0, 6))
@@ -809,7 +754,7 @@ class CliporaApp(tk.Tk):
         self.destination_button.grid(row=0, column=1)
 
         # ── Card 3: Format / Options ──────────────────────────────────────────
-        fmt_card, _ = _make_card(content, '03', 'รูปแบบผลลัพธ์', row=3)
+        fmt_card, _ = _make_card(content, '03', 'รูปแบบผลลัพธ์', row=2)
 
         # Segmented mode control — full width
         self._mode_control = SegmentedControl(
@@ -880,13 +825,20 @@ class CliporaApp(tk.Tk):
         stems_options.grid_remove()
 
         # ── Action bar (sticky bottom) ─────────────────────────────────────────
-        action_bar = ttk.Frame(self, style='Action.TFrame', padding=(24, 10))
+        action_bar = ttk.Frame(self, style='Action.TFrame', padding=(24, 12, 24, 10))
         action_bar.grid(row=2, column=0, sticky='ew')
         action_bar.columnconfigure(0, weight=1)
 
+        # Primary action button — full width, on top for prominence
+        self.start_button = ttk.Button(
+            action_bar, text='เริ่มแยกเสียง',
+            style='Accent.TButton', command=self._start,
+        )
+        self.start_button.grid(row=0, column=0, sticky='ew', pady=(0, 10))
+
         # Progress row
         prog_row = ttk.Frame(action_bar, style='Action.TFrame')
-        prog_row.grid(row=0, column=0, sticky='ew', pady=(0, 6))
+        prog_row.grid(row=1, column=0, sticky='ew', pady=(0, 6))
         prog_row.columnconfigure(0, weight=1)
         ttk.Label(prog_row, textvariable=self.status, style='Action.TLabel').grid(
             row=0, column=0, sticky='w',
@@ -899,11 +851,11 @@ class CliporaApp(tk.Tk):
             action_bar, mode='determinate', maximum=100,
             style='Clipora.Horizontal.TProgressbar',
         )
-        self.progress.grid(row=1, column=0, sticky='ew')
+        self.progress.grid(row=2, column=0, sticky='ew')
 
         # Result panel — shown after a job completes
         self.result_panel = ttk.Frame(action_bar, style='Action.TFrame')
-        self.result_panel.grid(row=2, column=0, sticky='ew', pady=(10, 0))
+        self.result_panel.grid(row=3, column=0, sticky='ew', pady=(10, 0))
         self.result_panel.columnconfigure(0, weight=1)
         self.result_summary = ttk.Label(
             self.result_panel, text='', style='Action.TLabel', wraplength=560,
@@ -927,19 +879,15 @@ class CliporaApp(tk.Tk):
         self.open_file_btn.pack(side='left')
         self.result_panel.grid_remove()
 
-        self.start_button = ttk.Button(
-            action_bar, text='เริ่มแยกเสียง',
-            style='Accent.TButton', command=self._start,
-        )
-        self.start_button.grid(row=3, column=0, sticky='ew', pady=(10, 0))
-
         # ── Footer ─────────────────────────────────────────────────────────────
+        footer = ttk.Frame(self, style='TFrame', padding=(0, 8, 0, 8))
+        footer.grid(row=3, column=0, sticky='ew')
         ttk.Label(
-            self,
+            footer,
             text='สร้างโดย ertyu.dev  •  ประมวลผลบนเครื่อง  •  ไม่มีโฆษณา  •  ไม่แก้ไขไฟล์ต้นฉบับ',
             style='Muted.TLabel',
             anchor='center',
-        ).grid(row=3, column=0, sticky='ew', pady=(4, 8))
+        ).grid(row=0, column=0, sticky='ew')
 
         # ── Input widget list (for enable/disable during job) ──────────────────
         self._input_widgets = [
@@ -958,7 +906,6 @@ class CliporaApp(tk.Tk):
         ]
         self._sync_source_kind()
         self._sync_options()
-        self._update_stepper()
 
     def _maybe_offer_tool_setup(self) -> None:
         if self._first_run_setup and missing_required_tools():
@@ -1204,26 +1151,6 @@ class CliporaApp(tk.Tk):
         self.mode.set(value)
         self._sync_options()
 
-    def _update_stepper(self) -> None:
-        """Refresh the 3-step indicator based on the current form state."""
-        if not hasattr(self, '_stepper_steps'):
-            return
-        source_ok = bool(self.source.get().strip())
-        destination_ok = self._destination_is_valid()
-        for key, (circle, caption) in self._stepper_steps.items():
-            if key == 'source':
-                state = 'done' if source_ok else 'inactive'
-            elif key == 'destination':
-                state = 'done' if destination_ok else 'inactive'
-            else:
-                state = 'done' if (source_ok and destination_ok) else 'inactive'
-            circle.configure(style=f'StepperCircle{state.capitalize()}.TLabel')
-            caption.configure(style='StepperCaption.TLabel')
-
-    def _destination_is_valid(self) -> bool:
-        value = self.destination.get().strip()
-        return bool(value) and Path(value).is_dir()
-
     def _sync_source_kind(self) -> None:
         new_kind = self.input_kind.get()
         if new_kind not in {'file', 'url'}:
@@ -1241,13 +1168,11 @@ class CliporaApp(tk.Tk):
             self.source_button_text.set('วางจากคลิปบอร์ด')
             self.rights_row.grid()
             self.dmca_row.grid()
-            self._drop_zone.grid()  # Show drop zone for URL mode
         else:
             self.source_hint.set('เลือกวิดีโอที่ต้องการประมวลผล')
             self.source_button_text.set('เลือกไฟล์')
             self.rights_row.grid_remove()
             self.dmca_row.grid_remove()
-            self._drop_zone.grid_remove()  # Hide drop zone for file mode (use file dialog)
         self._on_source_changed()
         self._sync_options()
 
@@ -1327,24 +1252,19 @@ class CliporaApp(tk.Tk):
         else:
             if not Path(value).is_file():
                 self._source_error.show('ไม่พบไฟล์นี้ กรุณาเลือกไฟล์ใหม่')
-                self._update_stepper()
                 return False
         self._source_error.hide()
-        self._update_stepper()
         return True
 
     def _validate_destination(self) -> bool:
         value = self.destination.get().strip()
         if not value:
             self._dest_error.show('กรุณาเลือกโฟลเดอร์บันทึก')
-            self._update_stepper()
             return False
         if not Path(value).is_dir():
             self._dest_error.show('โฟลเดอร์ไม่มีอยู่จริง')
-            self._update_stepper()
             return False
         self._dest_error.hide()
-        self._update_stepper()
         return True
 
     def _validate_stems(self) -> bool:
@@ -1356,28 +1276,6 @@ class CliporaApp(tk.Tk):
 
     def _validate_all(self) -> bool:
         return self._validate_source() and self._validate_destination() and self._validate_stems()
-
-    # Drop zone handlers
-    def _handle_drop(self, files: list[str]) -> None:
-        if not files:
-            return
-        # Take first valid video/audio file
-        for f in files:
-            path = Path(f)
-            if path.is_file() and path.suffix.lower() in ('.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.mp3', '.m4a', '.wav', '.flac', '.opus'):
-                self.input_kind.set('file')
-                self._sync_source_kind()
-                self.source.set(str(path))
-                self._validate_source()
-                return
-
-    def _handle_paste(self, text: str) -> None:
-        text = text.strip()
-        if text:
-            self.input_kind.set('url')
-            self._sync_source_kind()
-            self.source.set(text)
-            self._validate_source()
 
     # Destination history
     def _show_destination_history(self, _event: tk.Event) -> None:
@@ -1807,7 +1705,6 @@ class CliporaApp(tk.Tk):
         self._set_inputs_enabled(True)
         self._sync_source_kind()
         self._sync_options()
-        self._update_stepper()
         self.start_button.state(['!disabled'])
         if self._closing:
             self.destroy()
@@ -1922,11 +1819,14 @@ class DisclaimerDialog(tk.Toplevel):
         shell.columnconfigure(0, weight=1)
         shell.rowconfigure(2, weight=1)
 
+        accent_bar = tk.Frame(shell, bg=ACCENT, width=3, height=200)
+        accent_bar.grid(row=0, column=0, rowspan=4, sticky='ns', padx=(0, 16))
+
         ttk.Label(shell, text='คำปฏิเสธด้านลิขสิทธิ์', style='Heading.TLabel').grid(
-            row=0, column=0, sticky='w'
+            row=0, column=1, sticky='w'
         )
         ttk.Label(shell, text='อ่านและทำความเข้าใจก่อนเริ่มใช้งาน', style='Muted.TLabel').grid(
-            row=1, column=0, sticky='w', pady=(2, 14)
+            row=1, column=1, sticky='w', pady=(2, 14)
         )
         text = tk.Text(
             shell,
@@ -1936,11 +1836,14 @@ class DisclaimerDialog(tk.Toplevel):
             insertbackground=TEXT,
             relief='flat',
             borderwidth=0,
+            highlightthickness=1,
+            highlightbackground=BORDER,
+            highlightcolor=ACCENT,
             padx=16,
             pady=14,
-            font=(getattr(parent, 'ui_font', 'Segoe UI'), 10),
+            font=(getattr(parent, 'ui_font', 'Segoe UI'), FONT_SIZE_BASE),
         )
-        text.grid(row=2, column=0, sticky='nsew')
+        text.grid(row=2, column=1, sticky='nsew')
         text.insert('1.0', DISCLAIMER_TEXT)
         text.configure(state='disabled')
         close = ttk.Button(
@@ -1949,7 +1852,7 @@ class DisclaimerDialog(tk.Toplevel):
             style='Accent.TButton',
             command=self.destroy,
         )
-        close.grid(row=3, column=0, sticky='e', pady=(16, 0))
+        close.grid(row=3, column=1, sticky='e', pady=(16, 0))
         self.grab_set()
         close.focus_set()
 
@@ -2169,7 +2072,7 @@ class DmcaDialog(tk.Toplevel):
             borderwidth=0,
             padx=12,
             pady=10,
-            font=(getattr(parent, 'ui_font', 'Segoe UI'), 10),
+            font=(getattr(parent, 'ui_font', 'Segoe UI'), FONT_SIZE_BASE),
         )
         self.reason.grid(row=9, column=0, sticky='ew', pady=(4, 10))
         ttk.Label(shell, text=DMCA_NOTE, style='CardMuted.TLabel', wraplength=560).grid(

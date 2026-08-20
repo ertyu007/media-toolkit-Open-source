@@ -4,7 +4,7 @@
 
 ## สถานะโดยรวม
 
-- **RELEASE PC 0.5.6 เตรียมไว้** — auto-retry fallback (403/429/กัน bot) + auto-update yt-dlp + แจ้งเตือนบล็อกระดับ ISP; 155 tests ผ่าน (skipped 2 = network)
+- **RELEASE PC 0.6.0** — UI/UX redesign (ธีม Midnight Amethyst + stepper 3 ขั้น + result panel) + security hardening (zip-slip guard ใน dependencies, ยืนยันสิทธิ์); 163 tests ผ่าน (skipped 4 = network) + test_packaging 6/6
 
 - ฟีเจอร์ **แยกสเต็มเสียง (stems)** ผ่านการ implement ครบและทดสอบผ่านแล้ว
 - ฟีเจอร์ **อัปเดต yt-dlp** (ปุ่มในแอป + ตรวจอัตโนมัติตอนเปิดแอป) implement ครบและทดสอบผ่านแล้ว
@@ -29,7 +29,41 @@
 - **Release**: ไม่ bump version — ยัง 0.5.6 แล้ว push (commit `ec43cc9`) + `gh workflow run` (run `32254934177` build-windows ผ่าน) → upload `--clobber` ทับ 4 assets เดิมบน release `pc-v0.5.6` เรียบร้อย (สร้าง 2026-08-19 12:56Z); full suite 161 tests ผ่าน (skipped 4 = network) + `test_packaging` 6/6 ผ่าน
 - **หมายเหตุ**: พบไฟล์ค้างใน working tree ที่ยังไม่เคย commit — `clipora/ui_components/widgets.py` + `__init__.py` (ui.py import อยู่แล้ว) ถูก add เข้า commit ด้วย; ส่วน mobile changes ค้าง (README, app_state.dart, yt-dlp AAR) ถูก stash/restore กลับไว้เฉยๆ ไม่แตะ
 - **หมายเหตุ 2**: ไม่สามารถส่งอีเมลแจ้งผู้ใช้ได้ — Outlook COM มีเฉพาะแอป แต่ไม่มี mail profile/bัญชี configured (CreateItem คืน null, GetNamespace ค้างรอโปรไฟล์) จึงไม่มี SMTP ให้ใช้
-- **กู้ไฟล์เดิม ACL แตกสำเร็จ** — ผู้ใช้รัน `icacls /grant` แบบ Administrator เอง (คำสั่งเดิมมี syntax bug `$u:(F)` → PowerShell ตีความเป็น drive reference ต้องใช้ `${u}:(F)`) → ทั้ง `.mp4` (20,740,750 B) และ `.mp3` (7,638,957 B) เปิดอ่านได้แล้ว
+- **กู้ไฟล์เดิม ACL แตกสำเร็จ** — ผู้ใช้รัน `icacls /grant` แบบ Administrator เอง (คำสั่งเดิมมี syntax bug `$u:(F)` → PowerShell ตีความเป็น drive reference ต้องใช้ `${u}:(F)`)
+
+## ทำวันนี้ (2026-08-20) — รอบที่ 4: audit ความปลอดภัย + แก้ช่องโหว่
+
+- **Audit ความปลอดภัย (findings 1–10)** ตรวจทั้ง PC + Mobile (ไม่มี secrets ใน git history; subprocess ทั้งหมดใช้ argument list ไม่มี shell=True):
+  - Medium: Mobile ไม่ validate URL → SSRF/เข้าถึงเครือข่ายภายใน; URL ขึ้นต้น `-` → yt-dlp option injection; PC `validate_url` เช็ค string อย่างเดียว (ข้าม DNS rebinding/redirect); Mobile path traversal ผ่านชื่อไฟล์จาก provider ใน `copyUriToCache`; PC `zipfile.extractall` รับ archive จาก network (zip-slip) ผิดข้อกำหนด SECURITY.md
+  - Low: `http://` ยังอนุญาต (ไม่บังคับ HTTPS); yt-dlp auto-update ใช้ TOFU checksum; mobile ไม่มี max-filesize; `_cleanupPickCache` ใช้ prefix match; env `PATH`/`CLIPORA_*` override
+- **แก้แล้ว (ตามที่ผู้ใช้เลือก: ข้อ 1, 2, 4, 5)** — ข้ามข้อ 3 (PC DNS rebinding/redirect ต้องเพิ่ม resolve+IP-check ก่อนขอ redirects หรือสอบสวนตัวเลือกเพิ่ม):
+
+### Mobile
+- **ข้อ 1 + 2: URL validation** — เพิ่ม `AppState.validateDownloadUrl()` ใน `mobile/lib/app_state.dart` (scheme ต้อง http/https, มี host, ไม่มี userinfo, port 1–65535, ปฏิเสธ localhost/.localhost และ IP literal ส่วนตัว: 0/8, 10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.0.0/24, 192.0.2/24, 192.168/16, 198.18/15, 198.51.100/24, 203.0.113/24, 224+/4, IPv6 ::, ::1, fc00::/7, fe80::/10, ff00::/8, 64:ff9b::/96, 2001:db8::/32) — ใช้ใน `startUrlDownload` + `home_screen._startUrl` (แทนการเช็ค scheme เดิม); การบังคับ http(s):// ทำให้ URL ขึ้นต้นด้วย `-` เป็นไปไม่ได้ → กัน option injection โดยไม่ต้องใช้ตัวคั่น `--`; **เพิ่มเติม (หลัง reviewer)**: ปฏิเสธ hostname รูป encode อื่นของ IP ส่วนตัว (hex `0x7f000001`, decimal `2130706433`, octal `0177.0.0.1`, shorthand `127.1`, `[::ffff:127.1]`) — hostname ตัวเลขล้วนไม่เคยเป็นโดเมนสาธารณะใน DNS
+- **Defense-in-depth ฝั่ง Kotlin** — `MainActivity.kt`: เพิ่ม `validateDownloadUrl()` (java.net.URI) + `isNonPublicIpLiteral()/isNonPublicIpv4()/isNonPublicIpv6()` เรียกใน `handleDownload` ก่อนสร้าง `YtDlpRequest`
+- **ข้อ 4: path traversal** — `copyUriToCache` ตัดชื่อไฟล์ให้เหลือ basename (`File(rawName).name`) + ตรวจ `canonicalPath` ต้องอยู่ใต้ cacheDir ก่อนเขียน
+- **Tests** — +9 tests ใน `mobile/test/app_state_test.dart` (accept/trim, public IP, non-http scheme, SSRF IPs, credentials/port, dash-prefix, hostname-less); `flutter analyze` + `flutter test` ผ่าน 22/22; `flutter build apk --debug` ผ่าน (Kotlin compile OK)
+- **Docs** — `mobile/README.md` เพิ่มข้อควรรู้ "ลิงก์ต้องเป็น http/https สาธารณะ" (กัน SSRF + option injection, เช็คสองชั้น)
+
+### PC
+- **ข้อ 5: zip-slip** — `clipora/dependencies.py` เพิ่ม `_safe_extractall()` ตรวจทุก member ก่อน `extractall` (ปฏิเสธชื่อ absolute, ขึ้นต้น `/`, มี `..`, และที่ resolve หลุดออกจาก destination) ใช้แทนที่ `python-embed` + `python-wheel`; ถ้าผิดยก `DependencyInstallError`
+- **Tests** — +2 tests ใน `tests/test_dependencies.py` (python-embed `../evil.txt`, python-wheel absolute path); suite PC ทั้งหมด 163 tests ผ่าน (skipped 4 = network)
+- ยังไม่ทำ: ข้อ 3 (DNS rebinding/redirect SSRF ฝั่ง PC), ข้อ 6–10 (low) — รอตัดสินใจขอบเขตเพิ่ม
+- **Release**: bump PC 0.5.6 → **0.6.0** (minor — UI redesign รอบ 3 + security fixes รอบ 4); sync `__init__.py`, `version_info.txt`, `.iss`, README แล้ว; full suite 163 tests ผ่าน (skipped 4) + test_packaging 6/6; commit → tag `pc-v0.6.0` → push → รอ `build-windows` job
+
+## ทำวันนี้ (2026-08-20) — รอบที่ 3: redesign UI/UX ทั้งแอป
+
+- **ธีมใหม่ "Midnight Amethyst"** — `clipora/ui_components/theme.py` ถูกเขียนใหม่ทั้ง palette: ฐานดำน้ำเงินเข้ม (`#0b0e16`), การ์ด `#141926`, ม่วง accent เดิม + เพิ่มชั้นสีใหม่ (`ACCENT_SOFT`, `ACCENT_GLOW`, `STEP_*`, `DISABLED_BG`, `FONT_SIZE_*`) ให้ทุกส่วนอ่านง่ายบนพื้นหลังมืด; ui.py/widgets.py/dialogs.py/setup_ui.py import constants กลางทั้งหมด (ลบ hardcoded hex ค้างใน setup_ui: bg `#090d15`, checkbox `#141a26` ฯลฯ)
+- **Layout หลักใหม่**:
+  - Top bar: โลโก้ในกรอบม่วง (`ACCENT_SOFT`) + ชื่อแอป + subtitle "แปลงวิดีโอ • แยกเสียง • ดาวน์โหลด" 2 บรรทัด
+  - การ์ด 3 ใบ: มีแถบ accent ม่วง 3px ด้านซ้าย (`_make_card` ใช้ `outer` bg=BORDER + accent frame column 0) โดยไม่ต้องย้าย grid ของ content ภายใน
+  - Stepper: เปลี่ยนเป็น pill ต่อเนื่องแบบ connector เต็มแถว + `StepperCaptionActive.TLabel` (caption สว่างขึ้นเมื่อ step สำเร็จ)
+  - Action bar: **ปุ่มเริ่มงานย้ายขึ้นบนสุด** (ใหญ่เต็มแถว) progress/สถานะ/result panel อยู่ล่าง — ปุ่มหลักโดดเด่นก่อน
+  - Footer: แยก frame มี padding สม่ำเสมอ
+- **Widgets**: Toast มีแถบสี accent ซ้ายตาม type (info/success/warning/error); DropZone ใช้สีธีมกลาง
+- **Dialogs**: OverwriteDialog/Disclaimer/Donate/Dmca เพิ่มแถบ accent ซ้าย + ใช้ theme constants; setup_ui ใช้ `BG`/`CARD`/`FIELD`/`TEXT`
+- **ทดสอบ**: `compileall` ผ่าน, app เปิดได้ (PID รันแล้ว kill), full suite **161 tests ผ่าน** (skipped 4 = network); screenshot ไว้ที่ `C:\Users\user\AppData\Local\Temp\opencode\clipora_ui_v2.png` ให้ผู้ใช้ยืนยัน visual ก่อน release
+- **Release**: ยังไม่ปล่อย — รอผู้ใช้ยืนยันผล visual แล้วค่อย clobber release `pc-v0.5.6` รอบ 2 → ทั้ง `.mp4` (20,740,750 B) และ `.mp3` (7,638,957 B) เปิดอ่านได้แล้ว
 
 ## ทำวันนี้ (2026-08-19)
 

@@ -6,8 +6,6 @@ from typing import Callable, Optional
 
 from .theme import (
     ACCENT,
-    DROPZONE_BG,
-    DROPZONE_HOVER_BG,
     ERROR,
     SUCCESS,
     TEXT,
@@ -83,57 +81,6 @@ class SegmentedControl(ttk.Frame):
 
 
 
-class DropZone(ttk.Frame):
-    """Drag-and-drop zone for files/URLs."""
-
-    def __init__(
-        self,
-        parent: tk.Misc,
-        on_drop: Callable[[list[str]], None],
-        on_paste: Callable[[str], None],
-        **kwargs,
-    ) -> None:
-        super().__init__(parent, style='DropZone.TFrame', **kwargs)
-        self._on_drop = on_drop
-        self._on_paste = on_paste
-
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
-
-        self._label = ttk.Label(
-            self,
-            text='ลากไฟล์วิดีโอ/เสียงมาที่นี่\nหรือกด Ctrl+V เพื่อวางลิงก์',
-            style='DropZoneLabel.TLabel',
-            anchor='center',
-            justify='center',
-        )
-        self._label.grid(row=0, column=0, sticky='nsew', padx=20, pady=30)
-
-        self.bind('<Enter>', self._on_enter)
-        self.bind('<Leave>', self._on_leave)
-        self.bind('<Button-1>', self._on_click)
-        self._label.bind('<Enter>', self._on_enter)
-        self._label.bind('<Leave>', self._on_leave)
-        self._label.bind('<Button-1>', self._on_click)
-
-    def _on_enter(self, _event: tk.Event) -> None:
-        self.configure(style='DropZoneHover.TFrame')
-        self._label.configure(style='DropZoneLabelHover.TLabel')
-
-    def _on_leave(self, _event: tk.Event) -> None:
-        self.configure(style='DropZone.TFrame')
-        self._label.configure(style='DropZoneLabel.TLabel')
-
-    def _on_click(self, _event: tk.Event) -> None:
-        self.focus_set()
-
-    def handle_drop(self, files: list[str]) -> None:
-        self._on_drop(files)
-
-    def handle_paste(self, text: str) -> None:
-        self._on_paste(text)
-
-
 class ToastManager:
     """Non-blocking toast notifications."""
 
@@ -161,7 +108,10 @@ class ToastManager:
         bg_color, fg_color = colors.get(type_, colors['info'])
 
         frame = ttk.Frame(toast, padding=(16, 10), style='Toast.TFrame')
-        frame.pack()
+        frame.pack(fill='both', expand=True)
+
+        accent_bar = tk.Frame(frame, bg=bg_color, width=4, height=40)
+        accent_bar.pack(side='left', fill='y', padx=(0, 12))
 
         ttk.Label(
             frame,
