@@ -28,6 +28,7 @@ from .importer import (
     URLImportError,
     VIDEO_QUALITIES,
     cleanup_import_workspace,
+    cleanup_orphaned_import_workspaces,
     import_audio_for_processing,
     import_url,
     url_summary,
@@ -41,6 +42,7 @@ from .separator import (
     separate_audio,
     separate_output_zip_path,
     separator_installed,
+    cleanup_orphaned_workspaces,
 )
 from .dependencies import DependencyInstallError
 from .donate import DONATE_BODY, DONATE_HEADING, DONATE_NOTE, donate_image_path
@@ -54,7 +56,7 @@ from .ytdlp_update import (
     latest_ytdlp_version,
     update_ytdlp,
 )
-from .ui_components.dialogs import CANCEL, KEEP, OVERWRITE, OverwriteDialog
+from .ui_components.dialogs import CANCEL, KEEP, OVERWRITE, ErrorDialog, OverwriteDialog
 from .ui_components.format import format_file_size
 from .ui_components.theme import (
     ACCENT,
@@ -804,6 +806,22 @@ class CliporaApp(tk.Tk):
             state='readonly', style='Dark.TCombobox', width=10,
         )
         self.fps_box.grid(row=0, column=3, sticky='w')
+
+        # New Trim UI Row for Media Trimming
+        trim_options = ttk.Frame(fmt_card, style='Card.TFrame')
+        trim_options.grid(row=4, column=0, sticky='ew', pady=(10, 0))
+        trim_options.columnconfigure(1, weight=1)
+        trim_options.columnconfigure(3, weight=1)
+        ttk.Label(trim_options, text='เริ่ม (วินาที/HH:MM:SS)', style='CardMuted.TLabel').grid(
+            row=0, column=0, padx=(0, 8), sticky='e',
+        )
+        self.start_time_entry = ttk.Entry(trim_options, width=12)
+        self.start_time_entry.grid(row=0, column=1, sticky='w')
+        ttk.Label(trim_options, text='ระยะเวลา / สิ้นสุด', style='CardMuted.TLabel').grid(
+            row=0, column=2, padx=(16, 8), sticky='e',
+        )
+        self.duration_entry = ttk.Entry(trim_options, width=12)
+        self.duration_entry.grid(row=0, column=3, sticky='w')
 
         stems_options = ttk.Frame(fmt_card, style='Card.TFrame')
         stems_options.grid(row=4, column=0, sticky='ew', pady=(10, 0))
@@ -1778,8 +1796,7 @@ class CliporaApp(tk.Tk):
         self._set_progress_phase('error', 0)
         if hasattr(self, '_toast'):
             self._toast.show(f'ข้อผิดพลาด: {detail[:200]}', 'error', 8000)
-        else:
-            messagebox.showerror('ทำรายการไม่สำเร็จ', detail[-1200:])
+        ErrorDialog(self, 'ทำรายการไม่สำเร็จ', detail)
 
     def _cancel(self) -> None:
         cancellation = self._cancellation

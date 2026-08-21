@@ -403,6 +403,21 @@ def collision_free_path(target: Path) -> Path:
     raise URLImportError('มีไฟล์ชื่อซ้ำจำนวนมาก กรุณาเลือกโฟลเดอร์อื่น')
 
 
+def check_destination_disk_space(destination: Path, required_bytes: int = 100 * 1024 * 1024) -> None:
+    try:
+        resolved = destination.resolve()
+        while not resolved.exists() and resolved.parent != resolved:
+            resolved = resolved.parent
+        usage = shutil.disk_usage(resolved)
+        if usage.free < required_bytes:
+            raise URLImportError(
+                f'พื้นที่ดิสก์ไม่เพียงพอ (เหลือ {usage.free / (1024*1024):.1f} MB, '
+                f'ต้องการอย่างน้อย {required_bytes / (1024*1024):.1f} MB)'
+            )
+    except OSError:
+        pass
+
+
 def create_import_workspace(destination: Path) -> Path:
     if not destination.is_dir():
         raise ValueError('ไม่พบโฟลเดอร์ปลายทาง')
@@ -431,6 +446,21 @@ def cleanup_import_workspace(workspace: Path, destination: Path) -> None:
         workspace.unlink()
     elif workspace.is_dir():
         shutil.rmtree(workspace)
+
+
+def cleanup_orphaned_import_workspaces(destination: Path) -> None:
+    """Clean up any orphaned import workspaces left behind in destination."""
+    try:
+        if not destination.is_dir():
+            return
+        for entry in destination.iterdir():
+            if entry.is_dir() and entry.name.startswith(WORKSPACE_PREFIX) and len(entry.name) > len(WORKSPACE_PREFIX):
+                try:
+                    cleanup_import_workspace(entry, destination)
+                except OSError:
+                    pass
+    except OSError:
+        pass
 
 
 def normalize_output_permissions(target: Path) -> None:

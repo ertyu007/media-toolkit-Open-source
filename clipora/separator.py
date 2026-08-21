@@ -98,7 +98,7 @@ def separator_installed() -> bool:
     return separator_python_exe().is_file() and separator_model_path().is_file()
 
 
-def separator_environment() -> dict[str, str]:
+def separator_environment(max_threads: int | None = None) -> dict[str, str]:
     environment = dict(os.environ)
     environment['PYTHONPATH'] = str(separator_site_packages())
     environment['PYTHONNOUSERSITE'] = '1'
@@ -106,6 +106,12 @@ def separator_environment() -> dict[str, str]:
     environment['PYTHONUNBUFFERED'] = '1'
     environment['PYTHONUTF8'] = '1'
     environment['TORCH_HOME'] = str(separator_models_dir())
+    if max_threads is not None and max_threads > 0:
+        environment['OMP_NUM_THREADS'] = str(max_threads)
+        environment['MKL_NUM_THREADS'] = str(max_threads)
+        environment['OPENBLAS_NUM_THREADS'] = str(max_threads)
+        environment['VECLIB_MAXIMUM_THREADS'] = str(max_threads)
+        environment['NUMEXPR_NUM_THREADS'] = str(max_threads)
     return environment
 
 
@@ -235,6 +241,21 @@ def cleanup_workspace(workspace: Path, destination: Path) -> None:
         workspace.unlink()
     elif workspace.is_dir():
         shutil.rmtree(workspace)
+
+
+def cleanup_orphaned_workspaces(destination: Path) -> None:
+    """Clean up any orphaned separator workspaces left behind in destination."""
+    try:
+        if not destination.is_dir():
+            return
+        for entry in destination.iterdir():
+            if entry.is_dir() and entry.name.startswith(WORKSPACE_PREFIX) and len(entry.name) > len(WORKSPACE_PREFIX):
+                try:
+                    cleanup_workspace(entry, destination)
+                except OSError:
+                    pass
+    except OSError:
+        pass
 
 
 def _elapsed_text(started: float) -> str:

@@ -286,9 +286,16 @@ def build_command(
     audio_format: str,
     video_format: str = 'mp4',
     fps: str = 'สูงสุด',
+    start_time: str | None = None,
+    duration_time: str | None = None,
 ) -> list[str]:
     ffmpeg = find_executable('ffmpeg')
-    command = [str(ffmpeg) if ffmpeg is not None else 'ffmpeg', '-y', '-loglevel', 'error', '-i', str(source)]
+    command = [str(ffmpeg) if ffmpeg is not None else 'ffmpeg']
+    if start_time:
+        command += ['-ss', start_time]
+    command += ['-y', '-loglevel', 'error', '-i', str(source)]
+    if duration_time:
+        command += ['-t', duration_time]
     if mode == 'audio':
         codecs = {
             'mp3': ['-c:a', 'libmp3lame', '-q:a', '2'],
@@ -414,6 +421,22 @@ def parse_progress_line(raw_line: str, duration: float | None) -> float | None:
     if elapsed is None:
         return None
     return max(0.0, min(elapsed / duration, 1.0))
+
+
+def check_disk_space(destination: Path, required_bytes: int = 50 * 1024 * 1024) -> None:
+    """Check if the destination disk has enough free space (default 50 MB buffer)."""
+    try:
+        resolved = destination.resolve()
+        while not resolved.exists() and resolved.parent != resolved:
+            resolved = resolved.parent
+        usage = shutil.disk_usage(resolved)
+        if usage.free < required_bytes:
+            raise FFmpegError(
+                f'พื้นที่ดิสก์ไม่เพียงพอ (เหลือ {usage.free / (1024*1024):.1f} MB, '
+                f'ต้องการอย่างน้อย {required_bytes / (1024*1024):.1f} MB)'
+            )
+    except OSError:
+        pass
 
 
 def convert(
