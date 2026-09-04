@@ -4,14 +4,7 @@ Clipora คือโปรแกรมเดสก์ท็อปโอเพน
 
 พัฒนาโดย [ertyu.dev](https://ertyu.dev)
 
-Clipora ประกอบด้วย **สองผลิตภัณฑ์แยกกันใน repository เดียว** — เวอร์ชัน แพ็กเกจ และ release แยกกันโดยสิ้นเชิง:
-
-| ผลิตภัณฑ์ | เทคโนโลยี | release tag | เอกสาร |
-|---|---|---|---|
-| **Clipora PC** — เดสก์ท็อป Windows | Python/Tkinter | `pc-vX.Y.Z` | [คู่มือผู้ใช้](docs/USER_GUIDE.md) |
-| **Clipora Mobile** — แอป Android | Flutter | `mobile-vX.Y.Z` | [mobile/README.md](mobile/README.md) |
-
-ดาวน์โหลดไฟล์แต่ละฝั่งจากหน้า [GitHub Releases](https://github.com/ertyu007/media-toolkit-Open-source/releases) โดยเลือก tag ตามฝั่ง — release ของ PC อยู่ที่ `pc-v*` และของมือถืออยู่ที่ `mobile-v*`
+ดาวน์โหลดไฟล์จากหน้า [GitHub Releases](https://github.com/ertyu007/media-toolkit-Open-source/releases) โดยเลือก tag `pc-v*`
 
 ---
 
@@ -27,7 +20,7 @@ Clipora ประกอบด้วย **สองผลิตภัณฑ์แ
 >
 > รุ่น 0.5.6 เมื่อโดนบล็อกการดาวน์โหลด (HTTP 403/429 หรือกัน bot) แอปจะลองซ้ำอัตโนมัติด้วยวิธีที่เพิ่มขึ้น (header เฉพาะเว็บ, สลับ player client YouTube, จำลองเบราว์เซอร์) อัปเดต yt-dlp ให้อัตโนมัติตอนเปิดแอป และแจ้งเตือนเมื่อถูกบล็อกระดับเครือข่าย/ISP (เปลี่ยน DNS หรือใช้ VPN)
 >
-> รุ่น 0.6.1 ปรับปรุง UI/UX ให้ทันสมัยและลื่นไหลยิ่งขึ้น พร้อมเพิ่มระบบตัดช่วงเวลา, คิวงาน, ตรวจสอบพื้นที่ดิสก์และไฟล์ต้นทาง, และจัดการแคชชั่วคราวอัตโนมัติ
+> รุ่น 0.6.2 ปรับปรุงและอัปเกรดระบบภายในและการจัดการเวอร์ชันเพิ่มเติม
 
 ## ติดตั้งสำหรับผู้ใช้ทั่วไป
 
@@ -123,7 +116,7 @@ python -m pip install -r requirements-dev.txt
 .\scripts\build_windows.ps1
 ```
 
-ต้องใช้ Python 3.10+ และ Inno Setup 6 ผลลัพธ์อยู่ที่ `dist\installer` การ push tag เช่น `pc-v0.6.0` (PC) หรือ `mobile-v1.0.4` (Android) จะให้ GitHub Actions ทดสอบ สร้าง Setup และแนบ checksum ไปยัง GitHub Release อัตโนมัติ
+ต้องใช้ Python 3.10+ และ Inno Setup 6 ผลลัพธ์อยู่ที่ `dist\installer` การ push tag เช่น `pc-v0.6.0` จะให้ GitHub Actions ทดสอบ สร้าง Setup และแนบ checksum ไปยัง GitHub Release อัตโนมัติ
 
 ## วิธีใช้แบบย่อ
 
@@ -138,7 +131,7 @@ python -m pip install -r requirements-dev.txt
 
 งานไฟล์ในเครื่องจะถามก่อนเขียนทับ ส่วนงานลิงก์จะสร้างชื่อ `(1)`, `(2)` เพื่อรักษาไฟล์เดิม และไม่แก้ไขต้นฉบับ อ่านทุกตัวเลือกใน [คู่มือผู้ใช้](docs/USER_GUIDE.md)
 
-## เอกสาร (PC)
+## เอกสาร
 
 - [คู่มือผู้ใช้](docs/USER_GUIDE.md)
 - [แก้ปัญหาและเก็บ Error Log](docs/TROUBLESHOOTING.md)
@@ -156,55 +149,10 @@ python -W error::ResourceWarning -m unittest discover -s tests -v
 
 Integration tests สร้างสื่อขนาดเล็กใน temporary directory และ skip เมื่อไม่พบ FFmpeg
 
-## Roadmap ระยะใกล้ (PC)
+## Roadmap ระยะใกล้
 
 - ตัดช่วงเวลาและ batch processing
 - Portable ZIP (ไฟล์พกพารวมเครื่องมือทั้งหมด)
-
----
-
-# Clipora Mobile (แอป Android)
-
-แอปมือถือของ Clipora สำหรับ Android — ประมวลผลในเครื่องมือถือเอง ฟรี 100% ไม่มีค่าโฮสติ้ง ไม่มีโฆษณา
-
-## ความสามารถ
-
-- **ดาวน์โหลดลิงก์** — วาง URL สาธารณะจาก YouTube, Facebook, Instagram และเว็บที่ yt-dlp รองรับ เลือกวิดีโอหรือเฉพาะเสียง พร้อมเฟรมเรตและคุณภาพ
-- **แปลงไฟล์ในเครื่อง** — เลือกวิดีโอในโทรศัพท์ แปลงเป็น MP4/MOV (ProRes) หรือแยกเสียง
-- ผลลัพธ์ถูกบันทึกไปยังโฟลเดอร์ **Downloads/Clipora** อัตโนมัติ พร้อมปุ่มแชร์ และแสดงความคืบหน้าแบบเรียลไทม์ ยกเลิกงานได้
-- หน้าจอภาษาไทย ฟรี ไม่มีโฆษณา และไม่มีการอัปโหลดไฟล์
-
-## ติดตั้งสำหรับผู้ใช้ทั่วไป
-
-1. เปิดหน้า [GitHub Releases](https://github.com/ertyu007/media-toolkit-Open-source/releases) แล้วเลือก tag `mobile-v<เวอร์ชัน>`
-2. ดาวน์โหลด `app-arm64-v8a-release.apk` และไฟล์ `.sha256` ที่อยู่คู่กัน
-3. เปิดไฟล์บนมือถือ → ยอมให้ติดตั้งจากแหล่งที่ไม่รู้จัก → ติดตั้ง
-
-> ใช้ตัว **arm64-v8a** (มือถือรุ่นใหม่เกือบทั้งหมด) — `armeabi-v7a` ใช้ไม่ได้เพราะ yt-dlp รองรับแค่ arm64/x86_64
-
-## สิ่งที่ฝังอยู่ในแอป
-
-| ไลบรารี | ใช้ทำอะไร |
-|---|---|
-| `ffmpeg_kit_flutter_new` (FFmpeg v8.1.2 Full-GPL) | แปลงไฟล์ / แยกเสียง / ffprobe |
-| `yt-dlp-android` (AAR ที่ build เอง: Python 3.13 + yt-dlp + curl-cffi) | ดาวน์โหลดลิงก์ 1,000+ เว็บไซต์ |
-| `quickjs` (qjs arm64 ที่ cross-compile จาก NDK) | JS runtime สำหรับแก้ JS challenge ของ YouTube |
-
-## วิธี build เอง
-
-```powershell
-cd mobile
-flutter pub get
-flutter build apk --release --split-per-abi
-```
-
-ต้องมี Flutter SDK + Android SDK ก่อน ผลลัพธ์อยู่ที่ `mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`
-
-## ข้อควรรู้
-
-- **Android เท่านั้น** — iOS ทำไม่ได้เพราะ Apple ห้ามฝัง Python interpreter ลงแอป
-- **yt-dlp ไม่อัปเดตในแอป** — ถ้าเวอร์ชันเก่าเกินไปต้อง rebuild AAR แล้ว build APK ใหม่ ดูขั้นตอนใน [mobile/README.md](mobile/README.md)
-- ใช้สิทธิ์ดาวน์โหลดเฉพาะสื่อที่คุณเป็นเจ้าของ ได้รับอนุญาต หรืออยู่ในสาธารณสมบัติเท่านั้น
 
 ## License
 

@@ -7,6 +7,8 @@ import webbrowser
 from pathlib import Path
 from tkinter import filedialog, font as tkfont, messagebox, ttk
 
+from . import __version__
+
 from .ffmpeg import (
     CancellationToken,
     ConversionCancelled,
@@ -49,6 +51,13 @@ from .donate import DONATE_BODY, DONATE_HEADING, DONATE_NOTE, donate_image_path
 from .legal import DMCA_EMAIL, DMCA_NOTE, DISCLAIMER_TEXT, build_dmca_mailto
 from .setup_ui import ToolSetupDialog
 from .tools import missing_required_tools
+from .app_update import (
+    AppReleaseInfo,
+    AppUpdateError,
+    fetch_latest_app_release,
+    get_skipped_version,
+    is_app_update_available,
+)
 from .ytdlp_update import (
     YtDlpUpdateError,
     installed_ytdlp_version,
@@ -56,7 +65,14 @@ from .ytdlp_update import (
     latest_ytdlp_version,
     update_ytdlp,
 )
-from .ui_components.dialogs import CANCEL, KEEP, OVERWRITE, ErrorDialog, OverwriteDialog
+from .ui_components.dialogs import (
+    CANCEL,
+    KEEP,
+    OVERWRITE,
+    AppUpdateDialog,
+    ErrorDialog,
+    OverwriteDialog,
+)
 from .ui_components.format import format_file_size
 from .ui_components.theme import (
     ACCENT,
@@ -218,6 +234,7 @@ class CliporaApp(tk.Tk):
         self._input_widgets: list[ttk.Widget] = []
         self._setup_dialog: ToolSetupDialog | None = None
         self._ytdlp_checking = False
+        self._app_update_checking = False
         self._recent_destinations: list[str] = []
         self._result_targets: list[Path] = []
         self._build()
@@ -229,6 +246,7 @@ class CliporaApp(tk.Tk):
         self.after_idle(self.source_entry.focus_set)
         self.after(120, self._maybe_offer_tool_setup)
         self.after(3000, self._maybe_check_ytdlp_update)
+        self.after(5000, self._maybe_check_app_update)
         self.protocol('WM_DELETE_WINDOW', self._on_close)
 
     def _create_icon(self) -> tk.PhotoImage:
@@ -557,6 +575,7 @@ class CliporaApp(tk.Tk):
         )
         menu.add_command(label='เครื่องมือ (Ctrl+T)', command=lambda: self._open_tool_setup(repair_mode=True))
         menu.add_command(label='อัปเดต yt-dlp (Ctrl+U)', command=lambda: self._check_ytdlp_update(auto=False))
+        menu.add_command(label='ตรวจหาการอัปเดต Clipora...', command=lambda: self._check_app_update(auto=False))
         menu.add_separator()
         menu.add_command(
             label='คู่มือผู้ใช้ (F1)',
@@ -1097,6 +1116,60 @@ class CliporaApp(tk.Tk):
         self.progress_text.set('100%')
         self.status.set(f'อัปเดต yt-dlp เป็น {latest} แล้ว')
         messagebox.showinfo('สำเร็จ', f'อัปเดต yt-dlp เป็น {latest} เรียบร้อย', parent=self)
+
+    def _maybe_check_app_update(self) -> None:
+        self._check_app_update(auto=True)
+
+    def _check_app_update(self, auto: bool = False) -> None:
+        if self._app_update_checking:
+            return
+        if self._cancellation is not None:
+            if not auto:
+                messagebox.showwarning(
+                    'กำลังทำงาน',
+                    'รอให้งานปัจจุบันเสร็จหรือยกเลิกก่อนตรวจสอบอัปเดต',
+                    parent=self,
+                )
+            return
+        self._app_update_checking = True
+        threading.Thread(target=self._app_update_check_worker, args=(auto,), daemon=True).start()
+
+    def _app_update_check_worker(self, auto: bool) -> None:
+        release_info: AppReleaseInfo | None = None
+        error: str = ''
+        try:
+            release_info = fetch_latest_app_release()
+        except (AppUpdateError, OSError) as exc:
+            error = str(exc)
+        self.after(0, self._app_update_check_done, auto, release_info, error)
+
+    def _app_update_check_done(
+        self,
+        auto: bool,
+        release_info: AppReleaseInfo | None,
+        error: str,
+    ) -> None:
+        self._app_update_checking = False
+        if error:
+            if not auto:
+                messagebox.showerror('ตรวจหาการอัปเดตไม่สำเร็จ', error, parent=self)
+            return
+
+        if release_info is None or not is_app_update_available(release_info.version, __version__):
+            if not auto:
+                if hasattr(self, '_toast'):
+                    self._toast.show(f'คุณกำลังใช้ Clipora เวอร์ชันล่าสุดแล้ว (v{__version__})', 'success')
+                else:
+                    messagebox.showinfo('อัปเดต', f'คุณกำลังใช้ Clipora เวอร์ชันล่าสุดแล้ว (v{__version__})', parent=self)
+            return
+
+        # Newer version available
+        if auto:
+            skipped = get_skipped_version()
+            if skipped == release_info.version:
+                return
+
+        AppUpdateDialog(self, release_info)
 
     def _open_disclaimer(self) -> None:
         DisclaimerDialog(self)
@@ -1865,7 +1938,7 @@ class DisclaimerDialog(tk.Toplevel):
         text.configure(state='disabled')
         close = ttk.Button(
             shell,
-            text='ปิด',
+            text='close',
             style='Accent.TButton',
             command=self.destroy,
         )

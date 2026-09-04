@@ -19,8 +19,8 @@ class LegalTextTests(unittest.TestCase):
     def test_dmca_note_is_available(self):
         self.assertIn('counter-notice', DMCA_NOTE)
 
-    def test_dmca_email_is_under_ertyu_dev(self):
-        self.assertEqual(DMCA_EMAIL, 'dmca@ertyu.dev')
+    def test_dmca_email_is_correct(self):
+        self.assertEqual(DMCA_EMAIL, 'yeahitthanato@gmail.com')
 
 
 class DmcaMailtoTests(unittest.TestCase):
@@ -30,7 +30,7 @@ class DmcaMailtoTests(unittest.TestCase):
             'rights@example.com',
             'I own this video',
         )
-        self.assertTrue(mailto.startswith('mailto:dmca@ertyu.dev?'))
+        self.assertTrue(mailto.startswith('mailto:yeahitthanato@gmail.com?'))
         parts = urlsplit(mailto)
         query = dict(
             pair.split('=', 1)

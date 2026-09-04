@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-DMCA_EMAIL = 'dmca@ertyu.dev'
+DMCA_EMAIL = 'yeahitthanato@gmail.com'
 
 DISCLAIMER_TEXT = """คำปฏิเสธความรับผิดชอบด้านลิขสิทธิ์
 

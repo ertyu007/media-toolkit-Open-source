@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import Callable
+from typing import Any, Callable
 
 from .format import format_file_size
 from .theme import (
     ACCENT,
     ACCENT_HOVER,
+    BG,
     BORDER,
     CARD,
     DISABLED_FG,
@@ -23,10 +24,9 @@ OVERWRITE = 'overwrite'
 KEEP = 'keep'
 CANCEL = 'cancel'
 
-
-OVERWRITE = 'overwrite'
-KEEP = 'keep'
-CANCEL = 'cancel'
+ACTION_UPDATE = 'update'
+ACTION_REMIND_LATER = 'remind_later'
+ACTION_SKIP_VERSION = 'skip_version'
 
 
 class OverwriteDialog(tk.Toplevel):
@@ -250,117 +250,146 @@ class ErrorDialog(tk.Toplevel):
         x = parent_x + (parent_w - width) // 2
         y = parent_y + (parent_h - height) // 2
         self.geometry(f'+{max(0, x)}+{max(0, y)}')
-    """Ask whether to replace an existing output file.
 
-    Returns one of :data:`OVERWRITE`, :data:`KEEP` or :data:`CANCEL` through
-    the ``on_result`` callback (or the :attr:`result` attribute after the
-    dialog closes). Displays the existing size and, when known, the size of the
-    new file so the user can decide before overwriting.
-    """
+
+class AppUpdateDialog(tk.Toplevel):
+    """OBS Studio-styled modal update notification dialog for Clipora."""
 
     def __init__(
         self,
         parent: tk.Misc,
-        filename: str,
-        existing_size: int = 0,
-        new_size: int | None = None,
-        detail: str | None = None,
-        on_result: Callable[[str], None] | None = None,
+        release_info: Any,
+        on_action: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.result: str | None = None
-        self._on_result = on_result
-        self.title('ไฟล์มีอยู่แล้ว')
+        self._release_info = release_info
+        self._on_action = on_action
+        self.title('พบการอัปเดตใหม่')
         self.configure(bg=CARD)
         self.transient(parent)
-        self.resizable(False, False)
-        self.protocol('WM_DELETE_WINDOW', lambda: self._close(CANCEL))
+        self.geometry('560x520')
+        self.minsize(480, 420)
+        self.protocol('WM_DELETE_WINDOW', lambda: self._close(ACTION_REMIND_LATER))
 
         ui_font = getattr(parent, 'ui_font', 'Segoe UI')
+
         shell = ttk.Frame(self, style='Card.TFrame', padding=(24, 20))
         shell.pack(fill='both', expand=True)
-        shell.columnconfigure(1, weight=1)
+        shell.rowconfigure(1, weight=1)
+        shell.columnconfigure(0, weight=1)
 
-        accent_bar = tk.Frame(shell, bg=ACCENT, width=3, height=200)
-        accent_bar.grid(row=0, column=0, rowspan=5, sticky='ns', padx=(0, 18))
-
+        # Header label
         ttk.Label(
             shell,
-            text='มีไฟล์ชื่อเดียวกันอยู่แล้ว',
-            style='Card.TLabel',
-            font=(ui_font, 13, 'bold'),
-        ).grid(row=0, column=1, sticky='w')
-
-        ttk.Label(
-            shell,
-            text=filename,
+            text='มี Clipora เวอร์ชันใหม่พร้อมให้อัปเดต:',
             style='CardMuted.TLabel',
             font=(ui_font, 10),
-            wraplength=420,
-            justify='left',
-        ).grid(row=1, column=1, sticky='w', pady=(4, 12))
+        ).grid(row=0, column=0, sticky='w', pady=(0, 10))
 
-        if detail:
-            ttk.Label(
-                shell,
-                text=detail,
-                style='CardMuted.TLabel',
-                font=(ui_font, 9),
-                wraplength=420,
-                justify='left',
-            ).grid(row=2, column=1, sticky='w', pady=(0, 12))
+        # Main release container / card
+        card = ttk.Frame(shell, style='CardBorder.TFrame', padding=(16, 14))
+        card.grid(row=1, column=0, sticky='nsew', pady=(0, 18))
+        card.rowconfigure(1, weight=1)
+        card.columnconfigure(0, weight=1)
 
-        # Size comparison
-        sizes = f'ขนาดไฟล์เดิม: {format_file_size(existing_size)}'
-        if new_size is not None:
-            sizes += f'\nขนาดไฟล์ใหม่: {format_file_size(new_size)}'
-        size_lbl = ttk.Label(
-            shell,
-            text=sizes,
-            style='CardMuted.TLabel',
-            font=(ui_font, 9),
-            justify='left',
+        # Release title
+        title_text = getattr(release_info, 'title', None) or f'Clipora {getattr(release_info, "version", "")}'
+        ttk.Label(
+            card,
+            text=title_text,
+            style='Card.TLabel',
+            font=(ui_font, 14, 'bold'),
+        ).grid(row=0, column=0, sticky='w', pady=(0, 10))
+
+        # Release notes text area with scrollbar
+        text_frame = tk.Frame(card, bg=FIELD, highlightbackground=BORDER, highlightthickness=1)
+        text_frame.grid(row=1, column=0, sticky='nsew')
+        text_frame.rowconfigure(0, weight=1)
+        text_frame.columnconfigure(0, weight=1)
+
+        notes_text = tk.Text(
+            text_frame,
+            bg=FIELD,
+            fg=TEXT,
+            insertbackground=TEXT,
+            selectbackground=ACCENT,
+            selectforeground='#ffffff',
+            relief='flat',
+            wrap='word',
+            font=(ui_font, 10),
+            padx=10,
+            pady=8,
+            borderwidth=0,
+            highlightthickness=0,
         )
-        size_lbl.grid(row=3, column=1, sticky='w', pady=(0, 18))
+        scrollbar = ttk.Scrollbar(text_frame, orient='vertical', command=notes_text.yview)
+        notes_text.configure(yscrollcommand=scrollbar.set)
 
+        notes_text.grid(row=0, column=0, sticky='nsew')
+        scrollbar.grid(row=0, column=1, sticky='ns')
+
+        raw_notes = getattr(release_info, 'release_notes', '') or ''
+        notes_content = raw_notes.strip() if raw_notes.strip() else 'มีการปรับปรุงประสิทธิภาพและแก้ไขข้อผิดพลาดทั่วไป'
+        notes_text.insert('1.0', notes_content)
+        notes_text.configure(state='disabled')
+
+        # Buttons row
         buttons = ttk.Frame(shell, style='Card.TFrame')
-        buttons.grid(row=4, column=1, sticky='ew')
+        buttons.grid(row=2, column=0, sticky='ew')
         buttons.columnconfigure(0, weight=1)
 
-        keep_btn = ttk.Button(
-            buttons,
-            text='เก็บทั้งสองไฟล์',
-            style='Secondary.TButton',
-            command=lambda: self._close(KEEP),
-        )
-        keep_btn.grid(row=0, column=1, padx=(8, 0))
+        btn_box = ttk.Frame(buttons, style='Card.TFrame')
+        btn_box.pack(side='right')
 
-        cancel_btn = ttk.Button(
-            buttons,
-            text='ยกเลิก',
-            style='Secondary.TButton',
-            command=lambda: self._close(CANCEL),
-        )
-        cancel_btn.grid(row=0, column=2, padx=(8, 0))
-
-        overwrite_btn = ttk.Button(
-            buttons,
-            text='เขียนทับ',
+        update_btn = ttk.Button(
+            btn_box,
+            text='อัปเดตทันที',
             style='DialogAccent.TButton',
-            command=lambda: self._close(OVERWRITE),
+            command=self._on_update,
         )
-        overwrite_btn.grid(row=0, column=3, padx=(8, 0))
+        update_btn.pack(side='left', padx=(0, 8))
+
+        remind_btn = ttk.Button(
+            btn_box,
+            text='เตือนฉันภายหลัง',
+            style='Secondary.TButton',
+            command=lambda: self._close(ACTION_REMIND_LATER),
+        )
+        remind_btn.pack(side='left', padx=(0, 8))
+
+        skip_btn = ttk.Button(
+            btn_box,
+            text='ข้ามเวอร์ชันนี้',
+            style='Secondary.TButton',
+            command=self._on_skip,
+        )
+        skip_btn.pack(side='left')
 
         self._center_on(parent)
         self.grab_set()
-        self.bind('<Escape>', lambda _e: self._close(CANCEL))
-        overwrite_btn.focus_set()
+        self.bind('<Escape>', lambda _e: self._close(ACTION_REMIND_LATER))
+        update_btn.focus_set()
         self.wait_window(self)
+
+    def _on_update(self) -> None:
+        import webbrowser
+        target_url = getattr(self._release_info, 'download_url', None) or getattr(self._release_info, 'html_url', None)
+        if target_url:
+            webbrowser.open(str(target_url))
+        self._close(ACTION_UPDATE)
+
+    def _on_skip(self) -> None:
+        from ..app_update import set_skipped_version
+        version = getattr(self._release_info, 'version', None)
+        if version:
+            set_skipped_version(str(version))
+        self._close(ACTION_SKIP_VERSION)
 
     def _close(self, result: str) -> None:
         self.result = result
-        if self._on_result is not None:
-            self._on_result(result)
+        if self._on_action is not None:
+            self._on_action(result)
         self.destroy()
 
     def _center_on(self, parent: tk.Misc) -> None:
