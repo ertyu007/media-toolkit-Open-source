@@ -67,6 +67,12 @@ _NETWORK_BLOCK_SIGNATURES = (
     'no route to host',
     'errno 11001',
 )
+_EXTRACTOR_BROKEN_SIGNATURES = (
+    'unexpected response from webpage request',
+    'please report this issue',
+    'confirm you are on the latest version',
+    'unable to extract player response',
+)
 _SITE_WORKAROUND_HEADERS = (
     ('tiktok', ('--add-header', 'Referer:https://www.tiktok.com/')),
 )
@@ -100,6 +106,19 @@ class URLNetworkBlocked(URLImportError):
         super().__init__(
             'เครือข่าย/ISP บล็อกการเข้าถึงเว็บไซต์นี้ (resolve โดเมนไม่ได้) — '
             'ลองเปลี่ยน DNS เป็น 1.1.1.1 หรือ 8.8.8.8 หรือใช้ VPN/proxy แล้วลองใหม่'
+            + (f'\n\n{detail}' if detail else '')
+        )
+        self.detail = detail
+
+
+class URLExtractorBroken(URLImportError):
+    """Raised when yt-dlp cannot parse the site (site changed, extractor outdated)."""
+
+    def __init__(self, detail: str = '') -> None:
+        super().__init__(
+            'เว็บไซต์เปลี่ยนระบบจนตัวดาวน์โหลดตามไม่ทัน — '
+            'กด "อัปเดต yt-dlp (Ctrl+U)" แล้วลองใหม่ '
+            'หากยังไม่ได้ ให้รอ yt-dlp เวอร์ชันใหม่แล้วลองอีกครั้ง'
             + (f'\n\n{detail}' if detail else '')
         )
         self.detail = detail
@@ -218,6 +237,15 @@ def is_network_block_error(diagnostics: Sequence[str]) -> bool:
     return False
 
 
+def is_extractor_broken_error(diagnostics: Sequence[str]) -> bool:
+    """True when yt-dlp reports its extractor can no longer parse the site."""
+    for line in diagnostics:
+        lower = line.lower()
+        if any(signature in lower for signature in _EXTRACTOR_BROKEN_SIGNATURES):
+            return True
+    return False
+
+
 def ytdlp_supports_impersonation(
     tool_command: Sequence[str] | None = None,
 ) -> bool:
@@ -277,7 +305,7 @@ def build_import_command(
     if spec.mode not in {'audio', 'video'}:
         raise ValueError(f'ไม่รองรับโหมดดาวน์โหลด: {spec.mode}')
 
-    output_template = str(workspace / '%(title).160B [%(id)s].%(ext)s')
+    output_template = str(workspace / '%(title).160B.%(ext)s')
     command = [
         *tool_command,
         '--ignore-config',
@@ -623,6 +651,8 @@ def _run_import_process(
             raise URLNetworkBlocked(detail)
         if is_block_error(diagnostics):
             raise URLImportBlocked(detail)
+        if is_extractor_broken_error(diagnostics):
+            raise URLExtractorBroken(detail)
         raise URLImportError(
             'ดาวน์โหลดลิงก์ไม่สำเร็จ ลิงก์อาจไม่เป็นสาธารณะหรือเว็บไซต์อาจเปลี่ยนแปลง'
             + (f'\n\n{detail}' if detail else f' (รหัส {return_code})')
@@ -650,7 +680,8 @@ def _run_import_with_fallback(
 
     Attempts: clean command → per-site headers → per-site extractor args
     (e.g. YouTube player_client) → browser impersonation.
-    Non-block failures raise immediately; partial files are cleared between retries.
+    Non-block failures (including outdated extractors and network blocks)
+    raise immediately; partial files are cleared between retries.
     """
     headers = site_workaround_headers(spec.url)
     extractor_args = site_workaround_extractor_args(spec.url)

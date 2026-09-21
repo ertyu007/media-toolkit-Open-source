@@ -11,6 +11,7 @@ from unittest.mock import patch
 from clipora.ffmpeg import CancellationToken, ConversionCancelled
 from clipora.importer import (
     ImportSpec,
+    URLExtractorBroken,
     URLImportBlocked,
     URLImportError,
     URLNetworkBlocked,
@@ -27,6 +28,7 @@ from clipora.importer import (
     find_ytdlp_command,
     import_url,
     is_block_error,
+    is_extractor_broken_error,
     is_network_block_error,
     normalize_output_permissions,
     parse_import_progress,
@@ -280,6 +282,64 @@ class BlockDetectionTests(unittest.TestCase):
         for line in normal:
             with self.subTest(line=line):
                 self.assertFalse(is_block_error([line]))
+
+
+class ExtractorBrokenDetectionTests(unittest.TestCase):
+    def test_detects_outdated_extractor_errors(self):
+        broken = (
+            'ERROR: [TikTok] 7673293790857235733: Unexpected response from webpage request; '
+            'please report this issue on https://github.com/yt-dlp/yt-dlp/issues?q= , '
+            'filling out the appropriate issue template. '
+            'Confirm you are on the latest version using yt-dlp -U',
+            'ERROR: [youtube] Unable to extract player response; '
+            'please report this issue on https://github.com/yt-dlp/yt-dlp/issues',
+        )
+        for line in broken:
+            with self.subTest(line=line):
+                self.assertTrue(is_extractor_broken_error([line]))
+
+    def test_ignores_block_and_unrelated_failures(self):
+        normal = (
+            'HTTP Error 403: Forbidden',
+            'ERROR: video unavailable',
+            'ERROR: This video is private',
+            'ERROR: HTTP Error 404: Not Found',
+        )
+        for line in normal:
+            with self.subTest(line=line):
+                self.assertFalse(is_extractor_broken_error([line]))
+
+    def test_extractor_broken_message_guides_ytdlp_update(self):
+        error = URLExtractorBroken('ERROR: [TikTok] 123: Unexpected response')
+        self.assertIn('อัปเดต yt-dlp', str(error))
+        self.assertIn('ERROR: [TikTok] 123', str(error))
+        self.assertEqual(error.detail, 'ERROR: [TikTok] 123: Unexpected response')
+        self.assertIsInstance(error, URLImportError)
+
+    @patch('clipora.importer._run_import_process')
+    def test_extractor_broken_fails_immediately_without_retries(self, run_process):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+            workspace = create_import_workspace(destination)
+            run_process.side_effect = URLExtractorBroken('Unexpected response')
+
+            with self.assertRaises(URLExtractorBroken):
+                _run_import_with_fallback(
+                    ['yt-dlp'],
+                    ImportSpec(
+                        url='https://www.tiktok.com/@user/video/123',
+                        destination=destination,
+                        mode='video',
+                        quality='สูงสุด',
+                        audio_format='mp3',
+                    ),
+                    workspace,
+                    lambda _value: None,
+                    CancellationToken(),
+                )
+            cleanup_import_workspace(workspace, destination)
+
+            self.assertEqual(run_process.call_count, 1)
 
 
 class NetworkBlockDetectionTests(unittest.TestCase):

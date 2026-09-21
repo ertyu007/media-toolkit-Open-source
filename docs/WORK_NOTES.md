@@ -1,6 +1,15 @@
 # บันทึกงาน (Work Notes) — ฟีเจอร์แยกสเต็มเสียง (Stem Separation) + อัปเดต yt-dlp
 
-อัปเดตล่าสุด: 2026-08-19
+อัปเดตล่าสุด: 2026-09-21
+
+## ทำวันนี้ (2026-09-21) — Quick fix: TikTok `Unexpected response from webpage request`
+
+- **สาเหตุ**: user รายงานดาวน์โหลด TikTok ล้มเหลว (`[TikTok] 7673293790857235733: Unexpected response from webpage request; please report... Confirm you are on the latest version using yt-dlp -U`) — ตรงกับ upstream `yt-dlp#17407` (duplicate/site:tiktok บน stable `2026.07.04` ซึ่งเป็น pin ปัจจุบัน) และ `#17604` (ยัง open บน nightly `2026.08.30`, stack ชี้ `tiktok.py _solve_challenge_and_set_cookies`) → เว็บเปลี่ยนระบบ ไม่ใช่ลิงก์ private เสมอไป
+- **ปัญหาในแอป**: `_run_import_process` จัด error นี้เป็น generic `URLImportError` ("ลิงก์อาจไม่เป็นสาธารณะ...") ทำให้เข้าใจผิด และ `_run_import_with_fallback` ไม่ retry (ถูกแล้ว เพราะต้องแก้ extractor ต้นทาง)
+- **แก้ (ไม่ bump pin ตามที่ user เลือก)**: เพิ่ม `_EXTRACTOR_BROKEN_SIGNATURES` + `is_extractor_broken_error()` + `URLExtractorBroken` (subclass ของ `URLImportError`, ข้อความไทยชี้นำกด "อัปเดต yt-dlp (Ctrl+U)") ใน `clipora/importer.py`; เช็คใน `_run_import_process` หลัง block-check จึง fail-fast โดยไม่ retry
+- **Tests**: +4 tests ใน `tests/test_importer.py` (`ExtractorBrokenDetectionTests`: detect/ignore/message/fail-fast ไม่ retry)
+- **Docs**: `docs/TROUBLESHOOTING.md` เพิ่มหัวข้อ extractor-broken + วิธีแก้; ไม่เปลี่ยน pin/SHA/version จึงไม่ต้อง sync packaging
+- **Release**: bump PC 0.6.2 → **0.6.3** (patch — ข้อความ extractor-broken ของ TikTok); sync `__init__.py`, `version_info.txt`, `.iss`, README แล้ว; full suite 181 tests ผ่าน (skipped 2 = network) + test_packaging 6/6; commit → tag `pc-v0.6.3` → push → รอ `build-windows` job ปล่อย Setup + portable ZIP + `.sha256` ขึ้น release `pc-v0.6.3` เพื่อให้ตัวเช็คอัปเดตในแอปแจ้งเตือนผู้ใช้
 
 ## สถานะโดยรวม
 
