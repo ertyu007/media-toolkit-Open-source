@@ -1386,7 +1386,7 @@ class CliporaApp(tk.Tk):
         else:
             self.source_hint.set('เลือกวิดีโอที่ต้องการประมวลผล')
             self.source_button_text.set('เลือกไฟล์')
-        self.rights_row.grid_remove()
+            self.rights_row.grid_remove()
         self._on_source_changed()
         self._sync_options()
 
