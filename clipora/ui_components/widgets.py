@@ -504,7 +504,9 @@ class RoundedButton(tk.Canvas):
         if hover_internal:
             self.bind('<Enter>', lambda _e: self._set_hover(True))
             self.bind('<Leave>', lambda _e: (self._set_hover(False), self._set_pressed(False)))
-            self.bind('<ButtonPress-1>', lambda _e: self._set_pressed(True))
+        # Press tracking always stays on: _on_release needs it to detect a
+        # real click (ui may add its own ButtonPress tween with add='+').
+        self.bind('<ButtonPress-1>', lambda _e: self._set_pressed(True))
         self.bind('<ButtonRelease-1>', self._on_release)
         self.bind('<Return>', lambda _e: self.invoke())
         self.bind('<space>', lambda _e: self.invoke())
