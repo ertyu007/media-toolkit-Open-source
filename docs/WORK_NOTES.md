@@ -2,6 +2,13 @@
 
 อัปเดตล่าสุด: 2026-09-28
 
+## ทำวันนี้ (2026-09-28) — สเต็มเดี่ยวไม่ zip + ประวัติ + พรีวิวลิงก์ (ยังไม่ bump version)
+
+- **สเต็มเดี่ยวไม่ zip**: `separate_audio` เลือกสเต็มเดียวคืนไฟล์เสียงเปล่า (`เพลง_vocals.mp3`) เลือกหลายสเต็มค่อย zip; helper บริสุทธิ์ใหม่ `separate_expected_outputs()` ให้ UI เช็ก overwrite + เทสต์ได้โดยไม่รัน demucs; อัปเดต integration test ที่เคย assume zip; `USER_GUIDE` §6/§9 แก้ตามจริง (ของเดิมอ้างว่าไฟล์แยกยังอยู่ด้วย — ไม่จริง มันอยู่ใน workspace ชั่วคราวที่ถูกล้าง)
+- **ประวัติ** (`clipora/history.py` ใหม่ + `tests/test_history.py` 8 tests): JSON capped 200 ต่อท้าย settings บันทึกทุกงานสำเร็จใน `_show_result` จุดเดียว (ไม่พังงานถ้าเขียนไม่ได้); dialog ใน `ui.py` (เปิดจาก ☰) มีกรอง pill ทั้งหมด/เพลง/วิดีโอ/สเต็ม, เปิดตำแหน่งไฟล์, ลบทีละอัน/ลบทั้งหมด (ถามยืนยัน, ไม่ลบไฟล์จริง), แต้ม (ไฟล์หาย)
+- **พรีวิวลิงก์** (`clipora/preview.py` ใหม่ + `tests/test_preview.py` 7 tests): `yt-dlp --skip-download --print` ดึง title/uploader/duration/thumbnail, โหลดปก (cap 5MB) แปลงเป็น PNG ผ่าน FFmpeg ในเครื่อง (ไม่เพิ่ม dependency, stdlib PhotoImage อ่านได้); UI debounce 1.2วิ + generation กันงานซ้อน, พังเงียบ (ไม่มีการ์ด ไม่ใช่ error), การ์ดค้างโชว์ตอนโหลดต่อ
+- **Tests**: full suite รอรอบสุดท้าย
+
 ## ทำวันนี้ (2026-09-28) — ลบ DMCA + pill widgets + toast มุมขวาล่าง + เสียงเสร็จงาน (ยังไม่ bump version)
 
 - **ลบ DMCA report**: ฟอร์มแค่เปิด mailto ไป gmail ส่วนตัว ไม่มี backend/blocklist จริง (grep ทั้ง repo แล้ว) ส่งแล้วเงียบ → ลบ `DmcaDialog` + เมนู + `build_dmca_mailto`/`DMCA_EMAIL`/`DMCA_NOTE` เก็บคำเตือนลิขสิทธิ์ไว้ครบ; อัปเดต `test_legal.py` + `USER_GUIDE` §ความปลอดภัยแล้ว

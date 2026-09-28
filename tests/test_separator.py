@@ -20,6 +20,7 @@ from clipora.separator import (
     separate_output_path,
     separate_output_paths,
     separate_output_zip_path,
+    separate_expected_outputs,
 )
 
 
@@ -100,6 +101,26 @@ class OutputPathTests(unittest.TestCase):
         self.assertEqual(
             separate_output_zip_path(source, Path('C:/out')),
             Path('C:/out/เพลง_stems.zip'),
+        )
+
+    def test_single_stem_expects_bare_file_not_zip(self):
+        self.assertEqual(
+            separate_expected_outputs(Path('s.wav'), Path('out'), 'mp3', ('vocals',)),
+            (Path('out/s_vocals.mp3'),),
+        )
+
+    def test_multiple_stems_expect_one_zip(self):
+        self.assertEqual(
+            separate_expected_outputs(
+                Path('s.wav'), Path('out'), 'mp3', ('vocals', 'drums')
+            ),
+            (Path('out/s_stems.zip'),),
+        )
+
+    def test_empty_selection_falls_back_to_all_stems_zip(self):
+        self.assertEqual(
+            separate_expected_outputs(Path('s.wav'), Path('out'), 'mp3', ()),
+            (Path('out/s_stems.zip'),),
         )
 
 

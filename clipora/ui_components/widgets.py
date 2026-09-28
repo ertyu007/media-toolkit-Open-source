@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import colorsys
 import tkinter as tk
 from tkinter import font as tkfont, ttk
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 from .motion import Tween, mix_color
 from .theme import (
@@ -10,12 +11,14 @@ from .theme import (
     ACCENT_SOFT,
     BG,
     BORDER,
+    DANGER,
     DISABLED_BG,
     DISABLED_FG,
     ERROR,
     FIELD,
     FONT_FAMILY,
     MUTED,
+    PROGRESS_TROUGH,
     SECONDARY_BG,
     SECONDARY_HOVER,
     SUCCESS,
@@ -236,6 +239,15 @@ def _stadium_items(canvas: tk.Canvas, x0: float, y0: float, x1: float, y1: float
     )
 
 
+def _draw_pill_shell(canvas: tk.Canvas, width: float, height: float, border: str) -> None:
+    """Redraw the double-stadium field shell (border outside, fill inside)."""
+    canvas.delete('bg')
+    _stadium_items(canvas, 1, 1, width - 1, height - 1, border, tags='bg')
+    inner = 3
+    _stadium_items(canvas, inner, inner, width - inner, height - inner, FIELD, tags='bg')
+    canvas.tag_lower('bg')
+
+
 class RoundedEntry(tk.Frame):
     """Pill-shaped text field: borderless Entry embedded in a drawn rounded shell.
 
@@ -250,6 +262,7 @@ class RoundedEntry(tk.Frame):
         font_family: str | None = None,
         font_size: int = 10,
         bg: str = BG,
+        width: int | None = None,
         **kwargs,
     ) -> None:
         super().__init__(parent, bg=bg, **kwargs)
@@ -261,6 +274,9 @@ class RoundedEntry(tk.Frame):
             self, height=FIELD_HEIGHT, bg=bg,
             highlightthickness=0, borderwidth=0,
         )
+        if width is not None:
+            fixed = tkfont.Font(font=(family, font_size)).measure('0' * width)
+            self._canvas.configure(width=fixed + _FIELD_PAD_X * 2 + 6)
         self._canvas.pack(fill='x', expand=True)
         self.entry = tk.Entry(
             self._canvas, textvariable=textvariable,
@@ -298,15 +314,8 @@ class RoundedEntry(tk.Frame):
             return
         if width <= 1:
             return
-        self._canvas.delete('bg')
         border = ACCENT if (self._focused and self._enabled) else BORDER
-        _stadium_items(self._canvas, 1, 1, width - 1, FIELD_HEIGHT - 1, border, tags='bg')
-        inner = 3
-        _stadium_items(
-            self._canvas, inner, inner, width - inner, FIELD_HEIGHT - inner,
-            FIELD, tags='bg',
-        )
-        self._canvas.tag_lower('bg')
+        _draw_pill_shell(self._canvas, width, FIELD_HEIGHT, border)
 
     def bind(self, sequence: str, func, add: bool | str = True):  # type: ignore[override]
         # Inner Entry gets the binding; the pill canvas gets a copy too so
@@ -321,12 +330,129 @@ class RoundedEntry(tk.Frame):
     def icursor(self, index) -> None:
         self.entry.icursor(index)
 
+    def get(self) -> str:
+        return self.entry.get()
+
+    def delete(self, first, last=None) -> None:
+        self.entry.delete(first, last)
+
+    def insert(self, index, string: str) -> None:
+        self.entry.insert(index, string)
+
     def state(self, states) -> None:
         states = set(states)
         enabled = 'disabled' not in states
         self._enabled = enabled
         try:
             self.entry.configure(state='normal' if enabled else 'disabled')
+        except tk.TclError:
+            pass
+        self._draw()
+
+
+class RoundedCombobox(tk.Frame):
+    """Pill-shaped readonly dropdown: borderless Combobox in a drawn shell."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        textvariable: tk.StringVar | None = None,
+        values: Sequence[str] = (),
+        width: int = 12,
+        font_family: str | None = None,
+        font_size: int = 10,
+        bg: str = BG,
+        **kwargs,
+    ) -> None:
+        super().__init__(parent, bg=bg, **kwargs)
+        self._enabled = True
+        self._focused = False
+        family = font_family or getattr(parent, 'ui_font', FONT_FAMILY)
+        self._canvas = tk.Canvas(
+            self, height=FIELD_HEIGHT, bg=bg,
+            highlightthickness=0, borderwidth=0,
+        )
+        fixed = tkfont.Font(font=(family, font_size)).measure('0' * width) + 40
+        self._canvas.configure(width=fixed)
+        self._canvas.pack(fill='x', expand=True)
+        style = ttk.Style(self)
+        style.configure(
+            'Pill.TCombobox',
+            fieldbackground=FIELD, background=FIELD, foreground=TEXT,
+            arrowcolor=MUTED, borderwidth=0, relief='flat', padding=(12, 7),
+            bordercolor=FIELD, lightcolor=FIELD, darkcolor=FIELD,
+        )
+        style.map(
+            'Pill.TCombobox',
+            fieldbackground=[('disabled', FIELD)],
+            foreground=[('disabled', DISABLED_FG)],
+            arrowcolor=[('disabled', DISABLED_FG)],
+            background=[('active', FIELD), ('pressed', FIELD), ('focus', FIELD),
+                        ('disabled', FIELD)],
+            bordercolor=[('active', FIELD), ('pressed', FIELD), ('focus', FIELD),
+                         ('disabled', FIELD)],
+            lightcolor=[('active', FIELD), ('pressed', FIELD), ('focus', FIELD),
+                        ('disabled', FIELD)],
+            darkcolor=[('active', FIELD), ('pressed', FIELD), ('focus', FIELD),
+                       ('disabled', FIELD)],
+        )
+        self.box = ttk.Combobox(
+            self._canvas, textvariable=textvariable, values=list(values),
+            state='readonly', style='Pill.TCombobox', width=width,
+            font=(family, font_size),
+        )
+        self._window = self._canvas.create_window(
+            _FIELD_PAD_X, FIELD_HEIGHT // 2, window=self.box, anchor='w',
+        )
+        self.box.bind('<FocusIn>', lambda _e: self._set_focus(True), add='+')
+        self.box.bind('<FocusOut>', lambda _e: self._set_focus(False), add='+')
+        self._canvas.bind('<Button-1>', lambda _e: self.box.focus_set())
+        self._canvas.bind('<Configure>', lambda _e: (self._layout(), self._draw()))
+        self._layout()
+        self._draw()
+
+    def _layout(self) -> None:
+        try:
+            width = self._canvas.winfo_width()
+        except tk.TclError:
+            return
+        if width > 1:
+            self._canvas.itemconfigure(self._window, width=width - _FIELD_PAD_X * 2)
+
+    def _set_focus(self, focused: bool) -> None:
+        self._focused = focused
+        self._draw()
+
+    def _draw(self) -> None:
+        try:
+            width = self._canvas.winfo_width()
+        except tk.TclError:
+            return
+        if width <= 1:
+            return
+        border = ACCENT if (self._focused and self._enabled) else BORDER
+        _draw_pill_shell(self._canvas, width, FIELD_HEIGHT, border)
+
+    def focus_set(self) -> None:  # type: ignore[override]
+        self.box.focus_set()
+
+    def configure(self, cnf=None, **kw):  # type: ignore[override]
+        if 'values' in kw:
+            try:
+                self.box.configure(values=kw.pop('values'))
+            except tk.TclError:
+                kw.pop('values', None)
+        if kw:
+            try:
+                super().configure(cnf, **kw)
+            except tk.TclError:
+                pass
+        return None
+
+    def state(self, states) -> None:
+        self._enabled = 'disabled' not in set(states)
+        try:
+            self.box.configure(state='disabled' if not self._enabled else 'readonly')
         except tk.TclError:
             pass
         self._draw()
@@ -345,6 +471,10 @@ class RoundedButton(tk.Canvas):
         font_family: str | None = None,
         font_size: int = 10,
         bg: str = BG,
+        height: int = FIELD_HEIGHT,
+        fill: str | None = None,
+        hover_fill: str | None = None,
+        hover_internal: bool = True,
         **kwargs,
     ) -> None:
         self._text = text
@@ -353,11 +483,16 @@ class RoundedButton(tk.Canvas):
         self._enabled = True
         self._hover = False
         self._pressed = False
+        self._base_fill = fill or SECONDARY_BG
+        self._base_hover = hover_fill or SECONDARY_HOVER
+        self._accent_pair = (self._base_fill, self._base_hover)
+        self._custom_fill: str | None = None
+        self._height = height
         family = font_family or getattr(parent, 'ui_font', FONT_FAMILY)
         self._font = (family, font_size, 'bold')
         self._bg = bg
         super().__init__(
-            parent, height=FIELD_HEIGHT, bg=bg,
+            parent, height=height, bg=bg,
             highlightthickness=0, borderwidth=0, takefocus=True, **kwargs,
         )
         measure = tkfont.Font(font=self._font).measure
@@ -366,9 +501,10 @@ class RoundedButton(tk.Canvas):
         self.configure(width=int(self._min_width))
         if textvariable is not None:
             textvariable.trace_add('write', lambda *_: self._refit())
-        self.bind('<Enter>', lambda _e: self._set_hover(True))
-        self.bind('<Leave>', lambda _e: (self._set_hover(False), self._set_pressed(False)))
-        self.bind('<ButtonPress-1>', lambda _e: self._set_pressed(True))
+        if hover_internal:
+            self.bind('<Enter>', lambda _e: self._set_hover(True))
+            self.bind('<Leave>', lambda _e: (self._set_hover(False), self._set_pressed(False)))
+            self.bind('<ButtonPress-1>', lambda _e: self._set_pressed(True))
         self.bind('<ButtonRelease-1>', self._on_release)
         self.bind('<Return>', lambda _e: self.invoke())
         self.bind('<space>', lambda _e: self.invoke())
@@ -406,7 +542,7 @@ class RoundedButton(tk.Canvas):
             was_pressed
             and self._enabled
             and 0 <= event.x <= self.winfo_width()
-            and 0 <= event.y <= FIELD_HEIGHT
+            and 0 <= event.y <= self.winfo_height()
         ):
             self.invoke()
 
@@ -414,25 +550,61 @@ class RoundedButton(tk.Canvas):
         if self._enabled and self._command:
             self._command()
 
+    def set_fill(self, color: str) -> None:
+        """Paint an explicit base fill (used by external tween/flash drivers)."""
+        self._custom_fill = color
+        self._draw()
+
+    def reset_fill(self) -> None:
+        self._custom_fill = None
+        self._draw()
+
+    def set_mode(self, accent: bool) -> None:
+        """Switch between the accent look and the danger (cancel) look."""
+        if accent:
+            self._base_fill, self._base_hover = self._accent_pair
+        else:
+            self._base_fill = DANGER
+            self._base_hover = '#d9534f'
+        self._custom_fill = None
+        self._draw()
+
+    def configure(self, cnf=None, **kw):  # type: ignore[override]
+        if 'text' in kw:
+            self._text = kw.pop('text')
+        if 'command' in kw:
+            self._command = kw.pop('command')
+        kw.pop('style', None)
+        if kw:
+            try:
+                super().configure(cnf, **kw)
+            except tk.TclError:
+                pass
+        self._draw()
+        return None
+
     def _draw(self) -> None:
         try:
             width = self.winfo_width()
+            height = self.winfo_height()
         except tk.TclError:
             return
-        if width <= 1:
+        if width <= 1 or height <= 1:
             return
         self.delete('all')
         if not self._enabled:
             fill, fg = DISABLED_BG, DISABLED_FG
         elif self._pressed:
             fill, fg = ACCENT_SOFT, TEXT
+        elif self._custom_fill is not None:
+            fill, fg = self._custom_fill, TEXT
         elif self._hover:
-            fill, fg = SECONDARY_HOVER, TEXT
+            fill, fg = self._base_hover, TEXT
         else:
-            fill, fg = SECONDARY_BG, TEXT
-        _stadium_items(self, 1, 1, width - 1, FIELD_HEIGHT - 1, fill)
+            fill, fg = self._base_fill, TEXT
+        _stadium_items(self, 1, 1, width - 1, height - 1, fill)
         self.create_text(
-            width / 2, FIELD_HEIGHT / 2,
+            width / 2, height / 2,
             text=self._label(), fill=fg, font=self._font,
         )
 
@@ -543,9 +715,107 @@ class Switch(tk.Canvas):
         self._draw()
 
 
+class RainbowBar(tk.Canvas):
+    """Rounded progress bar with an animated rainbow fill.
+
+    Drop-in for the ttk Progressbar on the main window: supports
+    ``bar['value']`` / ``bar['maximum']`` item access. The hue drifts while
+    0 < value < maximum and rests on solid SUCCESS at 100%.
+    """
+
+    _SLICE = 4
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        height: int = 14,
+        bg: str = BG,
+        maximum: float = 100.0,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            parent, height=height, bg=bg,
+            highlightthickness=0, borderwidth=0, **kwargs,
+        )
+        self._height = height
+        self._maximum = maximum
+        self._value = 0.0
+        self._hue = 0.0
+        self._ticking = False
+        self.bind('<Configure>', lambda _e: self._draw())
+
+    def __setitem__(self, key: str, value: float) -> None:
+        if key == 'value':
+            self._value = max(0.0, min(float(value), self._maximum))
+        elif key == 'maximum':
+            self._maximum = float(value) or 100.0
+        self._draw()
+        self._ensure_tick()
+
+    def __getitem__(self, key: str) -> float:
+        if key == 'value':
+            return self._value
+        if key == 'maximum':
+            return self._maximum
+        raise KeyError(key)
+
+    @staticmethod
+    def _rainbow(hue: float) -> str:
+        red, green, blue = colorsys.hsv_to_rgb(hue % 1.0, 0.85, 1.0)
+        return f'#{int(red * 255):02x}{int(green * 255):02x}{int(blue * 255):02x}'
+
+    def _draw(self) -> None:
+        try:
+            width = self.winfo_width()
+        except tk.TclError:
+            return
+        if width <= 1:
+            return
+        height = self._height
+        self.delete('all')
+        _stadium_items(self, 0, 0, width, height, PROGRESS_TROUGH)
+        if self._maximum <= 0 or self._value <= 0:
+            return
+        fill_w = width * min(self._value / self._maximum, 1.0)
+        if fill_w <= 4:
+            return
+        pad = 2
+        if self._value >= self._maximum:
+            _stadium_items(self, pad, pad, fill_w - pad, height - pad, SUCCESS)
+            return
+        span = max(fill_w - pad * 2, 1)
+        x = pad
+        while x < fill_w - pad:
+            step = min(self._SLICE, fill_w - pad - x)
+            hue = self._hue + (x - pad) / max(span, 1) * 0.8
+            self.create_rectangle(
+                x, pad, x + step, height - pad,
+                fill=self._rainbow(hue), outline='',
+            )
+            x += step
+
+    def _ensure_tick(self) -> None:
+        if self._ticking:
+            return
+        if 0 < self._value < self._maximum:
+            self._ticking = True
+            self.after(60, self._tick)
+
+    def _tick(self) -> None:
+        try:
+            self._hue += 0.015
+            self._draw()
+        except tk.TclError:
+            self._ticking = False
+            return
+        if 0 < self._value < self._maximum:
+            self.after(60, self._tick)
+        else:
+            self._ticking = False
+
+
 class ToastManager:
     """Non-blocking toast notifications stacked at the window's bottom-right."""
-
     def __init__(self, root: tk.Tk) -> None:
         self._root = root
         self._toasts: list[tk.Toplevel] = []

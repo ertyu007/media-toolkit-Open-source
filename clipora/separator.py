@@ -187,6 +187,22 @@ def separate_output_zip_path(source: Path, destination: Path) -> Path:
     return destination / f'{source.stem}_stems.zip'
 
 
+def separate_expected_outputs(
+    source: Path,
+    destination: Path,
+    audio_format: str,
+    stems: Sequence[str] | None,
+) -> tuple[Path, ...]:
+    """Final output paths (before overwrite/collision policy).
+
+    A single stem yields its bare audio file; multiple stems yield one zip.
+    """
+    selected = tuple(dict.fromkeys(stems)) if stems else SELECTABLE_STEMS
+    if len(selected) == 1:
+        return (separate_output_path(source, destination, audio_format, selected[0]),)
+    return (separate_output_zip_path(source, destination),)
+
+
 def create_stems_zip(
     outputs: Sequence[Path],
     target: Path,
@@ -431,7 +447,17 @@ def separate_audio(
     info = probe(source)
     validate_operation(info, 'audio')
 
-    zip_target = _resolve_target(source, destination, 'zip', 'stems', overwrite, collision_free)
+    zip_target = None
+    final_target = None
+    if len(selected) == 1:
+        # Single stem: bare audio file in the destination, no zip.
+        final_target = _resolve_target(
+            source, destination, audio_format, selected[0], overwrite, collision_free
+        )
+    else:
+        zip_target = _resolve_target(
+            source, destination, 'zip', 'stems', overwrite, collision_free
+        )
 
     token = cancellation or CancellationToken()
     workspace = create_workspace(destination)
@@ -444,9 +470,12 @@ def separate_audio(
         stem_dir = demucs_dir / SEPARATOR_MODEL
         stage_dir = workspace / 'outputs'
         stage_dir.mkdir()
-        targets = {
-            stem: separate_output_path(source, stage_dir, audio_format, stem) for stem in selected
-        }
+        if final_target is not None:
+            targets = {selected[0]: final_target}
+        else:
+            targets = {
+                stem: separate_output_path(source, stage_dir, audio_format, stem) for stem in selected
+            }
         outputs = _finalize_stems(
             source,
             stage_dir,
@@ -459,6 +488,9 @@ def separate_audio(
             on_progress,
             token,
         )
+        if final_target is not None:
+            return outputs
+        assert zip_target is not None
         zip_target = create_stems_zip(outputs, zip_target, on_phase, on_progress, token)
         return [zip_target]
     finally:

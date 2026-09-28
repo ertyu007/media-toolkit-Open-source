@@ -72,7 +72,7 @@ class SeparatorIntegrationTests(unittest.TestCase):
     def test_existing_output_is_rejected_without_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory)
-            (destination / 'sample audio_stems.zip').write_bytes(b'occupied')
+            (destination / 'sample audio_vocals.mp3').write_bytes(b'occupied')
             with self.assertRaises(OutputExistsError):
                 separate_audio(self.source, destination, 'mp3', ('vocals',))
 
