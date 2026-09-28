@@ -10,6 +10,7 @@ from clipora.ffmpeg import (
     build_command,
     cleanup_temporary_output,
     convert,
+    normalize_trim,
     probe,
     temporary_output_path,
     tools_available,
@@ -162,6 +163,59 @@ class FFmpegIntegrationTests(unittest.TestCase):
             result = probe(target)
             self.assertTrue(result.has_video)
             self.assertFalse(result.has_audio)
+
+    def test_trimmed_audio_extracts_expected_segment(self):
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            source = root / 'trim input.mp4'
+            target = root / 'trim output.wav'
+            creation = subprocess.run(
+                [
+                    'ffmpeg',
+                    '-y',
+                    '-loglevel',
+                    'error',
+                    '-f',
+                    'lavfi',
+                    '-i',
+                    'color=c=black:s=160x90:d=4',
+                    '-f',
+                    'lavfi',
+                    '-i',
+                    'sine=frequency=440:duration=4',
+                    '-shortest',
+                    '-c:v',
+                    'libx264',
+                    '-pix_fmt',
+                    'yuv420p',
+                    '-c:a',
+                    'aac',
+                    str(source),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(creation.returncode, 0, creation.stderr)
+
+            info = probe(source)
+            self.assertTrue(info.has_audio)
+            start_arg, duration_arg, effective = normalize_trim(1.0, 2.0, info.duration)
+            self.assertAlmostEqual(effective, 2.0)
+
+            progress = []
+            command = build_command(
+                source, target, 'audio', 'Balanced', 'wav',
+                start_time=start_arg, duration_time=duration_arg,
+            )
+            convert(command, target, effective, progress.append)
+
+            result = probe(target)
+            self.assertTrue(result.has_audio)
+            self.assertIsNotNone(result.duration)
+            self.assertAlmostEqual(result.duration, 2.0, delta=0.4)
+            self.assertTrue(progress)
+            self.assertEqual(progress[-1], 1.0)
 
 
 if __name__ == '__main__':

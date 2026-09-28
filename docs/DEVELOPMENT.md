@@ -152,9 +152,11 @@ Manual GUI checks ที่ unit test แทนไม่ได้:
 
 ตรวจ extension, container, codec, encoder availability, stream maps, quality semantics และ metadata เพิ่ม command/naming/invalid-value/integration tests
 
-### Trim
+### Trim (มีแล้วสำหรับงานไฟล์ในเครื่อง)
 
-Normalize time, reject reversed/out-of-range, นิยาม seeking accuracy, ใช้ effective duration กับ progress และ test A/V sync
+- ช่องกรอก `start_time_entry`/`duration_entry` ใน `ui.py` snapshot เป็น `JobSpec.trim_start/trim_duration` (วินาที) ก่อนเริ่ม worker
+- `parse_trim_seconds()` รับวินาที/`MM:SS`/`HH:MM:SS` ค่าว่างคือไม่ตัด, `normalize_trim()` เทียบกับ duration จาก probe (จุดเริ่มเกินไฟล์ = error, ระยะเวลาเกิน = clamp) และคืน effective duration ให้ progress
+- งาน URL/stems ยังไม่รองรับ trim (ต้องตัดหลังดาวน์โหลด/ก่อนแยกสเต็ม) — ถ้าจะเพิ่มให้เริ่มจาก core + test ก่อนต่อ UI
 
 ### Batch
 
@@ -183,7 +185,7 @@ URL import ปัจจุบันรองรับ public single-item ผ่�
 - ไม่มี media, log, credential หรือ local path ใน Git
 - หากมี certificate: ลงนาม `Clipora.exe` และตัวติดตั้งผ่าน `scripts/sign_windows.ps1` (ตั้งค่า environment ตาม [CODE_SIGNING.md](CODE_SIGNING.md)) build ที่ไม่มี certificate จะข้ามการลงนามได้ตามปกติ
 
-Windows release ใช้ PyInstaller แบบ onedir และ Inno Setup แบบ per-user ห้าม commit `.exe`, `build/` หรือ `dist/` ลง Git
+Windows release ใช้ PyInstaller แบบ onedir และ Inno Setup แบบ per-machine (ขอสิทธิ์ admin ตอนติดตั้ง) ห้าม commit `.exe`, `build/` หรือ `dist/` ลง Git
 
 สร้าง release ในเครื่อง:
 
@@ -196,4 +198,4 @@ python -m pip install -r requirements-dev.txt
 
 ข้อกำหนด build: Python 3.10+, Inno Setup 6 และ Windows x64 สคริปต์สร้าง icon, `dist\Clipora`, Setup installer และ `.sha256` ห้าม release หาก test, EXE smoke test หรือ install/open/uninstall cycle ไม่ผ่าน
 
-GitHub workflow `.github/workflows/release.yml` ทำงานเมื่อ push tag `v*` และแนบ Setup/checksum ไปที่ Release การเปลี่ยน dependency manifest ต้องอัปเดต immutable URL, version, SHA-256, source และ license ใน `clipora/dependencies.py` กับ `THIRD_PARTY_NOTICES.md` พร้อมกัน
+GitHub workflow `.github/workflows/release.yml` ทำงานเมื่อ push tag `pc-v*` และแนบ Setup/checksum ไปที่ Release การเปลี่ยน dependency manifest ต้องอัปเดต immutable URL, version, SHA-256, source และ license ใน `clipora/dependencies.py` กับ `THIRD_PARTY_NOTICES.md` พร้อมกัน

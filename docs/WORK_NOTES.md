@@ -1,6 +1,77 @@
 # บันทึกงาน (Work Notes) — ฟีเจอร์แยกสเต็มเสียง (Stem Separation) + อัปเดต yt-dlp
 
-อัปเดตล่าสุด: 2026-09-21
+อัปเดตล่าสุด: 2026-09-28
+
+## ทำวันนี้ (2026-09-28) — ลบ DMCA + pill widgets + toast มุมขวาล่าง + เสียงเสร็จงาน (ยังไม่ bump version)
+
+- **ลบ DMCA report**: ฟอร์มแค่เปิด mailto ไป gmail ส่วนตัว ไม่มี backend/blocklist จริง (grep ทั้ง repo แล้ว) ส่งแล้วเงียบ → ลบ `DmcaDialog` + เมนู + `build_dmca_mailto`/`DMCA_EMAIL`/`DMCA_NOTE` เก็บคำเตือนลิขสิทธิ์ไว้ครบ; อัปเดต `test_legal.py` + `USER_GUIDE` §ความปลอดภัยแล้ว
+- **pill widgets** (`widgets.py`, ไม่เพิ่ม dependency): `SegmentedControl` วาดบน Canvas (รางมน + pill เลื่อน 140ms, ลูกศรซ้าย/ขวาได้), `RoundedEntry`/`RoundedButton` ทรง stadium, `Switch` แทน Checkbutton; ต่อเข้า `ui.py` เฉพาะฟอร์มหลัก (ปุ่มเริ่มงานยักษ์ + combobox ยังเดิม)
+- **Ctrl+V ใน dialog**: `_on_paste_shortcut` เดิมดัก paste ทั้งแอป (ฟอร์ม DMCA วางไม่ได้) → คืน native paste ให้ทุก Entry/Text เก็บ hijack ไว้เฉพาะโฟกัสบนพื้นหลัง
+- **toast**: ย้ายจากเหนือจอบน (ยึดปุ่ม ☰) ลงมุมขวาล่าง + ขยาย (10 bold, แถบ 5px)
+- **เสียงเสร็จงาน**: `clipora/sound.py` ใหม่ (arpeggio A5→C#6→E6 ผ่าน winsound บน daemon thread) ต่อใน `_show_result` จุดเดียว
+- **Security (importer)**: `validate_url` ถอดรหัส IP แฝง (hex/decimal/octal/shorthand) + fallback `08/09` เป็น decimal; `dialogs.sanitize_error_message` แดง path โลคัล + ตัด 1500 ตัวอักษร โดยไม่กิน `https://` (lookbehind)
+- **รีวิวรอบสองจับบั๊กได้ 4 ตัว**: shell มนไม่ redraw ตอน resize, regex กิน URL, octal `08` bypass, history popup หลุดบน padding — แก้ + smoke ยืนยันแล้ว
+- **เคลียร์ซาก sidebar/rail**: โค้ดถอด rail ไปแล้วแต่เหลือ style `Rail.*`, `_switch_view`/`_sync_rail`, dict ว่าง และ USER_GUIDE ยังอ้างรางซ้าย — ลบทิ้ง + sync คู่มือให้ตรงจริง (pill โหมด, สวิตช์สิทธิ์, เมนู ☰ อย่างเดียว)
+- **Tests**: full suite **213 ผ่าน** (ลด 3 เทสต์ mailto ที่ลบไป, skipped 2 = network)
+
+## ทำวันนี้ (2026-09-24) — Dev-Tool Edition: reskin + sidebar (ยังไม่ bump version)
+
+- **เฟส 1 reskin** (`theme.py`): charcoal กลาง (`BG #121214`, panel `#1a1a1f`, field `#232329`), เส้นขอบคม 1px `#2e2e35`, ตัวหนังสือ `#e9e9ec`/`#9b9ba4`, ม่วงเหลือจุดเดียว (ปุ่มเริ่ม/active/progress/focus), motion จูนกระชับ (100–200ms)
+- **เฟส 2 sidebar**: รางซ้าย 4 รายการ (ไฟล์ในเครื่อง/ดาวน์โหลด/แยกสเต็ม/เครื่องมือ) + เส้นคั่น, `_switch_view()` preset kind/mode แล้วเรียก sync เดิม, `_sync_rail()` ไฮไลต์ตาม mode/kind (เรียกท้าย `_sync_options` จุดเดียว), ซ่อน toggle ไฟล์/URL นอกโหมดสเต็ม, ล็อก rail ตอนมีงาน, หน้าต่าง `900x820`
+- **logic งานไม่แตะเลย** (`_start`/`_run_*`/worker เหมือนเดิม)
+- **ตรวจของจริง**: สคริปต์ `verify_rail.py` บน mainloop — rail เริ่มต้น url, สลับ file/stems/url ถูกทุก state, toggle โผล่เฉพาะสเต็ม, กด hero pill ตรง rail ซิงก์ตาม, งาน trim จริงจบ "เสร็จสิ้น" + output ครบ; แคปทุก view แล้ว
+- **Tests**: full suite **216 tests ผ่าน** (skipped 2 = network); `USER_GUIDE` §3 เพิ่มรางซ้ายแล้ว
+- **ค้าง**: ผู้ใช้ลองกดเอง + scale 125/150% (ยังไม่ bump version)
+
+## ทำวันนี้ (2026-09-24) — กลับมาใช้ม่วงเดิม (ยังไม่ bump version)
+
+- ผู้ใช้ไม่เอามิ้นต์ → revert `theme.py` กลับ Midnight Amethyst เดิมทั้งไฟล์ + เอา `ON_ACCENT` ออกจาก `ui.py` (ปุ่ม accent กลับตัวหนังสือขาว)
+- ของที่เก็บไว้จากรอบมิ้นต์: จุดสีหน้าหัวข้อ section (ตอนนี้เป็นจุดม่วง), hover ปุ่มเป็น glow สว่าง (`ACCENT_GLOW`)
+- ตรวจของจริง + full suite **216 tests ผ่าน** (skipped 2 = network)
+
+## ทำวันนี้ (2026-09-24) — เปลี่ยนธีมเป็น Emerald Night: ดาร์กพรีเมียม + มิ้นต์ (ยังไม่ bump version)
+
+- **เหตุผล**: ผู้ใช้ไม่ชอบม่วง เลือกดาร์กพรีเมียม + เขียวมิ้นต์
+- **เปลี่ยนใน `clipora/ui_components/theme.py`**: accent ม่วง → มิ้นต์ (`ACCENT #10b981`, hover `#34d399`, glow `#6ee7b7`, soft `#0b2e26`), เพิ่ม `ON_ACCENT #04352b` (ตัวหนังสือเข้มบนปุ่มมิ้นต์), `SUCCESS` → `#4ade80` (ให้ต่างจาก accent ตอน success flash), พื้นผิวดาร์กเกลี่ยใหม่ให้มีมิติ (`CARD/FIELD/BORDER/SECONDARY` สว่างขึ้นเล็กน้อย), `MENU_ACTIVE_FG` เป็นสีเข้ม
+- **ตามใน `clipora/ui.py`**: ปุ่ม accent ทุกแบบ (เริ่ม/dialog/สนับสนุน) + ปุ่มโหมดที่เลือก + toggle ไฟล์/URL ใช้ตัวหนังสือเข้ม, section title มีจุดมิ้นต์หน้าหัวข้อ; เอฟเฟกต์ motion เดิมคำนวณสีจาก theme ตอนรันเลยตามมาเอง (hover glow/press/flash/pulse)
+- **ตรวจของจริง**: แคปทุก state (url+video, file+audio+details, stems, จบงาน) — เจอหน้าต่างม่วงเก่าค้างจากสคริปต์รอบแรกที่ crash ก่อน destroy (เคลียร์โปรเซสแล้ว, สคริปต์ verify รันจบ destroy ครบเลยไม่ค้าง)
+- **Tests**: full suite **216 tests ผ่าน** (skipped 2 = network, ไม่ต้องแก้เทสต์เพราะไม่มี hardcode สีม่วงในเทสต์)
+- **ค้าง**: ผู้ใช้ดูของจริงที่เครื่องว่าถูกใจไหม (ยังไม่ bump version)
+
+## ทำวันนี้ (2026-09-24) — เพิ่ม motion/animation ทั่วแอป (ยังไม่ bump version)
+
+- **ของใหม่**: `clipora/ui_components/motion.py` (pure + test ได้โดยไม่ต้องมีจอ: `mix_color`/`easing`/`Tween`/`Pulse`/`fade_in_window`) + `tests/test_motion.py` 13 tests
+- **เอฟเฟกต์ที่ต่อแล้ว** (main thread ผ่าน `after` ทั้งหมด, logic งานไม่แตะ):
+  - ปุ่มเริ่ม: hover glow (`ACCENT` → `ACCENT_GLOW`), กดยุบเข้ม, ปล่อยเด้งกลับ, งานสำเร็จแฟลชเขียวแล้วกลับม่วง
+  - ปุ่มโหมด: เปลี่ยนโหมดแล้ว hero box กระพริบ glow อ่อน (`FIELD` → `ACCENT_SOFT` → `FIELD`)
+  - progress bar: pulse ม่วงอ่อน-เข้มระหว่างงาน หยุดและคืนสีเมื่อจบ/ยกเลิก/พัง (`_finish_job` จุดเดียว)
+  - dialog ทั้ง 7 ตัว (Overwrite/Error/AppUpdate/Disclaimer/Donate/Dmca/ToolSetup) fade-in ตอนเปิด
+  - toast สไลด์ขึ้น + fade-in
+- **ตรวจของจริง**: สคริปต์ `verify_motion.py` บน mainloop — hover/press/release/hero-flash/toast/dialog/pulse/success-flash ผ่านทุก assert, แคปภาพยืนยัน (จับช็อตปุ่มเขียวกลางแฟลชได้ด้วย)
+- **Tests**: full suite **216 tests ผ่าน** (203 เดิม + 13 motion, skipped 2 = network)
+- **ค้าง**: ผู้ใช้ลอง hover/กดจริงที่เครื่อง + display scale ต่างๆ ว่าเอฟเฟกต์ลื่นไหม (16ms/frame บน Tk มาตรฐาน)
+
+## ทำวันนี้ (2026-09-24) — ดีไซน์ UI ใหม่ทั้งหน้าหลัก (ยังไม่ bump version)
+
+- **เหตุผล**: หน้าหลักเดิมดูรก (การ์ดขอบหนา + แถบม่วง + ป้ายตัวเลข 01/02/03, error แดงโชว์ตั้งแต่เปิดแอป, ตัวเลือกอัดแน่นต้องสกรอลล์)
+- **ดีไซน์ใหม่** (`clipora/ui.py` อย่างเดียว ไม่แตะ logic/worker): top bar แบบ slim (โลโก้ + `v{__version__}` + ปุ่มสนับสนุน + ☰), ปุ่มโหมด 3 ปุ่มใหญ่พร้อมคำอธิบาย 1 บรรทัด, section ไร้กรอบคั่นด้วยเส้น hairline, คุณภาพ/เฟรมเรต/trim ย้ายเข้าปุ่ม **▸ ตัวเลือกเพิ่มเติม** แบบพับได้, ลิงก์ DMCA ย้ายจากหน้าหลักเข้า ☰ เมนู, footer เหลือเวอร์ชัน + ertyu.dev, หน้าต่าง `780x820` พอดีจอไม่ต้องสกรอลล์
+- **บั๊กที่เจอระหว่างทาง (แก้แล้ว)**:
+  - error แดงโชว์ตั้งแต่เปิดแอป — สาเหตุคือ `<FocusOut>` ยิงตอนหน้าต่าง map ครั้งแรก → แก้ให้ FocusOut เตือนเฉพาะช่องที่มีข้อความ (`_validate_source_or_hide`) และบังคับ `_validate_all()` ตอนกดเริ่มงานจริง (เดิม `_validate_all` ไม่มีคนเรียกเลย)
+  - ช่อง trim พื้นขาว — ลืมใส่ `style='Dark.TEntry'`
+  - checkbox indicator ขาว — clam ใช้ `indicatorbackground` ไม่ใช่ `indicatorcolor` (แก้ทั้ง `TCheckbutton`/`Plain.TCheckbutton`, ติ๊กถูก = กล่องม่วง)
+  - ปุ่มสนับสนุนขึ้นกล่อง tofu — ฟอนต์ไม่มี glyph ♥ → ตัดเหลือคำว่า "สนับสนุน"
+- **ตรวจของจริง**: แคป before/after เทียบ, สคริปต์ `verify_gui.py` บน mainloop จริง — toggle details/trim/stems visibility ถูกทุก state, งาน trim จริง 6วิ → ออก 2.0วิเป๊ะ สถานะ "เสร็จสิ้น" + result panel ขึ้น
+- **Tests**: full suite **203 tests ผ่าน** (skipped 2 = network); `USER_GUIDE` §3/§11 อัปเดตตาม UI ใหม่แล้ว
+- **ค้าง**: manual GUI smoke บนหลาย display scale (100/125/150%) ยังไม่ได้ทำ — ผู้ใช้ช่วยดูอีกแรง
+
+## ทำวันนี้ (2026-09-24) — ต่อสาย trim + disk-check/cleanup + ปรับคำ GitHub ให้รัดกุม
+
+- **ตรวจด้วยเทสต์ก่อนทำ**: full suite 181 ผ่าน (skipped 2 = network) แล้วยืนยันว่า trim/batch/disk-check/cleanup/limiter ใช้ไม่ได้จริง — ช่อง trim ไม่มี `.get()` เลย (`ui.py`), ไม่มีโค้ดคิวงานทั้ง repo, `check_disk_space`/`cleanup_orphaned_*` มีแต่ไม่มีจุดเรียก, `separator_environment()` ถูกเรียกแบบไม่ส่ง limit; เทสต์ใหม่จับได้ด้วยว่า `ffmpeg.py` เรียก `shutil` แต่ไม่เคย import (NameError แฝง) → เติม `import shutil` แล้ว
+- **ข — trim ใช้ได้จริง (งานไฟล์ในเครื่อง โหมดแยกเสียง/แปลงวิดีโอ)**: `parse_trim_seconds()` (วินาที/`MM:SS`/`HH:MM:SS`, ค่าว่าง = ไม่ตัด) + `normalize_trim()` (จุดเริ่มเกินไฟล์ = error, ระยะเวลาเกิน = clamp, คืน effective duration ให้ progress) ใน `clipora/ffmpeg.py`; `JobSpec` เพิ่ม `trim_start/trim_duration`; `_start_local` ตรวจรูปแบบก่อนเริ่ม (เตือนผ่าน messagebox), `_run_local` ตรวจขอบเขตหลัง probe (error เข้า `ErrorDialog` ที่มีปุ่ม copy); แถว trim ซ่อนในโหมดสเต็ม/URL; ป้ายฟิลด์ที่สองแก้เป็น "ระยะเวลา (เว้นว่าง = ทั้งหมด)"
+- **ค — disk-check + cleanup ถูกเรียกจริง**: `_prepare_destination()` ใน `ui.py` ล้าง orphaned workspaces (import + separator, พลาดไม่บล็อกงาน) แล้วตรวจพื้นที่ดิสก์ก่อนเริ่มงานทุกครั้ง (ไฟล์ในเครื่อง = `check_disk_space`, ลิงก์ = `check_destination_disk_space`, เต็ม = เตือนแล้วไม่เริ่มงาน)
+- **Tests**: +22 tests (parse/normalize/command ใน `test_ffmpeg.py`, trim end-to-end กับ fixture จริงใน `test_ffmpeg_integration.py`, disk/orphan ใน `tests/test_maintenance.py` ไฟล์ใหม่) → full suite **203 tests ผ่าน** (skipped 2 = network)
+- **ก — ปรับคำ GitHub**: `README` กระชับ (intro 2 บรรทัด, มีอะไรใหม่ 0.6.3, วิธีตรวจ `.sha256`, แก้ 3 จุดที่ขัดของจริง: สิทธิ์ admin/รวมเครื่องมือ/portable), `release.yml` ใช้ release notes ภาษาไทยคงที่แทน `--generate-notes`, `SECURITY.md` เป็นตารางเวอร์ชันที่รองรับ, `USER_GUIDE` เพิ่มวิธีใช้ trim + disk/cleanup + ปุ่ม copy log, `DEVELOPMENT` แก้ trigger `pc-v*`/per-machine/trim ที่ทำแล้ว, `ACTIVITY_LOG` ติ๊กตามจริง (batch/limiter ยังไม่ทำ), `clipora.manifest` sync 0.6.3.0
+- **ค้าง**: batch queue (ไม่มีโค้ด ต้องเริ่มใหม่), trim สำหรับงาน URL/stems, CPU limiter (เรียกแบบจำกัด), About repo บนเว็บ (description/topics ต้องกดเอง) — ไม่ bump version รอบนี้ (ยังไม่ปล่อย release)
 
 ## ทำวันนี้ (2026-09-21) — Quick fix: TikTok `Unexpected response from webpage request`
 

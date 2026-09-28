@@ -113,6 +113,22 @@ jobs:
           $releaseTag = "pc-v$version"
           gh release view $releaseTag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $releaseTag --title "Clipora PC v$version" --generate-notes
+            $notes = @"
+          ## Clipora PC v$version (Windows x64)
+
+          ### ดาวน์โหลด
+          - `Clipora-Setup-$version-x64.exe` + ไฟล์ `.sha256` (ตัวติดตั้ง แนะนำ)
+          - `Clipora-$version-x64.zip` + ไฟล์ `.sha256` (แบบพกพา แกะ zip แล้วรัน `Clipora.exe`)
+
+          ### ติดตั้ง
+          1. ตรวจ checksum ก่อนติดตั้ง: `Get-FileHash -Algorithm SHA256 <ไฟล์ที่โหลดมา>` แล้วเทียบกับข้อความในไฟล์ `.sha256`
+          2. รันตัวติดตั้ง (ขอสิทธิ์ Administrator เพราะติดตั้งระดับเครื่อง) เปิด Clipora ใช้งานได้ทันที ไม่ต้องลง Python/FFmpeg เพิ่ม
+          3. มีอะไรใหม่ในรุ่นนี้ ดูที่หน้าหลักของ [README](https://github.com/ertyu007/media-toolkit-Open-source#readme) หัวข้อ "มีอะไรใหม่"
+
+          ### หมายเหตุ
+          - ใช้เฉพาะสื่อสาธารณะที่ท่านเป็นเจ้าของหรือได้รับอนุญาต ไม่รองรับ playlist, live, private/paid media, login, cookies หรือ DRM
+          - คู่มือผู้ใช้: [docs/USER_GUIDE.md](https://github.com/ertyu007/media-toolkit-Open-source/blob/main/docs/USER_GUIDE.md) แก้ปัญหา: [docs/TROUBLESHOOTING.md](https://github.com/ertyu007/media-toolkit-Open-source/blob/main/docs/TROUBLESHOOTING.md)
+          "@
+            gh release create $releaseTag --title "Clipora PC v$version" --notes $notes
           }
           gh release upload $releaseTag dist/installer/Clipora-Setup-*-x64.exe dist/installer/Clipora-Setup-*-x64.exe.sha256 dist/Clipora-*-x64.zip dist/Clipora-*-x64.zip.sha256 --clobber

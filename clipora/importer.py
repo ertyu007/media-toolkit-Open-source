@@ -135,6 +135,67 @@ class ImportSpec:
     fps: str = 'สูงสุด'
 
 
+_NUMERIC_PART_RE = re.compile(r'^(?:0[xX][0-9a-fA-F]+|0[0-7]*|[0-9]+)$')
+
+
+def _parse_numeric_part(part: str) -> int | None:
+    if not _NUMERIC_PART_RE.match(part):
+        return None
+    try:
+        if part.lower().startswith('0x'):
+            return int(part, 16)
+        if len(part) > 1 and part.startswith('0') and part.isdigit():
+            try:
+                return int(part, 8)
+            except ValueError:
+                # '08'/'09' are not valid octal; resolvers read them as
+                # decimal, so decode as decimal to avoid a private-IP bypass.
+                return int(part, 10)
+        return int(part, 10)
+    except ValueError:
+        return None
+
+
+def _decode_obscured_ipv4(hostname: str) -> ipaddress.IPv4Address | None:
+    """Decode hex/decimal/octal/shorthand IPv4 forms (e.g. ``0x7f000001``).
+
+    Returns None when the hostname is not a numeric IP encoding.
+    """
+    host = hostname.strip().lower().rstrip('.')
+    if not host:
+        return None
+    if '.' not in host:
+        value = _parse_numeric_part(host)
+        if value is None or not 0 <= value < 2**32:
+            return None
+        return ipaddress.IPv4Address(value)
+    parts = host.split('.')
+    if not 2 <= len(parts) <= 4:
+        return None
+    values: list[int] = []
+    for part in parts:
+        value = _parse_numeric_part(part)
+        if value is None:
+            return None
+        values.append(value)
+    try:
+        if len(values) == 4:
+            if any(value > 255 for value in values):
+                return None
+            packed = (values[0] << 24) | (values[1] << 16) | (values[2] << 8) | values[3]
+        elif len(values) == 3:
+            if values[0] > 255 or values[1] > 255 or values[2] > 65535:
+                return None
+            packed = (values[0] << 24) | (values[1] << 16) | values[2]
+        else:
+            if values[0] > 255 or values[1] > 2**24 - 1:
+                return None
+            packed = (values[0] << 24) | values[1]
+    except (ValueError, OverflowError):
+        return None
+    return ipaddress.IPv4Address(packed)
+
+
 def validate_url(raw_url: str) -> str:
     url = raw_url.strip()
     try:
@@ -160,6 +221,10 @@ def validate_url(raw_url: str) -> str:
         address = None
     if address is not None and not address.is_global:
         raise ValueError('ไม่รองรับลิงก์เครือข่ายภายในหรือ IP ส่วนตัว')
+    if address is None:
+        obscured = _decode_obscured_ipv4(hostname)
+        if obscured is not None and not obscured.is_global:
+            raise ValueError('ไม่รองรับลิงก์เครือข่ายภายในหรือ IP ส่วนตัว')
     return url
 
 

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 import tkinter as tk
 from tkinter import ttk
 from typing import Any, Callable
 
 from .format import format_file_size
+from .motion import fade_in_window
 from .theme import (
     ACCENT,
     ACCENT_HOVER,
@@ -16,6 +18,7 @@ from .theme import (
     DISABLED_FG,
     ERROR,
     FIELD,
+    FONT_FAMILY,
     MUTED,
     TEXT,
 )
@@ -27,6 +30,22 @@ CANCEL = 'cancel'
 ACTION_UPDATE = 'update'
 ACTION_REMIND_LATER = 'remind_later'
 ACTION_SKIP_VERSION = 'skip_version'
+
+MAX_ERROR_CHARS = 1500
+_LOCAL_PATH_PLACEHOLDER = '<เส้นทางในเครื่อง>'
+_UNC_PATH_RE = re.compile(r'\\\\[^\s"\']+')
+# Lookbehind keeps the scheme letter of URLs (https://…) from matching as a
+# drive letter; real drive paths start a segment (start/space/quote/paren).
+_DRIVE_PATH_RE = re.compile(r'(?<![A-Za-z])[A-Za-z]:[\\/][^\s"\']*')
+
+
+def sanitize_error_message(message: str, max_chars: int = MAX_ERROR_CHARS) -> str:
+    """Redact full local paths and cap length for user-facing errors."""
+    text = _UNC_PATH_RE.sub(_LOCAL_PATH_PLACEHOLDER, message)
+    text = _DRIVE_PATH_RE.sub(_LOCAL_PATH_PLACEHOLDER, text)
+    if len(text) > max_chars:
+        text = '…' + text[-max_chars:]
+    return text
 
 
 class OverwriteDialog(tk.Toplevel):
@@ -56,7 +75,7 @@ class OverwriteDialog(tk.Toplevel):
         self.resizable(False, False)
         self.protocol('WM_DELETE_WINDOW', lambda: self._close(CANCEL))
 
-        ui_font = getattr(parent, 'ui_font', 'Segoe UI')
+        ui_font = getattr(parent, 'ui_font', FONT_FAMILY)
         shell = ttk.Frame(self, style='Card.TFrame', padding=(24, 20))
         shell.pack(fill='both', expand=True)
         shell.columnconfigure(1, weight=1)
@@ -132,6 +151,7 @@ class OverwriteDialog(tk.Toplevel):
         overwrite_btn.grid(row=0, column=3, padx=(8, 0))
 
         self._center_on(parent)
+        fade_in_window(self, self.after)
         self.grab_set()
         self.bind('<Escape>', lambda _e: self._close(CANCEL))
         overwrite_btn.focus_set()
@@ -165,11 +185,12 @@ class ErrorDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, title: str, message: str) -> None:
         super().__init__(parent)
         self.title(title)
+        message = sanitize_error_message(message)
         self.configure(bg=CARD)
         self.transient(parent)
         self.resizable(True, True)
 
-        ui_font = getattr(parent, 'ui_font', 'Segoe UI')
+        ui_font = getattr(parent, 'ui_font', FONT_FAMILY)
         shell = ttk.Frame(self, style='Card.TFrame', padding=(24, 20))
         shell.pack(fill='both', expand=True)
         shell.columnconfigure(0, weight=1)
@@ -227,6 +248,7 @@ class ErrorDialog(tk.Toplevel):
         close_btn.grid(row=0, column=1)
 
         self._center_on(parent)
+        fade_in_window(self, self.after)
         self.grab_set()
         self.bind('<Escape>', lambda _e: self.destroy())
         close_btn.focus_set()
@@ -272,7 +294,7 @@ class AppUpdateDialog(tk.Toplevel):
         self.minsize(480, 420)
         self.protocol('WM_DELETE_WINDOW', lambda: self._close(ACTION_REMIND_LATER))
 
-        ui_font = getattr(parent, 'ui_font', 'Segoe UI')
+        ui_font = getattr(parent, 'ui_font', FONT_FAMILY)
 
         shell = ttk.Frame(self, style='Card.TFrame', padding=(24, 20))
         shell.pack(fill='both', expand=True)
@@ -367,6 +389,7 @@ class AppUpdateDialog(tk.Toplevel):
         skip_btn.pack(side='left')
 
         self._center_on(parent)
+        fade_in_window(self, self.after)
         self.grab_set()
         self.bind('<Escape>', lambda _e: self._close(ACTION_REMIND_LATER))
         update_btn.focus_set()

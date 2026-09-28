@@ -262,7 +262,7 @@ MP3, M4A และ MP4 ปัจจุบันมีการ re-encode จึ�
 
 ## 8. เก็บ Error Log
 
-ก่อนเปิด issue ให้เก็บ:
+เมื่องานล้มเหลว หน้าต่าง error มีปุ่ม **คัดลอก Error Log** กดแล้ววางลง issue ได้ทันที นอกจากนั้นให้เก็บ:
 
 ```powershell
 python --version

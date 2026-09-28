@@ -13,8 +13,10 @@ from clipora.ffmpeg import (
     cleanup_temporary_output,
     convert,
     finalize_output,
+    normalize_trim,
     output_path,
     parse_progress_line,
+    parse_trim_seconds,
     probe,
     temporary_output_path,
     validate_operation,
@@ -131,6 +133,82 @@ class FFmpegCommandTests(unittest.TestCase):
             'สูงสุด',
         )
         self.assertNotIn('-r', command)
+
+
+class TrimParsingTests(unittest.TestCase):
+    def test_blank_input_means_no_trim(self):
+        self.assertIsNone(parse_trim_seconds(None))
+        self.assertIsNone(parse_trim_seconds(''))
+        self.assertIsNone(parse_trim_seconds('   '))
+
+    def test_plain_seconds(self):
+        self.assertAlmostEqual(parse_trim_seconds('90'), 90.0)
+        self.assertAlmostEqual(parse_trim_seconds(' 90.5 '), 90.5)
+        self.assertAlmostEqual(parse_trim_seconds('0'), 0.0)
+
+    def test_clock_formats(self):
+        self.assertAlmostEqual(parse_trim_seconds('1:30'), 90.0)
+        self.assertAlmostEqual(parse_trim_seconds('01:02:03'), 3723.0)
+        self.assertAlmostEqual(parse_trim_seconds('0:01:02.5'), 62.5)
+
+    def test_invalid_input_is_rejected(self):
+        for text in ('abc', '-5', '1:2:3:4', '1:60', '1::30', '12:34:56:78', 'NaN', 'inf'):
+            with self.subTest(text=text):
+                with self.assertRaises(ValueError):
+                    parse_trim_seconds(text)
+
+
+class TrimNormalizeTests(unittest.TestCase):
+    def test_no_trim_passes_media_duration_through(self):
+        self.assertEqual(normalize_trim(None, None, 120.0), (None, None, 120.0))
+        self.assertEqual(normalize_trim(None, None, None), (None, None, None))
+
+    def test_start_only_uses_remaining_media_as_effective_duration(self):
+        start, duration, effective = normalize_trim(30.0, None, 120.0)
+        self.assertEqual(start, '30.000')
+        self.assertIsNone(duration)
+        self.assertAlmostEqual(effective, 90.0)
+
+    def test_duration_is_clamped_to_remaining_media(self):
+        start, duration, effective = normalize_trim(110.0, 30.0, 120.0)
+        self.assertEqual(start, '110.000')
+        self.assertEqual(duration, '10.000')
+        self.assertAlmostEqual(effective, 10.0)
+
+    def test_exact_bounds_are_formatted_for_ffmpeg(self):
+        start, duration, effective = normalize_trim(10.0, 5.0, 120.0)
+        self.assertEqual((start, duration), ('10.000', '5.000'))
+        self.assertAlmostEqual(effective, 5.0)
+
+    def test_out_of_range_bounds_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'เกินความยาวไฟล์'):
+            normalize_trim(120.0, None, 120.0)
+        with self.assertRaisesRegex(ValueError, 'เกินความยาวไฟล์'):
+            normalize_trim(200.0, 5.0, 120.0)
+        with self.assertRaisesRegex(ValueError, 'มากกว่า 0'):
+            normalize_trim(10.0, 0.0, 120.0)
+        with self.assertRaises(ValueError):
+            normalize_trim(-1.0, None, 120.0)
+
+    def test_unknown_media_duration_passes_values_through(self):
+        self.assertEqual(normalize_trim(10.0, 5.0, None), ('10.000', '5.000', None))
+
+
+class TrimCommandTests(unittest.TestCase):
+    def test_trim_args_are_placed_around_input(self):
+        command = build_command(
+            Path('in.mp4'), Path('out.mp3'), 'audio', 'Balanced', 'mp3',
+            start_time='10.000', duration_time='5.000',
+        )
+        self.assertEqual(command[command.index('-ss') + 1], '10.000')
+        self.assertLess(command.index('-ss'), command.index('-i'))
+        self.assertEqual(command[command.index('-t') + 1], '5.000')
+        self.assertGreater(command.index('-t'), command.index('-i'))
+
+    def test_no_trim_adds_no_seek_flags(self):
+        command = build_command(Path('in.mp4'), Path('out.mp3'), 'audio', 'Balanced', 'mp3')
+        self.assertNotIn('-ss', command)
+        self.assertNotIn('-t', command)
 
 
 class MediaValidationTests(unittest.TestCase):

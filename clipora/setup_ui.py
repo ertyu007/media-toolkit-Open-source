@@ -13,12 +13,14 @@ from .dependencies import (
     dependencies_to_install,
     install_toolchains,
 )
+from .ui_components.motion import fade_in_window
 from .ui_components.theme import (
     ACCENT,
     ACCENT_SOFT,
     BG,
     CARD,
     FIELD,
+    FONT_FAMILY,
     TEXT,
 )
 
@@ -80,6 +82,7 @@ class ToolSetupDialog(tk.Toplevel):
 
         self._build_shell()
         self._show_step(0)
+        fade_in_window(self, self.after)
         self.grab_set()
         self.after_idle(self.next_button.focus_set)
 
@@ -234,7 +237,7 @@ class ToolSetupDialog(tk.Toplevel):
             activebackground=CARD,
             activeforeground=TEXT,
             selectcolor=FIELD,
-            font=('Segoe UI', 10),
+            font=(FONT_FAMILY, 10),
             anchor='w',
         )
         consent.grid(row=2, column=0, sticky='w')

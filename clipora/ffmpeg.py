@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -60,6 +61,8 @@ class JobSpec:
     audio_format: str
     video_format: str = 'mp4'
     fps: str = 'สูงสุด'
+    trim_start: float | None = None
+    trim_duration: float | None = None
 
 
 class CancellationToken:
@@ -276,6 +279,71 @@ def _fps_value(fps: str) -> str | None:
     if value < 1:
         return None
     return str(value)
+
+
+def parse_trim_seconds(text: str | None) -> float | None:
+    """Parse a trim time field into seconds.
+
+    Accepts plain seconds (``90``, ``90.5``) or clock formats (``MM:SS``,
+    ``HH:MM:SS``). Blank input returns ``None`` (no trim). Raises
+    ``ValueError`` with a Thai message for anything else.
+    """
+    if text is None:
+        return None
+    cleaned = text.strip()
+    if not cleaned:
+        return None
+    parts = cleaned.split(':')
+    if len(parts) > 3:
+        raise ValueError(f'รูปแบบเวลาไม่ถูกต้อง: {cleaned} (ใช้ วินาที หรือ HH:MM:SS)')
+    try:
+        numbers = [float(part) for part in parts]
+    except ValueError:
+        raise ValueError(f'รูปแบบเวลาไม่ถูกต้อง: {cleaned} (ใช้ วินาที หรือ HH:MM:SS)') from None
+    if any(not math.isfinite(number) or number < 0 for number in numbers):
+        raise ValueError(f'เวลาในการตัดต้องไม่ติดลบ: {cleaned}')
+    if len(parts) == 2 and (numbers[0] >= 60 or numbers[1] >= 60):
+        raise ValueError(f'รูปแบบเวลาไม่ถูกต้อง: {cleaned} (ใช้ MM:SS โดยนาทีและวินาทีไม่เกิน 59)')
+    if len(parts) == 3 and (numbers[1] >= 60 or numbers[2] >= 60):
+        raise ValueError(f'รูปแบบเวลาไม่ถูกต้อง: {cleaned} (ใช้ HH:MM:SS โดยนาทีและวินาทีไม่เกิน 59)')
+    multipliers = (1.0, 60.0, 3600.0)
+    total = sum(number * multiplier for number, multiplier in zip(reversed(numbers), multipliers))
+    return total
+
+
+def normalize_trim(
+    start: float | None,
+    duration: float | None,
+    media_duration: float | None,
+) -> tuple[str | None, str | None, float | None]:
+    """Normalize trim bounds against the probed media duration.
+
+    Returns ``(start_arg, duration_arg, effective_duration)`` where the args
+    are formatted for ``build_command`` and ``effective_duration`` is the
+    expected output length for progress reporting. Raises ``ValueError``
+    with a Thai message when the bounds are out of range.
+    """
+    if start is not None and (not math.isfinite(start) or start < 0):
+        raise ValueError('จุดเริ่มตัดต้องไม่ติดลบ')
+    if duration is not None and (not math.isfinite(duration) or duration <= 0):
+        raise ValueError('ระยะเวลาที่ตัดต้องมากกว่า 0')
+    if media_duration is not None and start is not None and start >= media_duration:
+        raise ValueError(
+            f'จุดเริ่มตัด ({start:.1f} วินาที) เกินความยาวไฟล์ ({media_duration:.1f} วินาที)',
+        )
+    if media_duration is None:
+        start_arg = f'{start:.3f}' if start is not None else None
+        duration_arg = f'{duration:.3f}' if duration is not None else None
+        return start_arg, duration_arg, None
+    base = start or 0.0
+    remaining = media_duration - base
+    if (start is not None or duration is not None) and remaining <= 0:
+        raise ValueError('ไฟล์สั้นกว่าจุดเริ่มตัดที่ระบุ')
+    if duration is None:
+        effective = remaining if (start is not None or duration is not None) else media_duration
+        return (f'{start:.3f}' if start is not None else None, None, effective)
+    effective = min(duration, remaining)
+    return (f'{start:.3f}' if start is not None else None, f'{effective:.3f}', effective)
 
 
 def build_command(
