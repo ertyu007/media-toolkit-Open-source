@@ -2,7 +2,7 @@
 
 Clipora คือโปรแกรมเดสก์ท็อปโอเพนซอร์สสำหรับ Windows แปลงวิดีโอ แยกเสียง และดาวน์โหลดสื่อสาธารณะที่ได้รับอนุญาต — ฟรี ไม่มีโฆษณา ไม่มีบัญชี ประมวลผลบนเครื่องทั้งหมด
 
-พัฒนาโดย [ertyu.dev](https://ertyu.dev) • License [GPL-3.0](LICENSE)
+พัฒนาโดย [ertyu007](https://github.com/ertyu007) • License [GPL-3.0](LICENSE)
 
 ดาวน์โหลดไฟล์จากหน้า [GitHub Releases](https://github.com/ertyu007/media-toolkit-Open-source/releases) โดยเลือก tag `pc-v*`
 

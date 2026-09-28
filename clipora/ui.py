@@ -939,7 +939,7 @@ class CliporaApp(tk.Tk):
         footer.grid(row=3, column=0, sticky='ew')
         ttk.Label(
             footer,
-            text=f'Clipora v{__version__}  •  ertyu.dev',
+            text='create by ertyu007',
             style='ModeDesc.TLabel',
             anchor='center',
         ).grid(row=0, column=0, sticky='ew')

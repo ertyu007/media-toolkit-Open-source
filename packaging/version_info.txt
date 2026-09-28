@@ -14,7 +14,7 @@ VSVersionInfo(
       StringTable(
         u'040904B0',
         [
-          StringStruct(u'CompanyName', u'ertyu.dev'),
+          StringStruct(u'CompanyName', u'ertyu007'),
           StringStruct(u'FileDescription', u'Clipora desktop media toolkit'),
            StringStruct(u'FileVersion', u'0.6.3'),
           StringStruct(u'InternalName', u'Clipora'),
