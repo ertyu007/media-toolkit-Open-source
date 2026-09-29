@@ -66,6 +66,8 @@ from .app_update import (
     fetch_latest_app_release,
     get_skipped_version,
     is_app_update_available,
+    load_settings,
+    save_settings,
 )
 from .ytdlp_update import (
     YtDlpUpdateError,
@@ -176,6 +178,104 @@ def destination_path(value: str) -> Path:
     return Path(text)
 
 
+# Explorer-style history columns: name stretches, the rest keep pixel widths
+# so the fixed header always lines up with the rows.
+_HISTORY_COLUMN_MINSIZES = {1: 70, 2: 110, 3: 90}
+_SELECTED_HISTORY_KEY = 'selected_history_id'
+
+
+def validate_job_settings(raw: dict) -> dict:
+    """Validated startup/popup settings; unknown values fall back to defaults."""
+    try:
+        home_downloads = str(Path.home() / 'Downloads')
+    except Exception:
+        home_downloads = ''
+    destination = str(raw.get('destination') or '').strip() or home_downloads
+    mode = str(raw.get('mode') or 'video')
+    if mode not in ('audio', 'video', 'stems'):
+        mode = 'video'
+    audio_format = str(raw.get('audio_format') or 'MP3')
+    if audio_format not in AUDIO_FORMAT_LABELS:
+        audio_format = 'MP3'
+    video_format = str(raw.get('video_format') or VIDEO_FORMAT_LABELS[0])
+    if video_format not in VIDEO_FORMAT_LABELS:
+        video_format = VIDEO_FORMAT_LABELS[0]
+    fps = str(raw.get('fps') or FPS_LABELS[0])
+    if fps not in FPS_LABELS:
+        fps = FPS_LABELS[0]
+    return {
+        'destination': destination,
+        'mode': mode,
+        'audio_format': audio_format,
+        'video_format': video_format,
+        'quality': str(raw.get('quality') or 'Balanced'),
+        'fps': fps,
+        'theme': normalize_theme(raw.get('theme')),
+        'chime_enabled': bool(raw.get('chime_enabled', True)),
+        'auto_update_check': bool(raw.get('auto_update_check', True)),
+    }
+
+
+def load_job_defaults() -> dict:
+    """Validated job-form defaults from disk; never raises."""
+    try:
+        raw = load_settings()
+    except Exception:
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    return validate_job_settings(raw)
+
+
+def find_history_index(entries: list, selected_id: str | None) -> int | None:
+    """Index of the entry with *selected_id* (falls back to target path)."""
+    if not selected_id:
+        return None
+    for index, entry in enumerate(entries):
+        if getattr(entry, 'id', None) == selected_id:
+            return index
+    for index, entry in enumerate(entries):
+        if getattr(entry, 'target', None) == selected_id:
+            return index
+    return None
+
+
+def load_selected_history_id() -> str | None:
+    """Last history entry the user picked (survives restarts); None on failure."""
+    try:
+        value = load_settings().get(_SELECTED_HISTORY_KEY)
+    except Exception:
+        return None
+    return str(value) if value else None
+
+
+def save_selected_history_id(entry_id: str | None) -> None:
+    """Remember the picked history entry; never raises (selection is cosmetic)."""
+    try:
+        settings = load_settings()
+        if entry_id:
+            settings[_SELECTED_HISTORY_KEY] = entry_id
+        else:
+            settings.pop(_SELECTED_HISTORY_KEY, None)
+        save_settings(settings)
+    except Exception:
+        pass
+
+
+def format_debug_line(when: datetime, message: str) -> str:
+    """Pure formatter for one debug-log line (``[HH:MM:SS] message``)."""
+    return f"[{when.strftime('%H:%M:%S')}] {message}"
+
+
+def find_clipora_uninstaller(app_dir: Path) -> Path | None:
+    """Inno Setup uninstaller next to the frozen exe; None when absent."""
+    candidate = Path(app_dir) / 'unins000.exe'
+    try:
+        return candidate if candidate.is_file() else None
+    except OSError:
+        return None
+
+
 def route_dropped_paths(paths: list[str]) -> tuple[str, str] | None:
     """Route an Explorer drop: first existing file → source, else dir → destination."""
     cleaned = [(raw or '').strip().strip('"') for raw in paths]
@@ -186,6 +286,8 @@ def route_dropped_paths(paths: list[str]) -> tuple[str, str] | None:
         if path and os.path.isdir(path):
             return ('destination', path)
     return None
+
+
 def fit_photo_image(image: tk.PhotoImage, max_width: int, max_height: int) -> tk.PhotoImage:
     """Scale a PhotoImage to fit inside a bounding box (stdlib only)."""
     width, height = image.width(), image.height()
@@ -241,18 +343,19 @@ class CliporaApp(tk.Tk):
 
         self.source = tk.StringVar()
         self.input_kind = tk.StringVar(value='url')
-        self.destination = tk.StringVar(value=str(Path.home() / 'Downloads'))
-        self.mode = tk.StringVar(value='video')
+        defaults = load_job_defaults()
+        self.destination = tk.StringVar(value=defaults['destination'])
+        self.mode = tk.StringVar(value=defaults['mode'])
         self.stem_vars = {
             stem: tk.BooleanVar(value=stem in ('vocals', 'instrumental'))
             for stem in SELECTABLE_STEMS
         }
         self._stems_options: ttk.Frame | None = None
         self._trim_options: ttk.Frame | None = None
-        self.audio_format = tk.StringVar(value='MP3')
-        self.video_format = tk.StringVar(value=VIDEO_FORMAT_LABELS[0])
-        self.fps = tk.StringVar(value=FPS_LABELS[0])
-        self.quality = tk.StringVar(value='Balanced')
+        self.audio_format = tk.StringVar(value=defaults['audio_format'])
+        self.video_format = tk.StringVar(value=defaults['video_format'])
+        self.fps = tk.StringVar(value=defaults['fps'])
+        self.quality = tk.StringVar(value=defaults['quality'])
         self.mode_desc = tk.StringVar(value='')
         self._details_expanded = False
         self._last_av_mode = 'video'
@@ -277,6 +380,8 @@ class CliporaApp(tk.Tk):
         self._app_update_checking = False
         self._recent_destinations: list[str] = []
         self._result_targets: list[Path] = []
+        self._chime_var = tk.BooleanVar(value=defaults['chime_enabled'])
+        self._auto_update_var = tk.BooleanVar(value=defaults['auto_update_check'])
         self._build()
         self._toast = ToastManager(self)
         self._drop_unregister = (
@@ -409,6 +514,53 @@ class CliporaApp(tk.Tk):
             background=[('active', SECONDARY_BG)],
             foreground=[('active', TEXT), ('disabled', DISABLED_FG)],
         )
+        style.configure(
+            'GhostLarge.TButton',
+            background=BG,
+            foreground=MUTED,
+            bordercolor=BG,
+            lightcolor=BG,
+            darkcolor=BG,
+            font=(self.ui_font, FONT_SIZE_TOP, 'bold'),
+            padding=(10, 6),
+        )
+        style.map(
+            'GhostLarge.TButton',
+            background=[('active', SECONDARY_BG)],
+            foreground=[('active', TEXT), ('disabled', DISABLED_FG)],
+        )
+        style.configure(
+            'Side.TButton',
+            background=TOP_BAR_BG,
+            foreground=MUTED,
+            bordercolor=TOP_BAR_BG,
+            lightcolor=TOP_BAR_BG,
+            darkcolor=TOP_BAR_BG,
+            font=(self.ui_font, FONT_SIZE_BASE, 'bold'),
+            padding=(12, 9),
+            anchor='w',
+        )
+        style.map(
+            'Side.TButton',
+            background=[('active', SECONDARY_BG)],
+            foreground=[('active', TEXT), ('disabled', DISABLED_FG)],
+        )
+        style.configure(
+            'SideActive.TButton',
+            background=ACCENT_SOFT,
+            foreground=TEXT,
+            bordercolor=ACCENT_SOFT,
+            lightcolor=ACCENT_SOFT,
+            darkcolor=ACCENT_SOFT,
+            font=(self.ui_font, FONT_SIZE_BASE, 'bold'),
+            padding=(12, 9),
+            anchor='w',
+        )
+        style.map(
+            'SideActive.TButton',
+            background=[('active', ACCENT_SOFT)],
+            foreground=[('disabled', DISABLED_FG)],
+        )
 
         # ── Buttons ───────────────────────────────────────────────────────────
         style.configure(
@@ -539,24 +691,79 @@ class CliporaApp(tk.Tk):
         )
 
         # ── Root layout ───────────────────────────────────────────────────────
+        # Col 0 = collapsible sidebar, col 1 = top bar + content + action + footer
         # Row 0 = top bar, row 1 = scrollable content, row 2 = action bar, row 3 = footer
         self.rowconfigure(0, weight=0)
         self.rowconfigure(1, weight=1)
         self.rowconfigure(2, weight=0)
         self.rowconfigure(3, weight=0)
-        self.columnconfigure(0, weight=1)
+        self.columnconfigure(0, weight=0)
+        self.columnconfigure(1, weight=1)
+
+        # ── Sidebar ─────────────────────────────────────────────────────────────
+        self._sidebar = ttk.Frame(self, style='TopBar.TFrame', padding=(12, 12, 12, 12))
+        self._sidebar.grid(row=0, column=0, rowspan=4, sticky='nsew')
+        self._sidebar_visible = True
+        self._view = 'job'
+        self._view_buttons: dict[str, ttk.Button] = {}
+
+        ttk.Label(self._sidebar, text='เมนู', style='TopBarMuted.TLabel').pack(
+            anchor='w', pady=(0, 8)
+        )
+        for value, label in (('job', 'งานปัจจุบัน'), ('history', 'ประวัติ')):
+            button = ttk.Button(
+                self._sidebar, text=label, style='Side.TButton',
+                command=lambda v=value: self._show_view(v),
+            )
+            button.pack(fill='x', pady=(0, 6))
+            self._view_buttons[value] = button
+        ttk.Separator(self._sidebar, orient='horizontal').pack(fill='x', pady=(6, 12))
+        for label, command in (
+            ('เครื่องมือ (Ctrl+T)', lambda: self._open_tool_setup(repair_mode=True)),
+            ('อัปเดต yt-dlp (Ctrl+U)', lambda: self._check_ytdlp_update(auto=False)),
+            ('ตรวจอัปเดต Clipora...', lambda: self._check_app_update(auto=False)),
+        ):
+            ttk.Button(
+                self._sidebar, text=label, style='Ghost.TButton', command=command,
+            ).pack(fill='x', anchor='w', pady=(0, 2))
+        ttk.Separator(self._sidebar, orient='horizontal').pack(fill='x', pady=(12, 12))
+        for label, command in (
+            ('คู่มือ (F1)', lambda: webbrowser.open(
+                'https://github.com/ertyu007/media-toolkit-Open-source/blob/main/docs/USER_GUIDE.md')),
+            ('รายงานปัญหา', lambda: webbrowser.open(
+                'https://github.com/ertyu007/media-toolkit-Open-source/issues')),
+            ('สนับสนุนโครงการ', self._open_donate_dialog),
+        ):
+            ttk.Button(
+                self._sidebar, text=label, style='Ghost.TButton', command=command,
+            ).pack(fill='x', anchor='w', pady=(0, 2))
+        ttk.Frame(self._sidebar, style='TopBar.TFrame').pack(fill='both', expand=True)
+        ttk.Separator(self._sidebar, orient='horizontal').pack(fill='x', pady=(0, 8))
+        ttk.Button(
+            self._sidebar, text='⚙ ตั้งค่า', style='Ghost.TButton',
+            command=self._open_settings,
+        ).pack(fill='x', anchor='w')
+
+        # ── Top bar ───────────────────────────────────────────────────────────
+        topbar = ttk.Frame(self, style='TopBar.TFrame', padding=(12, 10, 16, 10))
+        topbar.grid(row=0, column=1, sticky='ew')
+        topbar.columnconfigure(2, weight=1)
+
+        self._sidebar_toggle = ttk.Button(
+            topbar, text='«', style='GhostLarge.TButton', width=4,
+            command=self._toggle_sidebar,
+        )
+        self._sidebar_toggle.grid(row=0, column=0, padx=(0, 6))
+        self._sync_sidebar_toggle()
 
         # ── Top bar ───────────────────────────────────────────────────────────
         topbar = ttk.Frame(self, style='TopBar.TFrame', padding=(20, 10, 16, 10))
-        topbar.grid(row=0, column=0, sticky='ew')
-        topbar.columnconfigure(1, weight=1)
-
         ttk.Label(topbar, image=self._icon, background=TOP_BAR_BG).grid(
-            row=0, column=0, padx=(0, 10), pady=2,
+            row=0, column=1, padx=(0, 10), pady=2,
         )
 
         brand_col = ttk.Frame(topbar, style='TopBar.TFrame')
-        brand_col.grid(row=0, column=1, sticky='w')
+        brand_col.grid(row=0, column=2, sticky='w')
         ttk.Label(brand_col, text='Clipora', style='TopBarTitle.TLabel').pack(side='left')
         ttk.Label(
             brand_col,
@@ -564,43 +771,14 @@ class CliporaApp(tk.Tk):
             style='TopBarMuted.TLabel',
         ).pack(side='left')
 
-        # Right side: ☰ เมนู only (support lives inside the menu to keep
-        # the violet accent reserved for the primary Start action)
-        topbar_actions = ttk.Frame(topbar, style='TopBar.TFrame')
-        topbar_actions.grid(row=0, column=2, sticky='e', padx=(8, 0))
-
-        self._menu_btn = ttk.Menubutton(
-            topbar_actions, text='☰', style='Ghost.TButton', direction='below',
-        )
-        menu = tk.Menu(
-            self._menu_btn, tearoff=0, bg=MENU_BG, fg=TEXT,
-            activebackground=ACCENT, activeforeground=MENU_ACTIVE_FG,
-            font=(self.ui_font, FONT_SIZE_BASE),
-        )
-        menu.add_command(label='เครื่องมือ (Ctrl+T)', command=lambda: self._open_tool_setup(repair_mode=True))
-        menu.add_command(label='อัปเดต yt-dlp (Ctrl+U)', command=lambda: self._check_ytdlp_update(auto=False))
-        menu.add_command(label='ตรวจหาการอัปเดต Clipora...', command=lambda: self._check_app_update(auto=False))
-        menu.add_separator()
-        menu.add_command(label='สนับสนุนโครงการ', command=self._open_donate_dialog)
-        menu.add_command(label='ประวัติดาวน์โหลด', command=self._open_history)
-        menu.add_command(
-            label='คู่มือผู้ใช้ (F1)',
-            command=lambda: webbrowser.open('https://github.com/ertyu007/media-toolkit-Open-source/blob/main/docs/USER_GUIDE.md'),
-        )
-        menu.add_command(
-            label='รายงานปัญหา',
-            command=lambda: webbrowser.open('https://github.com/ertyu007/media-toolkit-Open-source/issues'),
-        )
-        self._menu_btn.configure(menu=menu)
-        self._menu_btn.pack(side='left')
-
         # Thin separator under topbar
-        tk.Frame(self, bg=BORDER, height=1).grid(row=0, column=0, sticky='sew')
+        tk.Frame(self, bg=BORDER, height=1).grid(row=0, column=1, sticky='sew')
 
         # ── Main: single-column scrollable content (mode + source-kind
         # controls in content are the single source of truth)
         main = ttk.Frame(self, style='TFrame')
-        main.grid(row=1, column=0, sticky='nsew')
+        main.grid(row=1, column=1, sticky='nsew')
+        self._main_view = main
         main.rowconfigure(0, weight=1)
         main.columnconfigure(0, weight=1)
 
@@ -892,7 +1070,8 @@ class CliporaApp(tk.Tk):
 
         # ── Action dock (sticky bottom) ─────────────────────────────────────────
         action_bar = ttk.Frame(self, style='Action.TFrame', padding=(24, 12, 24, 12))
-        action_bar.grid(row=2, column=0, sticky='ew')
+        self._action_bar = action_bar
+        action_bar.grid(row=2, column=1, sticky='ew')
         action_bar.columnconfigure(0, weight=1)
 
         # Primary action button — full-width pill, on top for prominence.
@@ -949,9 +1128,18 @@ class CliporaApp(tk.Tk):
         self.open_file_btn.pack(side='left')
         self.result_panel.grid_remove()
 
+        # ── History view (same cell as content + action dock) ───────────────
+        self._history_view = ttk.Frame(self, style='TFrame')
+        self._history_view.grid(row=1, column=1, rowspan=2, sticky='nsew')
+        self._history_view.rowconfigure(0, weight=1)
+        self._history_view.columnconfigure(0, weight=1)
+        self._history_panel = HistoryPanel(self._history_view)
+        self._history_panel.grid(row=0, column=0, sticky='nsew')
+        self._history_view.grid_remove()
+
         # ── Footer ─────────────────────────────────────────────────────────────
         footer = ttk.Frame(self, style='TFrame', padding=(0, 6, 0, 8))
-        footer.grid(row=3, column=0, sticky='ew')
+        footer.grid(row=3, column=1, sticky='ew')
         ttk.Label(
             footer,
             text='create by ertyu007',
@@ -979,6 +1167,7 @@ class CliporaApp(tk.Tk):
         ]
         self._sync_source_kind()
         self._sync_options()
+        self._show_view('job')
 
     def _maybe_offer_tool_setup(self) -> None:
         if self._first_run_setup and missing_required_tools():
@@ -1029,7 +1218,8 @@ class CliporaApp(tk.Tk):
             self.destroy()
 
     def _maybe_check_ytdlp_update(self) -> None:
-        self._check_ytdlp_update(auto=True)
+        if self._auto_update_var.get():
+            self._check_ytdlp_update(auto=True)
 
     def _check_ytdlp_update(self, auto: bool = False) -> None:
         if self._ytdlp_checking:
@@ -1154,7 +1344,8 @@ class CliporaApp(tk.Tk):
         messagebox.showinfo('สำเร็จ', f'อัปเดต yt-dlp เป็น {latest} เรียบร้อย', parent=self)
 
     def _maybe_check_app_update(self) -> None:
-        self._check_app_update(auto=True)
+        if self._auto_update_var.get():
+            self._check_app_update(auto=True)
 
     def _check_app_update(self, auto: bool = False) -> None:
         if self._app_update_checking:
@@ -1214,8 +1405,47 @@ class CliporaApp(tk.Tk):
         DonateDialog(self)
 
     def _open_history(self) -> None:
-        HistoryDialog(self)
+        self._show_view('history')
 
+    def _toggle_sidebar(self) -> None:
+        try:
+            if self._sidebar_visible:
+                self._sidebar.grid_remove()
+            else:
+                self._sidebar.grid()
+            self._sidebar_visible = not self._sidebar_visible
+            self._sync_sidebar_toggle()
+        except tk.TclError:
+            pass
+    def _sync_sidebar_toggle(self) -> None:
+        """Topbar button doubles as the hide button: « when open, ☰ when shut."""
+        try:
+            self._sidebar_toggle.configure(
+                text='«' if self._sidebar_visible else '☰')
+        except (tk.TclError, AttributeError):
+            pass
+    def _show_view(self, name: str) -> None:
+        """Switch between the job form and the embedded history view."""
+        self._view = name
+        try:
+            if name == 'history':
+                self._main_view.grid_remove()
+                self._action_bar.grid_remove()
+                self._history_panel.refresh()
+                self._history_view.grid()
+            else:
+                self._history_view.grid_remove()
+                self._main_view.grid()
+                self._action_bar.grid()
+        except tk.TclError:
+            pass
+        for value, button in self._view_buttons.items():
+            try:
+                button.configure(
+                    style='SideActive.TButton' if value == name else 'Side.TButton'
+                )
+            except tk.TclError:
+                pass
     def _record_history(self, targets: list[Path]) -> None:
         """Remember where finished outputs were saved; never breaks the job."""
         try:
@@ -2130,7 +2360,8 @@ class CliporaApp(tk.Tk):
 
     def _show_result(self, targets: list[Path]) -> None:
         self._result_targets = list(targets)
-        play_completion_chime()
+        if self._chime_var.get():
+            play_completion_chime()
         self._record_history(targets)
         if hasattr(self, '_toast'):
             names = ' • '.join(target.name for target in targets[:2])
@@ -2372,21 +2603,16 @@ class DonateDialog(tk.Toplevel):
         self.after_idle(self.focus_set)
 
 
-class HistoryDialog(tk.Toplevel):
-    """Browse, filter and prune download history (history only, media untouched)."""
+class HistoryPanel(ttk.Frame):
+    """Embedded history browser (history only, media untouched)."""
 
     def __init__(self, parent: tk.Misc) -> None:
-        super().__init__(parent)
-        self.title('ประวัติดาวน์โหลด')
-        self.geometry('640x560')
-        self.minsize(520, 420)
-        self.configure(bg=BG)
-        self.transient(parent)
-        self.resizable(True, True)
-        self.protocol('WM_DELETE_WINDOW', self.destroy)
-
+        super().__init__(parent, style='TFrame')
         self._filter = tk.StringVar(value='all')
         self._entries: list = []
+        self._selected: int | None = None
+        self._selected_id: str | None = load_selected_history_id()
+        self._row_widgets: list[tuple[tk.Frame, list[tk.Label]]] = []
         self._filter.trace_add('write', lambda *_: self._render())
 
         shell = ttk.Frame(self, padding=(28, 22, 28, 20))
@@ -2398,12 +2624,20 @@ class HistoryDialog(tk.Toplevel):
             row=0, column=0, sticky='w'
         )
         ttk.Label(
-            shell, text='จำว่าไฟล์ที่ทำเสร็จถูกบันทึกไว้ที่ไหน (ลบประวัติดไม่ลบไฟล์จริง)',
+            shell,
+            text=(f'จำที่อยู่ไฟล์ที่ทำเสร็จ '
+                  f'(ลบย้ายไปถังขยะก่อน หายถาวรใน {TRASH_RETENTION_DAYS} วัน) '
+                  '• คลิกขวาเพื่อดูเมนู'),
             style='Muted.TLabel',
+            wraplength=560,
+            justify='left',
         ).grid(row=1, column=0, sticky='w', pady=(2, 12))
 
+        filter_row = ttk.Frame(shell, style='TFrame')
+        filter_row.grid(row=2, column=0, sticky='ew', pady=(0, 10))
+        filter_row.columnconfigure(0, weight=1)
         SegmentedControl(
-            shell,
+            filter_row,
             options=[
                 ('all', 'ทั้งหมด'),
                 ('audio', 'เพลง'),
@@ -2412,74 +2646,178 @@ class HistoryDialog(tk.Toplevel):
             ],
             variable=self._filter,
             command=lambda _value: self._render(),
-        ).grid(row=2, column=0, sticky='ew', pady=(0, 10))
+        ).grid(row=0, column=0, sticky='ew')
+        self._trash_button = RoundedButton(
+            filter_row, text='ถังขยะ', width=6, height=PILL_HEIGHT,
+            command=self._toggle_trash_filter,
+        )
+        self._trash_button.grid(row=0, column=1, padx=(8, 0), sticky='ns')
+
+        header = ttk.Frame(shell, style='TFrame')
+        header.grid(row=3, column=0, sticky='ew', pady=(0, 4))
+        header.columnconfigure(0, weight=1)
+        for column, minsize in _HISTORY_COLUMN_MINSIZES.items():
+            header.grid_columnconfigure(column, minsize=minsize)
+        ttk.Label(header, text='ชื่อ', style='Muted.TLabel').grid(
+            row=0, column=0, sticky='w', padx=(12, 4))
+        ttk.Label(header, text='ประเภท', style='Muted.TLabel').grid(
+            row=0, column=1, sticky='w')
+        ttk.Label(header, text='วันที่', style='Muted.TLabel').grid(
+            row=0, column=2, sticky='w')
+        ttk.Label(header, text='ขนาด', style='Muted.TLabel').grid(
+            row=0, column=3, sticky='e', padx=(0, 4))
 
         list_frame = ttk.Frame(shell, style='Card.TFrame')
-        list_frame.grid(row=3, column=0, sticky='nsew', pady=(0, 12))
+        list_frame.grid(row=4, column=0, sticky='nsew', pady=(0, 12))
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
-        self._list = tk.Listbox(
-            list_frame,
-            bg=FIELD, fg=TEXT, selectbackground=ACCENT, selectforeground='#ffffff',
-            relief='flat', borderwidth=0, highlightthickness=1,
+        self._canvas = tk.Canvas(
+            list_frame, bg=FIELD, highlightthickness=1,
             highlightbackground=BORDER, highlightcolor=ACCENT,
-            font=(getattr(parent, 'ui_font', FONT_FAMILY), FONT_SIZE_BASE),
-            activestyle='none',
+            borderwidth=0,
         )
-        self._list.grid(row=0, column=0, sticky='nsew')
-        scrollbar = ttk.Scrollbar(list_frame, orient='vertical', command=self._list.yview)
+        self._canvas.grid(row=0, column=0, sticky='nsew')
+        scrollbar = ttk.Scrollbar(list_frame, orient='vertical', command=self._canvas.yview)
         scrollbar.grid(row=0, column=1, sticky='ns')
-        self._list.configure(yscrollcommand=scrollbar.set)
-        self._list.bind('<Double-Button-1>', lambda _e: self._open_selected())
+        self._canvas.configure(yscrollcommand=scrollbar.set)
+        self._rows = ttk.Frame(self._canvas, style='Card.TFrame')
+        self._rows_window = self._canvas.create_window((0, 0), window=self._rows, anchor='nw')
+        self._rows.bind('<Configure>', lambda _e: self._canvas.configure(
+            scrollregion=self._canvas.bbox('all')))
+        self._canvas.bind('<Configure>', lambda e: self._canvas.itemconfigure(
+            self._rows_window, width=e.width))
+        self._canvas.bind('<Enter>', lambda _e: self._canvas.bind_all(
+            '<MouseWheel>', self._on_wheel))
+        self._canvas.bind('<Leave>', lambda _e: self._canvas.unbind_all('<MouseWheel>'))
+        # Windows-style context menu on right-click; tk.Menu unposts itself
+        # when the user clicks anywhere else, no manual hide needed.
+        self._canvas.bind('<Button-3>', self._popup_menu)
+        self._rows.bind('<Button-3>', self._popup_menu)
 
-        buttons = ttk.Frame(shell, style='Card.TFrame')
-        buttons.grid(row=4, column=0, sticky='ew')
-        ttk.Button(
-            buttons, text='เปิดตำแหน่งไฟล์', style='Secondary.TButton',
-            command=self._open_selected,
-        ).pack(side='left')
-        ttk.Button(
-            buttons, text='ลบที่เลือก', style='Secondary.TButton',
-            command=self._delete_selected,
-        ).pack(side='left', padx=(8, 0))
-        ttk.Button(
-            buttons, text='ลบทั้งหมด', style='Secondary.TButton',
-            command=self._delete_all,
-        ).pack(side='left', padx=(8, 0))
-        ttk.Button(
-            buttons, text='ปิด', style='DialogAccent.TButton',
-            command=self.destroy,
-        ).pack(side='right')
         self._render()
-        fade_in_window(self, self.after)
-        self.grab_set()
+
+    def refresh(self) -> None:
+        """Reload entries (called when the history view is shown)."""
+        self._render()
+
+    def _in_trash(self) -> bool:
+        return self._filter.get() == 'trash'
+
+    def _toggle_trash_filter(self) -> None:
+        self._filter.set('all' if self._in_trash() else 'trash')
+
+    def _sync_trash_button(self) -> None:
+        try:
+            if self._in_trash():
+                self._trash_button.set_fill(ACCENT_SOFT)
+            else:
+                self._trash_button.reset_fill()
+        except tk.TclError:
+            pass
 
     def _render(self) -> None:
         wanted = self._filter.get()
-        self._entries = [
-            entry for entry in load_history()
-            if wanted == 'all' or entry.kind == wanted
-        ]
-        self._list.delete(0, 'end')
-        for entry in self._entries:
-            missing = '' if Path(entry.target).is_file() else ' (ไฟล์หาย)'
-            self._list.insert('end', f'{entry.name}  •  {self._label(entry)}{missing}')
+        if self._in_trash():
+            self._entries = load_trash()
+        else:
+            self._entries = [
+                entry for entry in load_history()
+                if wanted == 'all' or entry.kind == wanted
+            ]
+        for child in self._rows.winfo_children():
+            child.destroy()
+        self._row_widgets = []
+        self._selected = None
+        if not self._entries:
+            empty_text = ('ถังขยะว่าง' if self._in_trash() else 'ยังไม่มีประวัติ')
+            ttk.Label(self._rows, text=empty_text, style='Muted.TLabel').pack(
+                anchor='w', padx=12, pady=12)
+        for index, entry in enumerate(self._entries):
+            try:
+                size_text = format_file_size(Path(entry.target).stat().st_size)
+                missing = False
+            except OSError:
+                size_text = '—'
+                missing = True
+            text = entry.name
+            if len(text) > 40:
+                text = text[:40] + '…'
+            row = tk.Frame(self._rows, bg=CARD)
+            row.pack(fill='x', padx=4, pady=1)
+            row.columnconfigure(0, weight=1)
+            for column, minsize in _HISTORY_COLUMN_MINSIZES.items():
+                row.grid_columnconfigure(column, minsize=minsize)
+            font = (getattr(self, 'ui_font', FONT_FAMILY), FONT_SIZE_BASE)
+            name_label = tk.Label(
+                row, text=text, bg=CARD, fg=MUTED if missing else TEXT,
+                font=font, anchor='w', justify='left', cursor='hand2',
+            )
+            name_label.grid(row=0, column=0, sticky='ew', padx=(8, 4), pady=7)
+            kind_label = tk.Label(
+                row, text=KIND_LABELS.get(entry.kind, entry.kind),
+                bg=CARD, fg=MUTED if missing else TEXT, font=font, anchor='w',
+            )
+            kind_label.grid(row=0, column=1, sticky='w', pady=7)
+            date_label = tk.Label(
+                row, text=self._date_text(entry), bg=CARD,
+                fg=MUTED if missing else TEXT, font=font, anchor='w',
+            )
+            date_label.grid(row=0, column=2, sticky='w', pady=7)
+            size_label = tk.Label(
+                row, text=size_text, bg=CARD, fg=MUTED, font=font, anchor='e',
+            )
+            size_label.grid(row=0, column=3, sticky='e', padx=(0, 4), pady=7)
+            cells = [name_label, kind_label, date_label, size_label]
+            for widget in [row, name_label, kind_label, date_label, size_label]:
+                widget.bind('<Button-1>', lambda _e, i=index: self._select_row(i))
+                widget.bind('<Button-3>', lambda e, i=index: self._popup_menu(e, i))
+            name_label.bind(
+                '<Double-Button-1>', lambda _e, i=index: self._open_row(i))
+            self._row_widgets.append((row, cells))
+        # Restore the entry the user picked (same session or a previous run).
+        restored = find_history_index(self._entries, self._selected_id)
+        if restored is not None:
+            self._select_row(restored, persist=False)
+        self._sync_trash_button()
+        try:
+            self._canvas.yview_moveto(0.0)
+        except tk.TclError:
+            pass
 
     @staticmethod
-    def _label(entry) -> str:
-        kind = KIND_LABELS.get(entry.kind, entry.kind)
+    def _date_text(entry) -> str:
         try:
-            when = datetime.fromtimestamp(entry.finished_at).strftime('%d/%m %H:%M')
+            return datetime.fromtimestamp(entry.finished_at).strftime('%d/%m %H:%M')
         except (OSError, OverflowError, ValueError):
-            when = ''
-        return f'{kind} {when}'.strip()
+            return ''
+
+    def _select_row(self, index: int, persist: bool = True) -> None:
+        self._selected = index
+        if persist:
+            if 0 <= index < len(self._entries):
+                self._selected_id = self._entries[index].id
+            else:
+                self._selected_id = None
+            save_selected_history_id(self._selected_id)
+        for i, (row, cells) in enumerate(self._row_widgets):
+            bg = ACCENT_SOFT if i == index else CARD
+            try:
+                row.configure(bg=bg)
+                for cell in cells:
+                    cell.configure(bg=bg)
+            except tk.TclError:
+                pass
+
+    def _on_wheel(self, event: tk.Event) -> None:
+        delta = int(getattr(event, 'delta', 0))
+        if delta:
+            self._canvas.yview_scroll(int(-delta / 120), 'units')
 
     def _selected_entry(self):
-        selection = self._list.curselection()
-        if not selection:
-            messagebox.showinfo('ประวัติ', 'เลือกหนึ่งรายการก่อน', parent=self)
+        if self._selected is None or self._selected >= len(self._entries):
+            messagebox.showinfo('ประวัติ', 'คลิกเลือกรายการก่อน', parent=self)
             return None
-        return self._entries[selection[0]]
+        return self._entries[self._selected]
 
     def _open_selected(self) -> None:
         entry = self._selected_entry()
@@ -2491,21 +2829,100 @@ class HistoryDialog(tk.Toplevel):
         except OSError as exc:
             messagebox.showerror('เปิดโฟลเดอร์ไม่สำเร็จ', str(exc), parent=self)
 
-    def _delete_selected(self) -> None:
-        entry = self._selected_entry()
-        if entry is None:
-            return
-        remove_entry(entry.id)
-        self._render()
+    def _open_row(self, index: int) -> None:
+        self._select_row(index)
+        self._open_selected()
 
-    def _delete_all(self) -> None:
-        if not self._entries and not load_history():
-            messagebox.showinfo('ประวัติ', 'ไม่มีประวัติให้ลบ', parent=self)
+    def _forget_selected_id(self, entry_id: str) -> None:
+        if self._selected_id == entry_id:
+            self._selected_id = None
+            save_selected_history_id(None)
+
+    def _delete_one(self, index: int) -> None:
+        if index >= len(self._entries):
             return
+        entry = self._entries[index]
         if messagebox.askyesno(
-            'ลบประวัติทั้งหมด',
-            'ลบประวัติทั้งหมด? (ไฟล์จริงไม่ถูกลบ)',
+            'ย้ายไปถังขยะ',
+            f'ย้าย “{entry.name}” ไปถังขยะ?\n(ไฟล์จริงไม่ถูกลบ กู้คืนได้ใน {TRASH_RETENTION_DAYS} วัน)',
             parent=self,
         ):
-            clear_history()
+            trash_entry(entry.id)
+            self._forget_selected_id(entry.id)
             self._render()
+
+    def _restore_one(self, index: int) -> None:
+        if index >= len(self._entries):
+            return
+        restore_entry(self._entries[index].id)
+        self._render()
+
+    def _delete_forever_one(self, index: int) -> None:
+        if index >= len(self._entries):
+            return
+        entry = self._entries[index]
+        if messagebox.askyesno(
+            'ลบถาวร',
+            f'ลบ “{entry.name}” ถาวร? (กู้คืนไม่ได้ แต่ไฟล์จริงไม่ถูกลบ)',
+            parent=self,
+        ):
+            remove_entry(entry.id)
+            self._forget_selected_id(entry.id)
+            self._render()
+
+    def _confirm_empty_trash(self) -> None:
+        if not load_trash():
+            messagebox.showinfo('ถังขยะ', 'ถังขยะว่าง', parent=self)
+            return
+        if messagebox.askyesno(
+            'ล้างถังขยะ',
+            'ลบถังขยะทั้งหมดถาวร? (กู้คืนไม่ได้ แต่ไฟล์จริงไม่ถูกลบ)',
+            parent=self,
+        ):
+            empty_trash()
+            self._render()
+    def _popup_menu(self, event: tk.Event, index: int | None = None) -> None:
+        """Right-click menu (dismisses itself on outside click, like Windows)."""
+        if index is not None:
+            self._select_row(index)
+        has_selection = (
+            self._selected is not None and self._selected < len(self._entries)
+        )
+        menu = tk.Menu(
+            self, tearoff=0, bg=MENU_BG, fg=TEXT,
+            activebackground=ACCENT, activeforeground=MENU_ACTIVE_FG,
+            font=(getattr(self, 'ui_font', FONT_FAMILY), 10),
+        )
+        if self._in_trash():
+            menu.add_command(
+                label='กู้คืนรายการนี้',
+                state='normal' if has_selection else 'disabled',
+                command=lambda: self._restore_one(self._selected or 0),
+            )
+            menu.add_command(
+                label='ลบถาวร…',
+                state='normal' if has_selection else 'disabled',
+                command=lambda: self._delete_forever_one(self._selected or 0),
+            )
+            menu.add_separator()
+            menu.add_command(label='ล้างถังขยะ…', command=self._confirm_empty_trash)
+        else:
+            menu.add_command(
+                label='เปิดโฟลเดอร์',
+                state='normal' if has_selection else 'disabled',
+                command=self._open_selected,
+            )
+            menu.add_command(
+                label='ลบรายการนี้…',
+                state='normal' if has_selection else 'disabled',
+                command=lambda: self._delete_one(self._selected or 0),
+            )
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        except tk.TclError:
+            pass
+        finally:
+            try:
+                menu.grab_release()
+            except tk.TclError:
+                pass

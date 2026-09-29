@@ -2,8 +2,12 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from clipora.history import HistoryEntry
 from clipora.ui import (
     destination_path,
+    find_clipora_uninstaller,
+    find_history_index,
+    format_debug_line,
     format_file_size,
     route_dropped_paths,
     source_summary,
@@ -44,6 +48,28 @@ class DestinationValidationTests(unittest.TestCase):
 
     def test_trimmed_destination_is_returned(self):
         self.assertEqual(destination_path('  C:\\Videos  '), Path('C:\\Videos'))
+
+
+class HistorySelectionTests(unittest.TestCase):
+    def make_entry(self, entry_id, target='out/a.mp3'):
+        return HistoryEntry(
+            id=entry_id, finished_at=0.0, kind='audio',
+            source_kind='url', name='a.mp3', target=target,
+        )
+
+    def test_finds_entry_by_id(self):
+        entries = [self.make_entry('a'), self.make_entry('b')]
+        self.assertEqual(find_history_index(entries, 'b'), 1)
+
+    def test_falls_back_to_target_path(self):
+        entries = [self.make_entry('a', target='out/a.mp3')]
+        self.assertEqual(find_history_index(entries, 'out/a.mp3'), 0)
+
+    def test_unknown_or_empty_selection_returns_none(self):
+        entries = [self.make_entry('a')]
+        self.assertIsNone(find_history_index(entries, 'missing'))
+        self.assertIsNone(find_history_index(entries, None))
+        self.assertIsNone(find_history_index([], 'a'))
 
 
 class DropRoutingTests(unittest.TestCase):
