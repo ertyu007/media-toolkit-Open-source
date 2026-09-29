@@ -1102,7 +1102,7 @@ class ToastManager:
         if rounded:
             self._rounded_rect(
                 canvas, 0, 0, width, height, radius,
-                fill=TOAST_BG, outline=BORDER)
+                fill=TOAST_BG, outline='')
         else:
             canvas.create_rectangle(
                 0, 0, width, height, fill=TOAST_BG, outline=BORDER)
