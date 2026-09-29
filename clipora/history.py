@@ -22,7 +22,7 @@ TRASH_RETENTION_DAYS = 30
 TRASH_RETENTION_SECONDS = TRASH_RETENTION_DAYS * 24 * 60 * 60
 
 KINDS = ('audio', 'video', 'stems')
-KIND_LABELS = {'audio': 'เพลง', 'video': 'วิดีโอ', 'stems': 'สเต็ม'}
+KIND_LABELS = {'audio': 'เพลง', 'video': 'วิดีโอ', 'stems': 'Stem'}
 
 
 @dataclass(frozen=True)

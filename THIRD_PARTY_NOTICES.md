@@ -34,9 +34,9 @@ Clipora เป็น GPL-3.0-only แต่ใช้หรือช่วยต�
 - Source: https://github.com/denoland/deno/tree/v2.8.1
 - License: https://github.com/denoland/deno/blob/v2.8.1/LICENSE.md
 
-## เครื่องมือแยกสเต็มเสียง (Stem Separation toolchain)
+## เครื่องมือแยก Stem เสียง (Stem Separation toolchain)
 
-ติดตั้งผ่านปุ่ม **เครื่องมือ** ในโหมดแยกสเต็มเสียง ไปยัง `%LOCALAPPDATA%\Clipora\tools\separator` โดยดาวน์โหลดผ่าน HTTPS ตรวจ SHA-256 ก่อนติดตั้งทุกไฟล์
+ติดตั้งผ่านปุ่ม **เครื่องมือ** ในโหมดแยก Stem เสียง ไปยัง `%LOCALAPPDATA%\Clipora\tools\separator` โดยดาวน์โหลดผ่าน HTTPS ตรวจ SHA-256 ก่อนติดตั้งทุกไฟล์
 
 ### Embedded Python 3.13.14
 

@@ -458,6 +458,16 @@ class RoundedCombobox(tk.Frame):
     _POP_PAD = 8
     _open_owner: "RoundedCombobox | None" = None  # at most one popup app-wide
 
+    @classmethod
+    def close_open(cls) -> None:
+        """Close the currently open popup, if any (never raises)."""
+        owner = cls._open_owner
+        if owner is not None:
+            try:
+                owner.close()
+            except tk.TclError:
+                pass
+
     def __init__(
         self,
         parent: tk.Misc,
@@ -480,6 +490,9 @@ class RoundedCombobox(tk.Frame):
         self._pop_canvas: tk.Canvas | None = None
         self._grab_prev: tk.Misc | None = None
         self._grabbed = False
+        self._watch_after: str | None = None
+        self._open_x = 0
+        self._open_y = 0
         family = font_family or getattr(parent, 'ui_font', FONT_FAMILY)
         self._family = family
         self._font = (family, font_size)
@@ -603,7 +616,7 @@ class RoundedCombobox(tk.Frame):
         )
         canvas.pack(fill='both', expand=True)
         _rounded_rect(
-            canvas, 0, 0, width, height, 12, fill=FIELD, outline=BORDER)
+            canvas, 0, 0, width, height, 12, fill=FIELD, outline='')
         current = self._variable.get() if self._variable is not None else None
         self._hover = (
             self._values.index(current) if current in self._values else 0)
@@ -632,6 +645,31 @@ class RoundedCombobox(tk.Frame):
         except tk.TclError:
             self._grabbed = False
         RoundedCombobox._open_owner = self
+        try:
+            self._open_x = self._canvas.winfo_rootx()
+            self._open_y = self._canvas.winfo_rooty()
+        except tk.TclError:
+            self._open_x, self._open_y = 0, 0
+        self._watch_position()
+
+    def _watch_position(self) -> None:
+        """Close the popup if the parent window moved/scrolled underneath it."""
+        if self._popup is None:
+            self._watch_after = None
+            return
+        try:
+            x = self._canvas.winfo_rootx()
+            y = self._canvas.winfo_rooty()
+        except tk.TclError:
+            self.close()
+            return
+        if abs(x - self._open_x) > 2 or abs(y - self._open_y) > 2:
+            self.close()
+            return
+        try:
+            self._watch_after = self.after(80, self._watch_position)
+        except tk.TclError:
+            self._watch_after = None
 
     def _on_popup_button(self, event: tk.Event) -> None:
         """Dismiss when a (grab-redirected) click lands outside the popup."""
@@ -665,8 +703,8 @@ class RoundedCombobox(tk.Frame):
         for index, value in enumerate(self._values):
             top = self._POP_PAD + index * self._ROW_H
             if index == self._hover:
-                _rounded_rect(
-                    canvas, 4, top + 2, width - 4, top + self._ROW_H - 2, 8,
+                canvas.create_rectangle(
+                    2, top + 2, width - 2, top + self._ROW_H - 2,
                     fill=ACCENT, outline='', tags=('row',))
                 fg = '#ffffff'
             else:
@@ -716,6 +754,12 @@ class RoundedCombobox(tk.Frame):
         self._hover = -1
         grabbed, self._grabbed = self._grabbed, False
         prev, self._grab_prev = self._grab_prev, None
+        watch, self._watch_after = self._watch_after, None
+        if watch is not None:
+            try:
+                self.after_cancel(watch)
+            except tk.TclError:
+                pass
         if RoundedCombobox._open_owner is self:
             RoundedCombobox._open_owner = None
         if popup is not None:

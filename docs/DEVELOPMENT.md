@@ -156,7 +156,7 @@ Manual GUI checks ที่ unit test แทนไม่ได้:
 
 - ช่องกรอก `start_time_entry`/`duration_entry` ใน `ui.py` snapshot เป็น `JobSpec.trim_start/trim_duration` (วินาที) ก่อนเริ่ม worker
 - `parse_trim_seconds()` รับวินาที/`MM:SS`/`HH:MM:SS` ค่าว่างคือไม่ตัด, `normalize_trim()` เทียบกับ duration จาก probe (จุดเริ่มเกินไฟล์ = error, ระยะเวลาเกิน = clamp) และคืน effective duration ให้ progress
-- งาน URL/stems ยังไม่รองรับ trim (ต้องตัดหลังดาวน์โหลด/ก่อนแยกสเต็ม) — ถ้าจะเพิ่มให้เริ่มจาก core + test ก่อนต่อ UI
+- งาน URL/stems ยังไม่รองรับ trim (ต้องตัดหลังดาวน์โหลด/ก่อนแยก Stem) — ถ้าจะเพิ่มให้เริ่มจาก core + test ก่อนต่อ UI
 
 ### Batch
 

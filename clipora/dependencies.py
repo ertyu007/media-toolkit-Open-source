@@ -765,11 +765,11 @@ def _verify_separator_install(root: Path) -> None:
     demucs_package = root / 'python' / 'site-packages' / 'demucs'
     model = root / 'models' / 'htdemucs_6s.th'
     if not python_exe.is_file():
-        raise DependencyInstallError('ไม่พบ python.exe หลังจากติดตั้งเครื่องมือแยกสเต็ม')
+        raise DependencyInstallError('ไม่พบ python.exe หลังจากติดตั้งเครื่องมือแยก Stem')
     if not demucs_package.is_dir():
-        raise DependencyInstallError('ไม่พบแพ็กเกจ demucs หลังจากติดตั้งเครื่องมือแยกสเต็ม')
+        raise DependencyInstallError('ไม่พบแพ็กเกจ demucs หลังจากติดตั้งเครื่องมือแยก Stem')
     if not model.is_file():
-        raise DependencyInstallError('ไม่พบโมเดลแยกสเต็มหลังจากติดตั้ง')
+        raise DependencyInstallError('ไม่พบโมเดลแยก Stem หลังจากติดตั้ง')
 
 
 def install_separator_toolchain(
@@ -806,7 +806,7 @@ def install_separator_toolchain(
             completed += spec.expected_bytes
             installed.append(spec)
         _check_cancelled(cancel_event)
-        callback(0.96, 'กำลังติดตั้งเครื่องมือแยกสเต็ม…')
+        callback(0.96, 'กำลังติดตั้งเครื่องมือแยก Stem…')
         replacements: list[tuple[Path, Path]] = []
         for spec in installed:
             for destination_name in spec.destination_names:
@@ -823,7 +823,7 @@ def install_separator_toolchain(
             handled_targets.append(target)
         _verify_separator_install(root)
         _write_install_record(root, installed)
-    callback(1.0, 'ติดตั้งเครื่องมือแยกสเต็มเรียบร้อย')
+    callback(1.0, 'ติดตั้งเครื่องมือแยก Stem เรียบร้อย')
     return tuple(installed)
 
 

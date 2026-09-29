@@ -158,10 +158,10 @@ from .sound import play_completion_chime
 
 AUDIO_FORMAT_LABELS = ('MP3', 'M4A', 'WAV', 'FLAC', 'OPUS')
 AUDIO_FORMAT_VALUES = {'MP3': 'mp3', 'M4A': 'm4a', 'WAV': 'wav', 'FLAC': 'flac', 'OPUS': 'opus'}
-VIDEO_FORMAT_LABELS = ('MP4  •  เล่นได้ทั่วไป', 'MOV  •  ProRes (After Effects)')
+VIDEO_FORMAT_LABELS = ('MP4  •  เล่นได้ทั่วไป', 'MOV  •  ProRes')
 VIDEO_FORMAT_VALUES = {
     'MP4  •  เล่นได้ทั่วไป': 'mp4',
-    'MOV  •  ProRes (After Effects)': 'mov',
+    'MOV  •  ProRes': 'mov',
 }
 FPS_LABELS = ('สูงสุด', '60fps', '30fps')
 FPS_VALUES = {'สูงสุด': 'สูงสุด', '60fps': '60', '30fps': '30'}
@@ -173,7 +173,7 @@ PROGRESS_PHASES = {
     'downloading': 'กำลังดาวน์โหลด…',
     'extracting': 'กำลังแยกเสียง…',
     'converting': 'กำลังแปลงวิดีโอ…',
-    'separating': 'กำลังแยกสเต็ม…',
+    'separating': 'กำลังแยก Stem…',
     'finalizing': 'กำลังบันทึกไฟล์…',
     'done': 'เสร็จสิ้น',
     'error': 'เกิดข้อผิดพลาด',
@@ -871,7 +871,7 @@ class CliporaApp(tk.Tk):
             options=[
                 ('audio', 'แยกเสียง'),
                 ('video', 'แปลงเป็นวิดีโอ'),
-                ('stems', 'แยกสเต็มเสียง'),
+                ('stems', 'แยก Stem เสียง'),
             ],
             variable=self.mode,
             command=self._on_mode_change,
@@ -1036,7 +1036,7 @@ class CliporaApp(tk.Tk):
         self._stems_options = ttk.Frame(fmt_body, style='TFrame')
         self._stems_options.grid(row=1, column=0, sticky='ew', pady=(12, 0))
         self._stems_options.columnconfigure(0, weight=1)
-        ttk.Label(self._stems_options, text='สเต็มที่ต้องการ', style='ModeDesc.TLabel').grid(
+        ttk.Label(self._stems_options, text='Stem ที่ต้องการ', style='ModeDesc.TLabel').grid(
             row=0, column=0, sticky='w',
         )
         self._stem_check_widgets: list[Switch] = []
@@ -1071,7 +1071,7 @@ class CliporaApp(tk.Tk):
             width=12,
         )
         self.quality_box.grid(row=0, column=1, sticky='w')
-        self.fps_label = ttk.Label(self._details_box, text='เฟรมเรต', style='ModeDesc.TLabel')
+        self.fps_label = ttk.Label(self._details_box, text='FPS', style='ModeDesc.TLabel')
         self.fps_label.grid(row=0, column=2, padx=(16, 8), sticky='e')
         self.fps_box = RoundedCombobox(
             self._details_box, textvariable=self.fps, values=FPS_LABELS,
@@ -1724,7 +1724,7 @@ class CliporaApp(tk.Tk):
             self.format_box.grid()
             self.option_label.configure(text='รูปแบบเสียง')
             self.mode_desc.set('แยกเสียงร้อง/ดนตรีบนเครื่อง (ติดตั้งเครื่องมือครั้งแรกครั้งเดียว)')
-            action_text = 'ดาวน์โหลดและแยกสเต็ม' if is_url else 'เริ่มแยกสเต็ม'
+            action_text = 'ดาวน์โหลดและแยก Stem' if is_url else 'เริ่มแยก Stem'
         elif self.mode.get() == 'audio':
             self.video_format_box.grid_remove()
             self.quality_label.grid_remove()
@@ -1747,7 +1747,7 @@ class CliporaApp(tk.Tk):
             self.quality_box.grid()
             self.fps_label.grid()
             self.fps_box.grid()
-            self.mode_desc.set('แปลงเป็น MP4/MOV พร้อมคุมคุณภาพและเฟรมเรต')
+            self.mode_desc.set('แปลงเป็น MP4/MOV พร้อมคุมคุณภาพและ FPS')
             if is_url:
                 self.quality_box.configure(values=VIDEO_QUALITIES)
                 if self.quality.get() not in VIDEO_QUALITIES:
@@ -1782,7 +1782,7 @@ class CliporaApp(tk.Tk):
         """Locked option clicked (stems without separator tools): offer install."""
         self._debug(f'โหมดถูกล็อก ต้องติดตั้งเครื่องมือก่อน: {value}')
         if hasattr(self, '_toast'):
-            self._toast.show('แยกสเต็มเสียงต้องติดตั้งเครื่องมือก่อน', 'info')
+            self._toast.show('แยก Stem เสียงต้องติดตั้งเครื่องมือก่อน', 'info')
         self._open_tool_setup(separator=True)
 
     def _sync_mode_lock(self) -> None:
@@ -2242,7 +2242,7 @@ class CliporaApp(tk.Tk):
         mode = self.mode.get()
         if mode == 'stems':
             picked = [STEM_LABELS[s] for s, var in self.stem_vars.items() if var.get()]
-            return f'สเต็ม {self._audio_format_value()} [{", ".join(picked)}]'
+            return f'Stem {self._audio_format_value()} [{", ".join(picked)}]'
         if mode == 'audio':
             return f'เสียง {self.audio_format.get()}'
         return (f'วิดีโอ {self.video_format.get()} '
@@ -2364,7 +2364,7 @@ class CliporaApp(tk.Tk):
             self._open_tool_setup()
             return
         if not separator_installed():
-            self.status.set('ต้องติดตั้งเครื่องมือแยกสเต็มก่อนเริ่มงาน')
+            self.status.set('ต้องติดตั้งเครื่องมือแยก Stem ก่อนเริ่มงาน')
             self._open_tool_setup(separator=True)
             return
         stems = self._selected_stems()
@@ -2448,7 +2448,7 @@ class CliporaApp(tk.Tk):
             self._open_tool_setup()
             return
         if not separator_installed():
-            self.status.set('ต้องติดตั้งเครื่องมือแยกสเต็มก่อนเริ่มงาน')
+            self.status.set('ต้องติดตั้งเครื่องมือแยก Stem ก่อนเริ่มงาน')
             self._open_tool_setup(separator=True)
             return
         stems = self._selected_stems()
@@ -2798,6 +2798,10 @@ class CliporaApp(tk.Tk):
         threading.Thread(target=cancellation.cancel, daemon=True).start()
 
     def _on_close(self) -> None:
+        try:
+            RoundedCombobox.close_open()
+        except (tk.TclError, AttributeError):
+            pass
         cancellation = self._cancellation
         if cancellation is None:
             self.destroy()
@@ -2855,7 +2859,7 @@ class DisclaimerDialog(tk.Toplevel):
         text.configure(state='disabled')
         close = ttk.Button(
             shell,
-            text='close',
+            text='ปิด',
             style='Accent.TButton',
             command=self.destroy,
         )
@@ -3013,7 +3017,7 @@ class HistoryPanel(ttk.Frame):
                 ('all', 'ทั้งหมด'),
                 ('audio', 'เพลง'),
                 ('video', 'วิดีโอ'),
-                ('stems', 'สเต็ม'),
+                ('stems', 'Stem'),
             ],
             variable=self._filter,
             command=lambda _value: self._render(),

@@ -19,7 +19,7 @@ THEME_LABELS = {'เข้ม': 'dark', 'อ่อน': 'light', 'ตามร�
 MODE_LABELS = {
     'แยกเสียง': 'audio',
     'แปลงเป็นวิดีโอ': 'video',
-    'แยกสเต็มเสียง': 'stems',
+    'แยก Stem เสียง': 'stems',
 }
 
 
@@ -71,14 +71,32 @@ class SettingsDialog(tk.Toplevel):
         shell = ttk.Frame(self, padding=(28, 22, 28, 20))
         shell.pack(fill='both', expand=True)
         shell.columnconfigure(0, weight=1)
-        shell.rowconfigure(3, weight=1)
+        shell.rowconfigure(1, weight=1)
 
         ttk.Label(shell, text='ตั้งค่า', style='Heading.TLabel').grid(
             row=0, column=0, sticky='w', pady=(0, 14))
 
-        body = ttk.Frame(shell, style='TFrame')
-        body.grid(row=1, column=0, sticky='nsew')
+        scroll_wrap = ttk.Frame(shell, style='TFrame')
+        scroll_wrap.grid(row=1, column=0, sticky='nsew')
+        scroll_wrap.columnconfigure(0, weight=1)
+        scroll_wrap.rowconfigure(0, weight=1)
+        self._body_canvas = tk.Canvas(
+            scroll_wrap, bg=BG, highlightthickness=0, borderwidth=0)
+        self._body_canvas.grid(row=0, column=0, sticky='nsew')
+        body_scroll = ttk.Scrollbar(
+            scroll_wrap, orient='vertical', command=self._body_canvas.yview)
+        body_scroll.grid(row=0, column=1, sticky='ns')
+        self._body_canvas.configure(yscrollcommand=self._scroll_set(body_scroll))
+        body = ttk.Frame(self._body_canvas, style='TFrame')
+        self._body_window = self._body_canvas.create_window(
+            (0, 0), window=body, anchor='nw')
         body.columnconfigure(1, weight=1)
+        body.bind('<Configure>', lambda _e: self._body_canvas.configure(
+            scrollregion=self._body_canvas.bbox('all')))
+        self._body_canvas.bind('<Configure>', self._fit_body_width)
+        self._body_canvas.bind('<Enter>', lambda _e: self.bind_all(
+            '<MouseWheel>', self._on_body_wheel, add='+'))
+        self._body_canvas.bind('<Leave>', lambda _e: self.unbind_all('<MouseWheel>'))
 
         self._section(body, 'ทั่วไป', 0)
         self._combo_row(
@@ -102,7 +120,7 @@ class SettingsDialog(tk.Toplevel):
             body, 8, 'คุณภาพ', self._quality,
             self._qualities or ('Balanced',), width=18)
         self._combo_row(
-            body, 9, 'เฟรมเรต', self._fps,
+            body, 9, 'FPS', self._fps,
             self._fps_options or ('สูงสุด',), width=18)
         ttk.Label(body, text='โฟลเดอร์บันทึก', style='Muted.TLabel').grid(
             row=10, column=0, columnspan=2, sticky='w', pady=(8, 2))
@@ -123,7 +141,7 @@ class SettingsDialog(tk.Toplevel):
         ).grid(row=13, column=0, columnspan=2, sticky='w', pady=(2, 0))
         ttk.Label(
             body,
-            text='แยกเสียง • แปลงวิดีโอ • แยกสเต็ม ทำในเครื่อง ไม่ต้องสมัครสมาชิก',
+            text='แยกเสียง • แปลงวิดีโอ • แยก Stem เสียง ทำในเครื่อง ไม่ต้องสมัครสมาชิก',
             style='Muted.TLabel', wraplength=500, justify='left',
         ).grid(row=14, column=0, columnspan=2, sticky='w')
         ttk.Label(
@@ -139,7 +157,7 @@ class SettingsDialog(tk.Toplevel):
         ).pack(side='right')
 
         actions = ttk.Frame(shell, style='TFrame')
-        actions.grid(row=4, column=0, sticky='e', pady=(16, 0))
+        actions.grid(row=2, column=0, sticky='e', pady=(16, 0))
         ttk.Button(
             actions, text='ยกเลิก', style='Secondary.TButton',
             command=self._cancel,
@@ -156,6 +174,36 @@ class SettingsDialog(tk.Toplevel):
     def _uninstall(self) -> None:
         if self._on_uninstall is not None:
             self._on_uninstall()
+
+    def _scroll_set(self, scrollbar: ttk.Scrollbar):
+        """Hide the scrollbar when everything fits (like the main view)."""
+        def _set(first: str, last: str) -> None:
+            scrollbar.set(first, last)
+            try:
+                if float(first) <= 0.0 and float(last) >= 1.0:
+                    scrollbar.grid_remove()
+                else:
+                    scrollbar.grid()
+            except (tk.TclError, ValueError):
+                pass
+        return _set
+
+    def _fit_body_width(self, event: tk.Event) -> None:
+        try:
+            self._body_canvas.itemconfigure(self._body_window, width=event.width)
+        except tk.TclError:
+            pass
+
+    def _on_body_wheel(self, event: tk.Event) -> None:
+        try:
+            delta = int(getattr(event, 'delta', 0))
+        except (TypeError, ValueError):
+            return
+        if delta:
+            try:
+                self._body_canvas.yview_scroll(int(-delta / 120), 'units')
+            except tk.TclError:
+                pass
 
     def _section(self, parent: ttk.Frame, title: str, row: int) -> None:
         ttk.Label(parent, text=title, style='SectionTitle.TLabel').grid(
@@ -183,7 +231,14 @@ class SettingsDialog(tk.Toplevel):
         if path:
             self._destination.set(path)
 
+    def _close_popups(self) -> None:
+        try:
+            RoundedCombobox.close_open()
+        except (tk.TclError, AttributeError):
+            pass
+
     def _save(self) -> None:
+        self._close_popups()
         self.result = {
             'theme': THEME_LABELS.get(self._theme.get(), 'system'),
             'chime': bool(self._chime.get()),
@@ -202,6 +257,7 @@ class SettingsDialog(tk.Toplevel):
         self.destroy()
 
     def _cancel(self) -> None:
+        self._close_popups()
         self.result = None
         try:
             self.grab_release()

@@ -196,7 +196,7 @@ class ToolSetupDialog(tk.Toplevel):
                 'ตัวช่วยนี้จะเตรียม FFmpeg, yt-dlp และ Deno สำหรับดาวน์โหลด '
                 'แยกเสียง และแปลงวิดีโอบนเครื่องของคุณ'
                 + (
-                    '\nและจะติดตั้งเครื่องมือแยกสเต็มเสียง AI (Demucs + PyTorch) '
+                    '\nและจะติดตั้งเครื่องมือแยก Stem เสียง AI (Demucs + PyTorch) '
                     'สำหรับแยกเสียงร้องและดนตรีประกอบ'
                     if self._separator
                     else ''
@@ -301,7 +301,7 @@ class ToolSetupDialog(tk.Toplevel):
             sep_ok = separator_installed()
             rows.append((
                 sep_ok,
-                'แยกสเต็มเสียง (Demucs)',
+                'แยก Stem เสียง (Demucs)',
                 'พร้อมใช้งาน' if sep_ok else 'ยังไม่ติดตั้ง (ไม่บังคับ, ~209 MB)',
             ))
             for index, (ok, name, detail) in enumerate(rows):
@@ -334,16 +334,28 @@ class ToolSetupDialog(tk.Toplevel):
 
     def _build_review(self) -> None:
         card = self._page_card()
+        card.rowconfigure(1, weight=1)
         ttk.Label(card, text='พร้อมติดตั้ง', style='Section.TLabel').grid(
             row=0, column=0, sticky='w'
         )
         rows = dependency_rows(self._selected)
-        ttk.Label(
-            card,
-            text='\n'.join(f'✓  {row}' for row in rows),
-            style='Card.TLabel',
-            justify='left',
-        ).grid(row=1, column=0, sticky='w', pady=(14, 14))
+        list_frame = tk.Frame(card, bg=CARD)
+        list_frame.grid(row=1, column=0, sticky='nsew', pady=(14, 14))
+        list_frame.columnconfigure(0, weight=1)
+        list_frame.rowconfigure(0, weight=1)
+        dep_text = tk.Text(
+            list_frame, height=10, wrap='none', state='disabled',
+            bg=CARD, fg=TEXT, relief='flat', borderwidth=0,
+            highlightthickness=0, font=(FONT_FAMILY, 10),
+        )
+        dep_text.grid(row=0, column=0, sticky='nsew')
+        dep_scroll = ttk.Scrollbar(
+            list_frame, orient='vertical', command=dep_text.yview)
+        dep_scroll.grid(row=0, column=1, sticky='ns')
+        dep_text.configure(yscrollcommand=dep_scroll.set)
+        dep_text.configure(state='normal')
+        dep_text.insert('1.0', '\n'.join(f'✓  {row}' for row in rows))
+        dep_text.configure(state='disabled')
         ttk.Label(
             card,
             text=(

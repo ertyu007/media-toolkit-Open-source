@@ -122,7 +122,7 @@ def separator_environment(max_threads: int | None = None) -> dict[str, str]:
 def build_separate_command(source: Path, out_dir: Path) -> list[str]:
     python = find_separator_python()
     if python is None:
-        raise SeparatorNotInstalled('ยังไม่ได้ติดตั้งเครื่องมือแยกสเต็มเสียง กรุณาติดตั้งก่อน')
+        raise SeparatorNotInstalled('ยังไม่ได้ติดตั้งเครื่องมือแยก Stem เสียง กรุณาติดตั้งก่อน')
     return [
         str(python),
         '-m',
@@ -215,7 +215,7 @@ def create_stems_zip(
     cancellation: CancellationToken,
 ) -> Path:
     temporary = temporary_output_path(target)
-    on_phase('กำลังอัดไฟล์สเต็มเป็น zip…')
+    on_phase('กำลังอัดไฟล์ Stem เป็น zip…')
     members = list(outputs)
     span = (1.0 - _PROGRESS_PHASE_SEPARATE) / max(len(members), 1)
     try:
@@ -286,11 +286,11 @@ def _elapsed_text(started: float) -> str:
 
 
 def _separating_message(progress: float, started: float) -> str:
-    return f'กำลังแยกสเต็ม… {progress * 100:.0f}% (ผ่านไป {_elapsed_text(started)})'
+    return f'กำลังแยก Stem… {progress * 100:.0f}% (ผ่านไป {_elapsed_text(started)})'
 
 
 def _fallback_message(started: float) -> str:
-    return f'กำลังแยกสเต็ม… (ผ่านไป {_elapsed_text(started)})'
+    return f'กำลังแยก Stem… (ผ่านไป {_elapsed_text(started)})'
 
 
 def _run_demucs(
@@ -350,7 +350,7 @@ def _run_demucs(
         raise ConversionCancelled('ยกเลิกงานแล้ว')
     if return_code != 0:
         detail = '\n'.join(diagnostics)
-        raise SeparatorError(detail or f'การแยกสเต็มเสียงหยุดทำงานด้วยรหัส {return_code}')
+        raise SeparatorError(detail or f'การแยก Stem เสียงหยุดทำงานด้วยรหัส {return_code}')
 
 
 def _resolve_target(
@@ -406,7 +406,7 @@ def _finalize_stems(
         if cancellation.cancelled:
             raise ConversionCancelled('ยกเลิกงานแล้ว')
         if not wav.is_file() or wav.stat().st_size == 0:
-            raise SeparatorError(f'ไม่พบไฟล์สเต็ม {stem} จากการแยกเสียง')
+            raise SeparatorError(f'ไม่พบไฟล์ Stem {stem} จากการแยกเสียง')
         target = targets[stem]
         temporary = temporary_output_path(target)
 
@@ -443,11 +443,11 @@ def separate_audio(
     selected = tuple(dict.fromkeys(stems)) if stems else SELECTABLE_STEMS
     unsupported = [stem for stem in selected if stem not in STEM_LABELS]
     if unsupported:
-        raise ValueError(f'ไม่รองรับสเต็ม: {", ".join(unsupported)}')
+        raise ValueError(f'ไม่รองรับ Stem: {", ".join(unsupported)}')
     if audio_format.lower() not in AUDIO_FORMATS:
         raise ValueError(f'ไม่รองรับรูปแบบเสียง: {audio_format}')
     if not separator_installed():
-        raise SeparatorNotInstalled('ยังไม่ได้ติดตั้งเครื่องมือแยกสเต็มเสียง กรุณาติดตั้งก่อน')
+        raise SeparatorNotInstalled('ยังไม่ได้ติดตั้งเครื่องมือแยก Stem เสียง กรุณาติดตั้งก่อน')
     info = probe(source)
     validate_operation(info, 'audio')
 
@@ -468,7 +468,7 @@ def separate_audio(
     try:
         demucs_dir = workspace / 'stems'
         demucs_dir.mkdir()
-        on_phase('กำลังโหลดโมเดลแยกสเต็ม…')
+        on_phase('กำลังโหลดโมเดลแยก Stem…')
         on_progress(0.03)
         _run_demucs(build_separate_command(source, demucs_dir), separator_environment(), token, on_phase, on_progress)
         stem_dir = demucs_dir / SEPARATOR_MODEL

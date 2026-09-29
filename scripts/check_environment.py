@@ -121,8 +121,8 @@ def check_separator() -> CheckResult:
     from clipora.separator import separator_installed
 
     if separator_installed():
-        return CheckResult('สเต็มเสียง (Demucs)', True, 'พร้อมใช้งาน (Demucs 4.1.0)')
-    return CheckResult('สเต็มเสียง (Demucs)', True, 'ยังไม่ได้ติดตั้ง (ไม่บังคับ)')
+        return CheckResult('Stem เสียง (Demucs)', True, 'พร้อมใช้งาน (Demucs 4.1.0)')
+    return CheckResult('Stem เสียง (Demucs)', True, 'ยังไม่ได้ติดตั้ง (ไม่บังคับ)')
 
 
 def run_checks() -> list[CheckResult]:

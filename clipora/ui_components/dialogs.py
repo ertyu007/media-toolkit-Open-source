@@ -11,15 +11,10 @@ from .format import format_file_size
 from .motion import fade_in_window
 from .theme import (
     ACCENT,
-    ACCENT_HOVER,
-    BG,
     BORDER,
     CARD,
-    DISABLED_FG,
-    ERROR,
     FIELD,
     FONT_FAMILY,
-    MUTED,
     TEXT,
 )
 

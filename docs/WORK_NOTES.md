@@ -1,8 +1,26 @@
-# บันทึกงาน (Work Notes) — ฟีเจอร์แยกสเต็มเสียง (Stem Separation) + อัปเดต yt-dlp
+# บันทึกงาน (Work Notes) — ฟีเจอร์แยก Stem เสียง (Stem Separation) + อัปเดต yt-dlp
 
-อัปเดตล่าสุด: 2026-09-28
+อัปเดตล่าสุด: 2026-09-29
 
-## ทำวันนี้ (2026-09-28) — toast มินิมอล (ยังไม่ bump version)
+## ทำวันนี้ (2026-09-29) — คำศัพท์ UI: Stem/FPS + ปิด popup ค้าง (ยังไม่ bump version)
+
+- **ศัพท์เฉพาะเป็นอังกฤษ**: `สเต็ม` → `Stem` (โหมด/ป้าย/history/สถานะ/error), `เฟรมเรต` → `FPS` (ป้ายอย่างเดียว ค่า `60fps/30fps` คงเดิมกัน settings เก่าเด้ง); ซ่อมคำตก `close` → `ปิด`, คีย์ `MP4 • Normal` → ตรงป้าย, ข้อความ about เติม `เสียง`
+- **dropdown ไม่ค้าง**: `RoundedCombobox` ปิด popup เองเมื่อหน้าต่างขยับ/สกรอลล์ (เช็คตำแหน่งทุก 80ms) + ปิด popup ก่อนปิดหน้าต่างเสมอ (`SettingsDialog`, หน้าหลัก)
+- **Docs**: README/USER_GUIDE/THIRD_PARTY_NOTICES ตาม UI แล้ว
+- **Tests**: `compileall` + full suite ผ่าน (266, skip 4 — เน็ต/Demucs)
+
+## ทำวันนี้ (2026-09-28) — scroll + dropdown แบน (ยังไม่ bump version)
+
+- **หน้ารีวิวติดตั้ง**: รายการ dependency ยาวล้นการ์ด → เปลี่ยนเป็น `tk.Text` อ่านอย่างเดียว + scrollbar (เลื่อนดูได้, scrollbar ซ่อนเองถ้าพอ)
+- **ตั้งค่า scroll**: เนื้อหา popup ย้ายเข้า canvas+scrollbar (scrollbar ซ่อนเองถ้าพอ, ลูกกลิ้งเมาส์ใช้ได้) ปุ่มยกเลิก/บันทึกค้างล่างเสมอ
+- **dropdown แบน**: popup เอาเส้นขอบออก + แถวไฮไลต์สี่เหลี่ยมเต็มแถบ (เลิกวงมน)
+- **Tests**: full suite รอรอบนี้ (scroll/popup ต้องจอจริง — smoke เปิด/เลือก/เลื่อนผ่าน)
+
+## ทำวันนี้ (2026-09-28) — toast มนชัด + ตรวจซาก (ยังไม่ bump version)
+
+- **มนชัด**: radius 8→14 (ของเดิมเนียนจนดูเหลี่ยม), พื้นเรียบอยู่แล้ว (แถบสี+ข้อความ ไม่มีขอบ)
+- **เก็บซาก**: ลบ style `Toast.TFrame` + import ไม่ใช้ 6 ตัว (`TOAST_BG` ใน ui, 5 ตัวใน dialogs)
+- **Tests**: full suite ผ่าน; smoke ยืนยัน transparentcolor ทำงาน
 
 - **ตามวง**: ถอดวงไอคอน + ปุ่ม ✕ ออก เหลือแถบสี+ข้อความ กดตรงไหนก็ปิด (หมดเวลาแล้วหายเองเหมือนเดิม)
 - **เหลี่ยม**: เลิก fade `-alpha` (สงสัยตีกับ `-transparentcolor` จนมุมไม่โปร่งใส) เหลือสไลด์อย่างเดียว
@@ -20,9 +38,9 @@
 - **toast ในภาพคือของเก่า**: โค้ดปัจจุบันเป็น canvas มนแล้ว (smoke นับ 15 items) — ผู้ใช้รัน build เก่าอยู่
 - **Tests**: full suite รอรอบนี้ (popup ต้องจอจริง — smoke เปิด/เลือก/ปิดผ่าน); `USER_GUIDE` ไม่ต้องแก้ (พฤติกรรมผู้ใช้เหมือนเดิม)
 
-## ทำวันนี้ (2026-09-28) — โหมดแยกปุ่มมีล็อกสเต็ม (ยังไม่ bump version)
+## ทำวันนี้ (2026-09-28) — โหมดแยกปุ่มมีล็อก Stem (ยังไม่ bump version)
 
-- **แยกปุ่ม+ล็อก**: `SegmentedControl` รับ `gap` (ปุ่มแยกเป็นลูกๆ แต่ pill เลือกยังสไลด์ข้ามทั้งแถวเหมือนเดิม) + `locked`/`on_locked` (ติ๊ก 🔒 เทา กดแล้วไม่เปลี่ยนโหมด); hero ใช้ `gap=8` ล็อก `stems` จนกว่า `separator_installed()` กดตอนล็อกพาไปติดตั้งชุดแยกสเต็ม; รีเฟรชล็อกใน `_sync_options` + `_tools_ready`
+- **แยกปุ่ม+ล็อก**: `SegmentedControl` รับ `gap` (ปุ่มแยกเป็นลูกๆ แต่ pill เลือกยังสไลด์ข้ามทั้งแถวเหมือนเดิม) + `locked`/`on_locked` (ติ๊ก 🔒 เทา กดแล้วไม่เปลี่ยนโหมด); hero ใช้ `gap=8` ล็อก `stems` จนกว่า `separator_installed()` กดตอนล็อกพาไปติดตั้งชุดแยก Stem; รีเฟรชล็อกใน `_sync_options` + `_tools_ready`
 - **Tests**: `test_segmented.py` ใหม่ (math ล้วน ไม่ต้องจอ: layout/hit/edge); `USER_GUIDE` §3 sync ตามจริง
 
 - **เอาออกเหมือนกัน**: ถอดปุ่ม 🗑 ท้ายแถวโหมดปกติด้วย (ถังขยะถอดไปก่อนแล้ว) ลบทุกอย่างผ่านคลิกขวาอย่างเดียว + ลบคอลัมน์ actions/`_history_header` ที่ตายตาม
@@ -53,7 +71,7 @@
 - **Tests**: full suite รอรอบนี้; `USER_GUIDE` §3 sync ตามจริง
 
 - **ตัดซ้ำตามฟีดแบ็ก**: ถอดปุ่ม `ตรวจหาการอัปเดต` ใน popup (มีใน sidebar แล้ว), ถอด `auto_debug` ทั้งยวง (setting/var/hook/dialog เทสอัปเดตตาม, ค่าเก่าในไฟล์ถูกล้างตอนบันทึก)
-- **debug เปิดค้าง**: ถอดปุ่มกาง/พับ + `_debug_visible` กล่อง 6 บรรทัดอยู่ถาวร; เนื้อละเอียดขึ้น — พารามิเตอร์งานเต็ม (`โหมด/แหล่ง/ต้นฉบับ/ปลายทาง/รูปแบบ/คุณภาพ/fps/สเต็ม`), ผลรวมขนาด, ชื่อไฟล์ทุกประวัติ, พรีวิว (ชื่อ/ช่อง/เวลา), ลากวาง, บันทึกตั้งค่า, ประวัติถังขยะทุกแอ็กชัน, สถานะเครื่องมือทีละตัว, ผลตรวจอัปเดต; ตัดซ้ำ (`_done`/`_done_stems` เหลือ phase+ผลรวม+ชื่อประวัติ)
+- **debug เปิดค้าง**: ถอดปุ่มกาง/พับ + `_debug_visible` กล่อง 6 บรรทัดอยู่ถาวร; เนื้อละเอียดขึ้น — พารามิเตอร์งานเต็ม (`โหมด/แหล่ง/ต้นฉบับ/ปลายทาง/รูปแบบ/คุณภาพ/fps/Stem`), ผลรวมขนาด, ชื่อไฟล์ทุกประวัติ, พรีวิว (ชื่อ/ช่อง/เวลา), ลากวาง, บันทึกตั้งค่า, ประวัติถังขยะทุกแอ็กชัน, สถานะเครื่องมือทีละตัว, ผลตรวจอัปเดต; ตัดซ้ำ (`_done`/`_done_stems` เหลือ phase+ผลรวม+ชื่อประวัติ)
 - **Tests**: full suite รอรอบนี้; `USER_GUIDE` §3 sync ตามจริง
 
 ## ทำวันนี้ (2026-09-28) — หน้าต่างเครื่องมือมีสถานะ + dropdown ไม่ขาวแล้ว (ยังไม่ bump version)
@@ -80,7 +98,7 @@
 
 ## ทำวันนี้ (2026-09-28) — ประวัติคอลัมน์ Explorer + จำรายการที่เลือก (ยังไม่ bump version)
 
-- **ปุ่มถังขยะแยกขวาสุด**: กลุ่ม filter เหลือ 4 pill (ทั้งหมด/เพลง/วิดีโอ/สเต็ม) ปุ่มถังขยะแยกเป็นปุ่มเดี่ยวขวามือ กดสลับโหมดถังขยะ/ทั้งหมด (`_toggle_trash_filter`) ติดไฮไลต์ `SideActive` ตอนอยู่ในถังขยะ (`_sync_trash_button` ท้าย `_render`)
+- **ปุ่มถังขยะแยกขวาสุด**: กลุ่ม filter เหลือ 4 pill (ทั้งหมด/เพลง/วิดีโอ/Stem) ปุ่มถังขยะแยกเป็นปุ่มเดี่ยวขวามือ กดสลับโหมดถังขยะ/ทั้งหมด (`_toggle_trash_filter`) ติดไฮไลต์ `SideActive` ตอนอยู่ในถังขยะ (`_sync_trash_button` ท้าย `_render`)
 
 - **คอลัมน์แบบ Explorer**: header คงที่ **ชื่อ/ประเภท/วันที่/ขนาด** + แถว grid คอลัมน์กว้างพิกเซลคงที่ (`_HISTORY_COLUMN_MINSIZES`) header ตรงกับแถวเสมอ; ขนาดอ่านจากไฟล์จริง ไฟล์หายขึ้น `—` แถวเป็นสีจาง; ชื่อยาวตัด 40 ตัวอักษร (ซ่อม `rowconfigure` ผิดแถวที่ทำลิสต์ไม่ยืดด้วย)
 - **จำ path ที่เลือก**: คลิกแถวไหนจำ `id` ลง `settings.json` (`selected_history_id`, เขียนแบบไม่พังงาน) เปลี่ยนฟิลเตอร์/สลับ view/เปิดแอปใหม่ยังเลือกที่เดิม (`find_history_index` มี fallback เทียบ target path); ลบรายการที่จำไว้ล้างค่าทิ้ง
@@ -111,10 +129,10 @@
 - **speed/ETA ตอนโหลด**: progress template เพิ่ม `|speed|ETA`, parser ใหม่ `parse_import_progress_detail` (ตัวเก่า `parse_import_progress` ยังคืน float เหมือนเดิม, รองรับบรรทัดเก่าไม่มี `|`), `on_detail` optional ไหลผ่าน `_run_import_process`/`_run_import_with_fallback`/`import_url`/`import_audio_for_processing` (default None ไม่แตก caller เก่า); UI ต่อ `% • speed • เหลือ ETA` ทั้งงาน URL ตรงและ stems-URL
 - **Tests**: `test_preview` +4 (7 ฟิลด์, fallback exact, NA, estimate), `test_importer` +3 (speed/ETA, NA, legacy); `USER_GUIDE` §4 sync ตามจริง
 
-## ทำวันนี้ (2026-09-28) — สเต็มเดี่ยวไม่ zip + ประวัติ + พรีวิวลิงก์ (ยังไม่ bump version)
+## ทำวันนี้ (2026-09-28) — Stem เดี่ยวไม่ zip + ประวัติ + พรีวิวลิงก์ (ยังไม่ bump version)
 
-- **สเต็มเดี่ยวไม่ zip**: `separate_audio` เลือกสเต็มเดียวคืนไฟล์เสียงเปล่า (`เพลง_vocals.mp3`) เลือกหลายสเต็มค่อย zip; helper บริสุทธิ์ใหม่ `separate_expected_outputs()` ให้ UI เช็ก overwrite + เทสต์ได้โดยไม่รัน demucs; อัปเดต integration test ที่เคย assume zip; `USER_GUIDE` §6/§9 แก้ตามจริง (ของเดิมอ้างว่าไฟล์แยกยังอยู่ด้วย — ไม่จริง มันอยู่ใน workspace ชั่วคราวที่ถูกล้าง)
-- **ประวัติ** (`clipora/history.py` ใหม่ + `tests/test_history.py` 8 tests): JSON capped 200 ต่อท้าย settings บันทึกทุกงานสำเร็จใน `_show_result` จุดเดียว (ไม่พังงานถ้าเขียนไม่ได้); dialog ใน `ui.py` (เปิดจาก ☰) มีกรอง pill ทั้งหมด/เพลง/วิดีโอ/สเต็ม, เปิดตำแหน่งไฟล์, ลบทีละอัน/ลบทั้งหมด (ถามยืนยัน, ไม่ลบไฟล์จริง), แต้ม (ไฟล์หาย)
+- **Stem เดี่ยวไม่ zip**: `separate_audio` เลือก Stemเดียวคืนไฟล์เสียงเปล่า (`เพลง_vocals.mp3`) เลือกหลาย Stemค่อย zip; helper บริสุทธิ์ใหม่ `separate_expected_outputs()` ให้ UI เช็ก overwrite + เทสต์ได้โดยไม่รัน demucs; อัปเดต integration test ที่เคย assume zip; `USER_GUIDE` §6/§9 แก้ตามจริง (ของเดิมอ้างว่าไฟล์แยกยังอยู่ด้วย — ไม่จริง มันอยู่ใน workspace ชั่วคราวที่ถูกล้าง)
+- **ประวัติ** (`clipora/history.py` ใหม่ + `tests/test_history.py` 8 tests): JSON capped 200 ต่อท้าย settings บันทึกทุกงานสำเร็จใน `_show_result` จุดเดียว (ไม่พังงานถ้าเขียนไม่ได้); dialog ใน `ui.py` (เปิดจาก ☰) มีกรอง pill ทั้งหมด/เพลง/วิดีโอ/Stem, เปิดตำแหน่งไฟล์, ลบทีละอัน/ลบทั้งหมด (ถามยืนยัน, ไม่ลบไฟล์จริง), แต้ม (ไฟล์หาย)
 - **พรีวิวลิงก์** (`clipora/preview.py` ใหม่ + `tests/test_preview.py` 7 tests): `yt-dlp --skip-download --print` ดึง title/uploader/duration/thumbnail, โหลดปก (cap 5MB) แปลงเป็น PNG ผ่าน FFmpeg ในเครื่อง (ไม่เพิ่ม dependency, stdlib PhotoImage อ่านได้); UI debounce 1.2วิ + generation กันงานซ้อน, พังเงียบ (ไม่มีการ์ด ไม่ใช่ error), การ์ดค้างโชว์ตอนโหลดต่อ
 - **Tests**: full suite รอรอบสุดท้าย
 
@@ -139,9 +157,9 @@
 ## ทำวันนี้ (2026-09-24) — Dev-Tool Edition: reskin + sidebar (ยังไม่ bump version)
 
 - **เฟส 1 reskin** (`theme.py`): charcoal กลาง (`BG #121214`, panel `#1a1a1f`, field `#232329`), เส้นขอบคม 1px `#2e2e35`, ตัวหนังสือ `#e9e9ec`/`#9b9ba4`, ม่วงเหลือจุดเดียว (ปุ่มเริ่ม/active/progress/focus), motion จูนกระชับ (100–200ms)
-- **เฟส 2 sidebar**: รางซ้าย 4 รายการ (ไฟล์ในเครื่อง/ดาวน์โหลด/แยกสเต็ม/เครื่องมือ) + เส้นคั่น, `_switch_view()` preset kind/mode แล้วเรียก sync เดิม, `_sync_rail()` ไฮไลต์ตาม mode/kind (เรียกท้าย `_sync_options` จุดเดียว), ซ่อน toggle ไฟล์/URL นอกโหมดสเต็ม, ล็อก rail ตอนมีงาน, หน้าต่าง `900x820`
+- **เฟส 2 sidebar**: รางซ้าย 4 รายการ (ไฟล์ในเครื่อง/ดาวน์โหลด/แยก Stem/เครื่องมือ) + เส้นคั่น, `_switch_view()` preset kind/mode แล้วเรียก sync เดิม, `_sync_rail()` ไฮไลต์ตาม mode/kind (เรียกท้าย `_sync_options` จุดเดียว), ซ่อน toggle ไฟล์/URL นอกโหมด Stem, ล็อก rail ตอนมีงาน, หน้าต่าง `900x820`
 - **logic งานไม่แตะเลย** (`_start`/`_run_*`/worker เหมือนเดิม)
-- **ตรวจของจริง**: สคริปต์ `verify_rail.py` บน mainloop — rail เริ่มต้น url, สลับ file/stems/url ถูกทุก state, toggle โผล่เฉพาะสเต็ม, กด hero pill ตรง rail ซิงก์ตาม, งาน trim จริงจบ "เสร็จสิ้น" + output ครบ; แคปทุก view แล้ว
+- **ตรวจของจริง**: สคริปต์ `verify_rail.py` บน mainloop — rail เริ่มต้น url, สลับ file/stems/url ถูกทุก state, toggle โผล่เฉพาะ Stem, กด hero pill ตรง rail ซิงก์ตาม, งาน trim จริงจบ "เสร็จสิ้น" + output ครบ; แคปทุก view แล้ว
 - **Tests**: full suite **216 tests ผ่าน** (skipped 2 = network); `USER_GUIDE` §3 เพิ่มรางซ้ายแล้ว
 - **ค้าง**: ผู้ใช้ลองกดเอง + scale 125/150% (ยังไม่ bump version)
 
@@ -176,7 +194,7 @@
 ## ทำวันนี้ (2026-09-24) — ดีไซน์ UI ใหม่ทั้งหน้าหลัก (ยังไม่ bump version)
 
 - **เหตุผล**: หน้าหลักเดิมดูรก (การ์ดขอบหนา + แถบม่วง + ป้ายตัวเลข 01/02/03, error แดงโชว์ตั้งแต่เปิดแอป, ตัวเลือกอัดแน่นต้องสกรอลล์)
-- **ดีไซน์ใหม่** (`clipora/ui.py` อย่างเดียว ไม่แตะ logic/worker): top bar แบบ slim (โลโก้ + `v{__version__}` + ปุ่มสนับสนุน + ☰), ปุ่มโหมด 3 ปุ่มใหญ่พร้อมคำอธิบาย 1 บรรทัด, section ไร้กรอบคั่นด้วยเส้น hairline, คุณภาพ/เฟรมเรต/trim ย้ายเข้าปุ่ม **▸ ตัวเลือกเพิ่มเติม** แบบพับได้, ลิงก์ DMCA ย้ายจากหน้าหลักเข้า ☰ เมนู, footer เหลือเวอร์ชัน + ertyu.dev, หน้าต่าง `780x820` พอดีจอไม่ต้องสกรอลล์
+- **ดีไซน์ใหม่** (`clipora/ui.py` อย่างเดียว ไม่แตะ logic/worker): top bar แบบ slim (โลโก้ + `v{__version__}` + ปุ่มสนับสนุน + ☰), ปุ่มโหมด 3 ปุ่มใหญ่พร้อมคำอธิบาย 1 บรรทัด, section ไร้กรอบคั่นด้วยเส้น hairline, คุณภาพ/FPS/trim ย้ายเข้าปุ่ม **▸ ตัวเลือกเพิ่มเติม** แบบพับได้, ลิงก์ DMCA ย้ายจากหน้าหลักเข้า ☰ เมนู, footer เหลือเวอร์ชัน + ertyu.dev, หน้าต่าง `780x820` พอดีจอไม่ต้องสกรอลล์
 - **บั๊กที่เจอระหว่างทาง (แก้แล้ว)**:
   - error แดงโชว์ตั้งแต่เปิดแอป — สาเหตุคือ `<FocusOut>` ยิงตอนหน้าต่าง map ครั้งแรก → แก้ให้ FocusOut เตือนเฉพาะช่องที่มีข้อความ (`_validate_source_or_hide`) และบังคับ `_validate_all()` ตอนกดเริ่มงานจริง (เดิม `_validate_all` ไม่มีคนเรียกเลย)
   - ช่อง trim พื้นขาว — ลืมใส่ `style='Dark.TEntry'`
@@ -189,7 +207,7 @@
 ## ทำวันนี้ (2026-09-24) — ต่อสาย trim + disk-check/cleanup + ปรับคำ GitHub ให้รัดกุม
 
 - **ตรวจด้วยเทสต์ก่อนทำ**: full suite 181 ผ่าน (skipped 2 = network) แล้วยืนยันว่า trim/batch/disk-check/cleanup/limiter ใช้ไม่ได้จริง — ช่อง trim ไม่มี `.get()` เลย (`ui.py`), ไม่มีโค้ดคิวงานทั้ง repo, `check_disk_space`/`cleanup_orphaned_*` มีแต่ไม่มีจุดเรียก, `separator_environment()` ถูกเรียกแบบไม่ส่ง limit; เทสต์ใหม่จับได้ด้วยว่า `ffmpeg.py` เรียก `shutil` แต่ไม่เคย import (NameError แฝง) → เติม `import shutil` แล้ว
-- **ข — trim ใช้ได้จริง (งานไฟล์ในเครื่อง โหมดแยกเสียง/แปลงวิดีโอ)**: `parse_trim_seconds()` (วินาที/`MM:SS`/`HH:MM:SS`, ค่าว่าง = ไม่ตัด) + `normalize_trim()` (จุดเริ่มเกินไฟล์ = error, ระยะเวลาเกิน = clamp, คืน effective duration ให้ progress) ใน `clipora/ffmpeg.py`; `JobSpec` เพิ่ม `trim_start/trim_duration`; `_start_local` ตรวจรูปแบบก่อนเริ่ม (เตือนผ่าน messagebox), `_run_local` ตรวจขอบเขตหลัง probe (error เข้า `ErrorDialog` ที่มีปุ่ม copy); แถว trim ซ่อนในโหมดสเต็ม/URL; ป้ายฟิลด์ที่สองแก้เป็น "ระยะเวลา (เว้นว่าง = ทั้งหมด)"
+- **ข — trim ใช้ได้จริง (งานไฟล์ในเครื่อง โหมดแยกเสียง/แปลงวิดีโอ)**: `parse_trim_seconds()` (วินาที/`MM:SS`/`HH:MM:SS`, ค่าว่าง = ไม่ตัด) + `normalize_trim()` (จุดเริ่มเกินไฟล์ = error, ระยะเวลาเกิน = clamp, คืน effective duration ให้ progress) ใน `clipora/ffmpeg.py`; `JobSpec` เพิ่ม `trim_start/trim_duration`; `_start_local` ตรวจรูปแบบก่อนเริ่ม (เตือนผ่าน messagebox), `_run_local` ตรวจขอบเขตหลัง probe (error เข้า `ErrorDialog` ที่มีปุ่ม copy); แถว trim ซ่อนในโหมด Stem/URL; ป้ายฟิลด์ที่สองแก้เป็น "ระยะเวลา (เว้นว่าง = ทั้งหมด)"
 - **ค — disk-check + cleanup ถูกเรียกจริง**: `_prepare_destination()` ใน `ui.py` ล้าง orphaned workspaces (import + separator, พลาดไม่บล็อกงาน) แล้วตรวจพื้นที่ดิสก์ก่อนเริ่มงานทุกครั้ง (ไฟล์ในเครื่อง = `check_disk_space`, ลิงก์ = `check_destination_disk_space`, เต็ม = เตือนแล้วไม่เริ่มงาน)
 - **Tests**: +22 tests (parse/normalize/command ใน `test_ffmpeg.py`, trim end-to-end กับ fixture จริงใน `test_ffmpeg_integration.py`, disk/orphan ใน `tests/test_maintenance.py` ไฟล์ใหม่) → full suite **203 tests ผ่าน** (skipped 2 = network)
 - **ก — ปรับคำ GitHub**: `README` กระชับ (intro 2 บรรทัด, มีอะไรใหม่ 0.6.3, วิธีตรวจ `.sha256`, แก้ 3 จุดที่ขัดของจริง: สิทธิ์ admin/รวมเครื่องมือ/portable), `release.yml` ใช้ release notes ภาษาไทยคงที่แทน `--generate-notes`, `SECURITY.md` เป็นตารางเวอร์ชันที่รองรับ, `USER_GUIDE` เพิ่มวิธีใช้ trim + disk/cleanup + ปุ่ม copy log, `DEVELOPMENT` แก้ trigger `pc-v*`/per-machine/trim ที่ทำแล้ว, `ACTIVITY_LOG` ติ๊กตามจริง (batch/limiter ยังไม่ทำ), `clipora.manifest` sync 0.6.3.0
@@ -208,7 +226,7 @@
 
 - **RELEASE PC 0.6.0** — UI/UX redesign (ธีม Midnight Amethyst + stepper 3 ขั้น + result panel) + security hardening (zip-slip guard ใน dependencies, ยืนยันสิทธิ์); 163 tests ผ่าน (skipped 4 = network) + test_packaging 6/6
 
-- ฟีเจอร์ **แยกสเต็มเสียง (stems)** ผ่านการ implement ครบและทดสอบผ่านแล้ว
+- ฟีเจอร์ **แยก Stem เสียง (stems)** ผ่านการ implement ครบและทดสอบผ่านแล้ว
 - ฟีเจอร์ **อัปเดต yt-dlp** (ปุ่มในแอป + ตรวจอัตโนมัติตอนเปิดแอป) implement ครบและทดสอบผ่านแล้ว
 - **PC: auto-retry fallback เมื่อโดนบล็อก (HTTP 403/429/กัน bot)** — implement ครบ 30 tests ผ่าน (รายละเอียดด้านล่าง)
 - ชุดเทสต์เต็ม: **138 tests ผ่าน** (skipped 2 = network) — รันบน Python 3.13 (venv สร้างใหม่)
@@ -293,7 +311,7 @@
 - **แยกเวอร์ชัน PC/Mobile**: PC กลับเป็น `0.5.1` (mobile คง `1.0.1`) — แก้ `__init__.py`, UA, iss, version_info, README
 - **แก้ CI ล้ม**: `test_donate.py` เช็ค `assets/` (gitignored ไม่มีใน CI) → ลบ assert นั้น
 - **Donate QR ใช้ไฟล์ที่ commit ตรง ๆ แล้ว**: เดิมเก็บ QR เป็น secret `CLIPORA_DONATE_QR_BASE64` และ decode ใน CI — เปลี่ยนมา commit `assets/donate-qr.png` ไว้ใน repo (เลิก gitignore, ลบ step decode จาก workflow, ลบ `scripts/print_donate_secret.ps1`) เพื่อให้ทุก build มี QR แน่นอน
-- **แยกสเต็ม → อัด zip**: `separate_audio()` สร้าง `{ชื่อ}_stems.zip` รวมทุกสเต็ม หลังแยกเสร็จ (ไฟล์แยกยังอยู่) — `create_stems_zip()`, `separate_output_zip_path()`, UI เช็ค overwrite zip ด้วย, test 3 ตัวใหม่ + integration อัปเดต (138 tests ผ่าน)
+- **แยก Stem → อัด zip**: `separate_audio()` สร้าง `{ชื่อ}_stems.zip` รวมทุก Stem หลังแยกเสร็จ (ไฟล์แยกยังอยู่) — `create_stems_zip()`, `separate_output_zip_path()`, UI เช็ค overwrite zip ด้วย, test 3 ตัวใหม่ + integration อัปเดต (138 tests ผ่าน)
 - **แก้ QR โดเนทไม่ขึ้น + ขึ้นเวอร์ชัน 0.5.2**: `DonateDialog` ใช้ `ttk.Label` style `Card.TFrame` (Frame layout ไม่มี label element) ทำให้ label รูป QR หดเหลือ 1x1 → เปลี่ยนเป็น `Card.TLabel`; เปลี่ยน QR จาก CI secret มาเป็นรูป commit ตรง ๆ; bump ทุกที่ (`__init__`, iss, manifest, version_info, UA ×2, README)
 - **เพิ่มตัวโหลดแบบ ZIP (portable) ใน release**: workflow `release.yml` แพ็ค `dist/Clipora` → `Clipora-<ver>-x64.zip` (+ `.sha256`) หลัง build installer แล้วอัปโหลดขึ้น release คู่กับตัวติดตั้ง; อัปเดต README ตอนติดตั้ง
 - **Mobile: เพิ่มนำเข้า Cookies (ฟรี) แก้ APK โหลดคลิปไม่ได้**: สาเหตุคือ `yt-dlp-android` ฟรีไม่มี curl-cffi/TLS impersonation (YouTube ตรวจ TLS fingerprint บล็อก) + yt-dlp ฝังเป็น 2026.06.09 — เพิ่ม `pickCookiesFile` (native channel, request 9102), `importCookies()/clearCookies()` เก็บที่ `{appDir}/clipora/cookies.txt`, ส่ง `--cookies <path>` ในทุก URL download, UI ใน `_urlPanel`; bump mobile 1.0.2 (flutter analyze/test ผ่าน)
@@ -337,9 +355,9 @@
 
 | ไฟล์                                         | งาน                                                                                                                                                                                                                                                                                      |
 | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `clipora/separator.py` (ใหม่)                | pipeline หลัก: `demucs -n htdemucs_6s --repo <dir>` offline, parse progress, workspace (`.clipora-separate-*`) + cleanup, amix ประกอบ instrumental, แปลง/บันทึกแต่ละสเต็ม, collision/overwrite                                                                                                |
+| `clipora/separator.py` (ใหม่)                | pipeline หลัก: `demucs -n htdemucs_6s --repo <dir>` offline, parse progress, workspace (`.clipora-separate-*`) + cleanup, amix ประกอบ instrumental, แปลง/บันทึกแต่ละ Stem, collision/overwrite                                                                                                |
 | `clipora/dependencies.py`                   | `SEPARATOR_DEPENDENCIES` (32 specs แบบ pin: python-embed 3.13.14, torch 2.13.0+cpu, numpy 2.5.2, demucs 4.1.0 + deps, model `5c90dfd2-34c22ccb.th`), staging แบบ `python-embed`/`python-wheel` (แก้ `._pth` ให้เปิด site-packages), `install_separator_toolchain()`, `install_toolchains()` |
-| `clipora/ui.py`                             | โหมด `stems` ใหม่ (radio), ติ๊กเลือกสเต็ม (`stem_vars`), `_start_stems_local/_url`, `_run_stems_*`, `_done_stems`, progress/phase ของสเต็ม, เรียก `_open_tool_setup(separator=True)` เมื่อยังไม่ติดตั้ง                                                                                                |
+| `clipora/ui.py`                             | โหมด `stems` ใหม่ (radio), ติ๊กเลือก Stem (`stem_vars`), `_start_stems_local/_url`, `_run_stems_*`, `_done_stems`, progress/phase ของ Stem, เรียก `_open_tool_setup(separator=True)` เมื่อยังไม่ติดตั้ง                                                                                                |
 | `clipora/setup_ui.py`                       | พารามิเตอร์ `separator` ใน `ToolSetupDialog`, ใช้ `install_toolchains()`, ข้อความ welcome/summary เพิ่มตอนติดตั้ง separator                                                                                                                                                                       |
 | `clipora/importer.py`                       | `import_audio_for_processing()` (โหลดเสียงลง workspace โดยยังไม่ finalize) + `cleanup_import_workspace`                                                                                                                                                                                     |
 | `clipora/tools.py`                          | `CLIPORA_SEPARATOR_PYTHON` ใน `TOOL_ENVIRONMENT_VARIABLES` + `bundled_tool_directories()`                                                                                                                                                                                                |
@@ -370,11 +388,11 @@ python -m unittest discover -s tests -v
 
 ## งานต่อ (ยังไม่ทำ)
 
-- [ ] **Manual GUI smoke test** — สลับโหมด audio/video/stems, ติ๊กสเต็ม, overwrite prompt,
+- [ ] **Manual GUI smoke test** — สลับโหมด audio/video/stems, ติ๊ก Stem, overwrite prompt,
       ปุ่มติดตั้งเมื่อยังไม่ติดตั้ง separator, ปุ่ม "อัปเดต yt-dlp" (ตอนยังไม่ติดตั้ง/ติดตั้งแล้ว/อัปเดตล่าสุด),
       ข้อความไทย, scale 100/125/150%
 - [ ] ทดสอบ URL flow จริง (YouTube) ด้วย `CLIPORA_RUN_NETWORK_TESTS=1`
-- [ ] ทดสอบ cancellation ระหว่างแยกสเต็ม (สร้าง test ไว้ยัง? — ยังไม่มี integration สำหรับ cancel)
+- [ ] ทดสอบ cancellation ระหว่างแยก Stem (สร้าง test ไว้ยัง? — ยังไม่มี integration สำหรับ cancel)
 - [ ] เช็ค `test_version_is_synchronized_with_packaging_metadata` ถ้าจะ bump version + เขียน release notes
 
 ## หมายเหตุ/ข้อควรรู้
