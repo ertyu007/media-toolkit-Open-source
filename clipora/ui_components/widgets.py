@@ -62,7 +62,69 @@ def segment_index_at(x: float, width: float, count: int) -> int:
     """Pure hit-test: which of *count* equal segments contains canvas-x *x*."""
     if count <= 0 or width <= 0:
         return 0
-    return max(0, min(count - 1, int(x / width * count)))
+    seg, stride = segment_layout(width, count, gap)
+    if stride <= 0:
+        return 0
+    return max(0, min(count - 1, int(x // stride)))
+
+
+_TRANSPARENT_KEY = '#ff00ff'  # transparency key for rounded popups; in no palette
+
+
+def _rounded_rect(canvas: tk.Canvas, x0: float, y0: float,
+                  x1: float, y1: float, radius: float, **kwargs) -> None:
+    """Draw a rounded rectangle from rects + corner ovals."""
+    canvas.create_rectangle(x0 + radius, y0, x1 - radius, y1, **kwargs)
+    canvas.create_rectangle(x0, y0 + radius, x1, y1 - radius, **kwargs)
+    for cx, cy in ((x0 + radius, y0 + radius),
+                   (x1 - radius, y0 + radius),
+                   (x0 + radius, y1 - radius),
+                   (x1 - radius, y1 - radius)):
+        canvas.create_oval(
+            cx - radius, cy - radius, cx + radius, cy + radius, **kwargs)
+
+
+def segment_layout(width: float, count: int, gap: float = 0.0) -> tuple[float, float]:
+    """Return ``(segment_width, stride)`` for a gapped segmented row."""
+    if count <= 0:
+        return (0.0, 0.0)
+    seg = max(0.0, (width - gap * (count - 1)) / count)
+    return (seg, seg + gap)
+
+
+def segment_origin(index: int, width: float, count: int, gap: float = 0.0) -> float:
+    """Left edge x of segment *index* (fractional positions slide too)."""
+    _seg, stride = segment_layout(width, count, gap)
+    return index * stride
+
+
+def parent_surface_bg(parent: tk.Misc, fallback: str = BG) -> str:
+    """Background color behind *parent*.
+
+    Tk canvases cannot be transparent, so pill/stadium widgets paint their
+    canvas with the parent surface color to hide the square corners.
+    """
+    style_name = ''
+    try:
+        style_name = parent.cget('style')
+    except tk.TclError:
+        style_name = ''
+    if not style_name:
+        try:
+            style_name = parent.winfo_class()
+        except tk.TclError:
+            style_name = ''
+    if style_name:
+        try:
+            color = ttk.Style().lookup(style_name, 'background')
+        except tk.TclError:
+            color = ''
+        if color:
+            return str(color)
+    try:
+        return str(parent.cget('background'))
+    except tk.TclError:
+        return fallback
 
 
 class SegmentedControl(tk.Canvas):
@@ -261,10 +323,11 @@ class RoundedEntry(tk.Frame):
         textvariable: tk.StringVar | None = None,
         font_family: str | None = None,
         font_size: int = 10,
-        bg: str = BG,
+        bg: str | None = None,
         width: int | None = None,
         **kwargs,
     ) -> None:
+        bg = bg or parent_surface_bg(parent)
         super().__init__(parent, bg=bg, **kwargs)
         self._bg = bg
         self._enabled = True
@@ -351,7 +414,10 @@ class RoundedEntry(tk.Frame):
 
 
 class RoundedCombobox(tk.Frame):
-    """Pill-shaped readonly dropdown: borderless Combobox in a drawn shell."""
+    """Pill dropdown with a custom rounded popup (no native square edges)."""
+
+    _ROW_H = 34
+    _POP_PAD = 8
 
     def __init__(
         self,
@@ -361,63 +427,37 @@ class RoundedCombobox(tk.Frame):
         width: int = 12,
         font_family: str | None = None,
         font_size: int = 10,
-        bg: str = BG,
+        bg: str | None = None,
         **kwargs,
     ) -> None:
+        bg = bg or parent_surface_bg(parent)
         super().__init__(parent, bg=bg, **kwargs)
         self._enabled = True
         self._focused = False
+        self._hover = -1
+        self._popup: tk.Toplevel | None = None
+        self._pop_canvas: tk.Canvas | None = None
         family = font_family or getattr(parent, 'ui_font', FONT_FAMILY)
+        self._family = family
+        self._font = (family, font_size)
         self._canvas = tk.Canvas(
             self, height=FIELD_HEIGHT, bg=bg,
-            highlightthickness=0, borderwidth=0,
+            highlightthickness=0, borderwidth=0, takefocus=True,
         )
-        fixed = tkfont.Font(font=(family, font_size)).measure('0' * width) + 40
+        fixed = tkfont.Font(font=(family, font_size)).measure('0' * width) + 44
         self._canvas.configure(width=fixed)
         self._canvas.pack(fill='x', expand=True)
-        style = ttk.Style(self)
-        style.configure(
-            'Pill.TCombobox',
-            fieldbackground=FIELD, background=FIELD, foreground=TEXT,
-            arrowcolor=MUTED, borderwidth=0, relief='flat', padding=(12, 7),
-            bordercolor=FIELD, lightcolor=FIELD, darkcolor=FIELD,
-        )
-        style.map(
-            'Pill.TCombobox',
-            fieldbackground=[('disabled', FIELD)],
-            foreground=[('disabled', DISABLED_FG)],
-            arrowcolor=[('disabled', DISABLED_FG)],
-            background=[('active', FIELD), ('pressed', FIELD), ('focus', FIELD),
-                        ('disabled', FIELD)],
-            bordercolor=[('active', FIELD), ('pressed', FIELD), ('focus', FIELD),
-                         ('disabled', FIELD)],
-            lightcolor=[('active', FIELD), ('pressed', FIELD), ('focus', FIELD),
-                        ('disabled', FIELD)],
-            darkcolor=[('active', FIELD), ('pressed', FIELD), ('focus', FIELD),
-                       ('disabled', FIELD)],
-        )
-        self.box = ttk.Combobox(
-            self._canvas, textvariable=textvariable, values=list(values),
-            state='readonly', style='Pill.TCombobox', width=width,
-            font=(family, font_size),
-        )
-        self._window = self._canvas.create_window(
-            _FIELD_PAD_X, FIELD_HEIGHT // 2, window=self.box, anchor='w',
-        )
-        self.box.bind('<FocusIn>', lambda _e: self._set_focus(True), add='+')
-        self.box.bind('<FocusOut>', lambda _e: self._set_focus(False), add='+')
-        self._canvas.bind('<Button-1>', lambda _e: self.box.focus_set())
-        self._canvas.bind('<Configure>', lambda _e: (self._layout(), self._draw()))
-        self._layout()
+        if textvariable is not None:
+            textvariable.trace_add('write', lambda *_: self._draw())
+        self._canvas.bind('<Button-1>', lambda _e: (self.focus_set(), self.toggle()))
+        self._canvas.bind('<FocusIn>', lambda _e: self._set_focus(True))
+        self._canvas.bind('<FocusOut>', lambda _e: self._set_focus(False))
+        self._canvas.bind('<Down>', lambda _e: self.open())
+        self._canvas.bind('<Return>', lambda _e: self.toggle())
+        self._canvas.bind('<space>', lambda _e: self.toggle())
+        self._canvas.bind('<Configure>', lambda _e: self._draw())
+        self.bind('<Destroy>', lambda _e: self.close(), add='+')
         self._draw()
-
-    def _layout(self) -> None:
-        try:
-            width = self._canvas.winfo_width()
-        except tk.TclError:
-            return
-        if width > 1:
-            self._canvas.itemconfigure(self._window, width=width - _FIELD_PAD_X * 2)
 
     def _set_focus(self, focused: bool) -> None:
         self._focused = focused
@@ -430,18 +470,32 @@ class RoundedCombobox(tk.Frame):
             return
         if width <= 1:
             return
+        self._canvas.delete('all')
         border = ACCENT if (self._focused and self._enabled) else BORDER
         _draw_pill_shell(self._canvas, width, FIELD_HEIGHT, border)
+        fg = DISABLED_FG if not self._enabled else TEXT
+        text = self._variable.get() if self._variable is not None else ''
+        self._canvas.create_text(
+            _FIELD_PAD_X, FIELD_HEIGHT / 2, text=text, fill=fg,
+            font=self._font, anchor='w',
+        )
+        self._canvas.create_text(
+            width - _FIELD_PAD_X, FIELD_HEIGHT / 2, text='▼',
+            fill=DISABLED_FG if not self._enabled else MUTED,
+            font=(self._family, 9), anchor='e',
+        )
 
     def focus_set(self) -> None:  # type: ignore[override]
-        self.box.focus_set()
+        try:
+            self._canvas.focus_set()
+        except tk.TclError:
+            pass
 
     def configure(self, cnf=None, **kw):  # type: ignore[override]
         if 'values' in kw:
-            try:
-                self.box.configure(values=kw.pop('values'))
-            except tk.TclError:
-                kw.pop('values', None)
+            self._values = list(kw.pop('values'))
+            self.close()
+            self._draw()
         if kw:
             try:
                 super().configure(cnf, **kw)
@@ -451,11 +505,142 @@ class RoundedCombobox(tk.Frame):
 
     def state(self, states) -> None:
         self._enabled = 'disabled' not in set(states)
+        if not self._enabled:
+            self.close()
+        self._draw()
+
+    # ── Popup ─────────────────────────────────────────────────────────────
+    def toggle(self) -> None:
+        if self._popup is not None:
+            self.close()
+        else:
+            self.open()
+
+    def open(self) -> None:
+        if not self._enabled or self._popup is not None or not self._values:
+            return
         try:
-            self.box.configure(state='disabled' if not self._enabled else 'readonly')
+            popup = tk.Toplevel(self)
+            popup.overrideredirect(True)
+            popup.attributes('-topmost', True)
+            try:
+                popup.attributes('-transparentcolor', _TRANSPARENT_KEY)
+                popup.configure(bg=_TRANSPARENT_KEY)
+                base_bg = _TRANSPARENT_KEY
+            except tk.TclError:
+                popup.configure(bg=FIELD)
+                base_bg = FIELD
+        except tk.TclError:
+            return
+        try:
+            width = max(self._canvas.winfo_width(), 160)
+            rows = len(self._values)
+            height = self._POP_PAD * 2 + rows * self._ROW_H
+            x = self._canvas.winfo_rootx()
+            y = self._canvas.winfo_rooty() + self._canvas.winfo_height() + 6
+            if y + height > popup.winfo_screenheight():
+                y = self._canvas.winfo_rooty() - height - 6
+        except tk.TclError:
+            popup.destroy()
+            return
+        canvas = tk.Canvas(
+            popup, width=width, height=height, bg=base_bg,
+            highlightthickness=0, borderwidth=0,
+        )
+        canvas.pack(fill='both', expand=True)
+        _rounded_rect(
+            canvas, 0, 0, width, height, 12, fill=FIELD, outline=BORDER)
+        current = self._variable.get() if self._variable is not None else None
+        self._hover = (
+            self._values.index(current) if current in self._values else 0)
+        self._popup = popup
+        self._pop_canvas = canvas
+        self._paint_rows()
+        canvas.bind('<Motion>', self._on_pop_motion)
+        canvas.bind('<Button-1>', self._on_pop_click)
+        popup.bind('<Escape>', lambda _e: self.close())
+        popup.bind('<Up>', lambda _e: self._move_hover(-1))
+        popup.bind('<Down>', lambda _e: self._move_hover(1))
+        popup.bind('<Return>', lambda _e: self._choose_hovered())
+        popup.geometry(f'{width}x{height}+{x}+{y}')
+        try:
+            popup.grab_set()
         except tk.TclError:
             pass
-        self._draw()
+
+    def _row_at(self, y: int) -> int:
+        index = (y - self._POP_PAD) // self._ROW_H
+        if 0 <= index < len(self._values):
+            return index
+        return -1
+
+    def _paint_rows(self) -> None:
+        canvas = self._pop_canvas
+        if canvas is None:
+            return
+        try:
+            width = int(canvas.cget('width'))
+        except tk.TclError:
+            return
+        canvas.delete('row')
+        current = self._variable.get() if self._variable is not None else None
+        for index, value in enumerate(self._values):
+            top = self._POP_PAD + index * self._ROW_H
+            if index == self._hover:
+                _rounded_rect(
+                    canvas, 4, top + 2, width - 4, top + self._ROW_H - 2, 8,
+                    fill=ACCENT, outline='', tags=('row',))
+                fg = '#ffffff'
+            else:
+                fg = ACCENT if value == current else TEXT
+            canvas.create_text(
+                self._POP_PAD + 10, top + self._ROW_H / 2, text=value,
+                fill=fg, font=self._font, anchor='w', tags=('row',))
+
+    def _on_pop_motion(self, event: tk.Event) -> None:
+        index = self._row_at(event.y)
+        if index != self._hover:
+            self._hover = index
+            self._paint_rows()
+
+    def _on_pop_click(self, event: tk.Event) -> None:
+        index = self._row_at(event.y)
+        if index < 0:
+            self.close()
+        else:
+            self._choose(index)
+
+    def _move_hover(self, direction: int) -> None:
+        if not self._values:
+            return
+        self._hover = (self._hover + direction) % len(self._values)
+        self._paint_rows()
+
+    def _choose_hovered(self) -> None:
+        if 0 <= self._hover < len(self._values):
+            self._choose(self._hover)
+        else:
+            self.close()
+
+    def _choose(self, index: int) -> None:
+        try:
+            if self._variable is not None:
+                self._variable.set(self._values[index])
+            self.event_generate('<<ComboboxSelected>>')
+        except (tk.TclError, IndexError):
+            pass
+        self.close()
+        self.focus_set()
+
+    def close(self) -> None:
+        popup, self._popup = self._popup, None
+        self._pop_canvas = None
+        self._hover = -1
+        if popup is not None:
+            try:
+                popup.destroy()
+            except tk.TclError:
+                pass
 
 
 class RoundedButton(tk.Canvas):
@@ -470,7 +655,7 @@ class RoundedButton(tk.Canvas):
         width: int = 14,
         font_family: str | None = None,
         font_size: int = 10,
-        bg: str = BG,
+        bg: str | None = None,
         height: int = FIELD_HEIGHT,
         fill: str | None = None,
         hover_fill: str | None = None,
@@ -480,6 +665,8 @@ class RoundedButton(tk.Canvas):
         self._text = text
         self._variable = textvariable
         self._command = command
+        self._variable = textvariable
+        self._values = list(values)
         self._enabled = True
         self._hover = False
         self._pressed = False
@@ -490,9 +677,9 @@ class RoundedButton(tk.Canvas):
         self._height = height
         family = font_family or getattr(parent, 'ui_font', FONT_FAMILY)
         self._font = (family, font_size, 'bold')
-        self._bg = bg
+        self._bg = bg or parent_surface_bg(parent)
         super().__init__(
-            parent, height=height, bg=bg,
+            parent, height=height, bg=self._bg,
             highlightthickness=0, borderwidth=0, takefocus=True, **kwargs,
         )
         measure = tkfont.Font(font=self._font).measure
@@ -629,7 +816,7 @@ class Switch(tk.Canvas):
         command: Optional[Callable[[bool], None]] = None,
         font_family: str | None = None,
         font_size: int = 10,
-        bg: str = BG,
+        bg: str | None = None,
         **kwargs,
     ) -> None:
         self._variable = variable
@@ -640,7 +827,7 @@ class Switch(tk.Canvas):
         self._font = (family, font_size)
         self._pos = 1.0 if variable.get() else 0.0
         super().__init__(
-            parent, height=self._HEIGHT, bg=bg,
+            parent, height=self._HEIGHT, bg=bg or parent_surface_bg(parent),
             highlightthickness=0, borderwidth=0, takefocus=True, **kwargs,
         )
         self._slide = Tween(self.after, self.after_cancel, duration_ms=120)
@@ -731,12 +918,12 @@ class RainbowBar(tk.Canvas):
         self,
         parent: tk.Misc,
         height: int = 14,
-        bg: str = BG,
+        bg: str | None = None,
         maximum: float = 100.0,
         **kwargs,
     ) -> None:
         super().__init__(
-            parent, height=height, bg=bg,
+            parent, height=height, bg=bg or parent_surface_bg(parent),
             highlightthickness=0, borderwidth=0, **kwargs,
         )
         self._height = height
@@ -817,11 +1004,23 @@ class RainbowBar(tk.Canvas):
 
 
 class ToastManager:
-    """Non-blocking toast notifications stacked at the window's bottom-right."""
+    """Non-blocking rounded toast notifications at the window's bottom-right.
+
+    Rounded corners use the ``-transparentcolor`` trick (opaque fallback when
+    the platform refuses it); content is drawn straight on the canvas.
+    """
+    _KEY = _TRANSPARENT_KEY  # transparency key; in neither palette
+    _RADIUS = 14
+
     def __init__(self, root: tk.Tk) -> None:
         self._root = root
         self._toasts: list[tk.Toplevel] = []
         self._max_toasts = 3
+
+    @staticmethod
+    def _rounded_rect(canvas: tk.Canvas, x0: float, y0: float,
+                      x1: float, y1: float, radius: float, **kwargs) -> None:
+        _rounded_rect(canvas, x0, y0, x1, y1, radius, **kwargs)
 
     def show(self, message: str, type_: str = 'info', duration: int = 4000) -> None:
         if len(self._toasts) >= self._max_toasts:
@@ -830,34 +1029,72 @@ class ToastManager:
         toast = tk.Toplevel(self._root)
         toast.overrideredirect(True)
         toast.attributes('-topmost', True)
-        toast.configure(bg=TOAST_BG)
+        try:
+            toast.attributes('-transparentcolor', self._KEY)
+            rounded = True
+        except tk.TclError:
+            rounded = False
+        toast.configure(bg=self._KEY if rounded else TOAST_BG)
 
         colors = {
-            'info': (ACCENT, TEXT),
-            'success': (SUCCESS, TEXT),
-            'warning': (WARNING, TOAST_BG),
-            'error': (ERROR, TEXT),
+            'info': (ACCENT, 'i'),
+            'success': (SUCCESS, '✓'),
+            'warning': (WARNING, '!'),
+            'error': (ERROR, '✕'),
         }
-        bg_color, fg_color = colors.get(type_, colors['info'])
+        accent, glyph = colors.get(type_, colors['info'])
 
-        frame = ttk.Frame(toast, padding=(18, 13), style='Toast.TFrame')
-        frame.pack(fill='both', expand=True)
+        pad = 16
+        radius = self._RADIUS if rounded else 0
+        max_msg = 340
+        icon_d = 22
+        font_glyph = tkfont.Font(font=(FONT_FAMILY, 11, 'bold'))
+        font_msg = tkfont.Font(font=(FONT_FAMILY, 10))
+        font_close = tkfont.Font(font=(FONT_FAMILY, 9))
+        close_w = font_close.measure('✕')
+        msg_w = min(max(font_msg.measure(message), 60), max_msg)
+        lines = max(1, -(-font_msg.measure(message) // max(msg_w, 1)))
+        line_h = font_msg.metrics('linespace')
+        body_h = max(icon_d, lines * line_h)
+        width = pad + 4 + 12 + icon_d + 10 + msg_w + 12 + close_w + pad
+        height = body_h + pad * 2
 
-        accent_bar = tk.Frame(frame, bg=bg_color, width=5, height=48)
-        accent_bar.pack(side='left', fill='y', padx=(0, 14))
-
-        ttk.Label(
-            frame,
-            text=message,
-            foreground=fg_color,
-            background=TOAST_BG,
-            font=(FONT_FAMILY, 10, 'bold'),
-            wraplength=340,
-        ).pack(side='left')
-
-        close_btn = ttk.Label(frame, text='✕', foreground=fg_color, background=TOAST_BG, cursor='hand2', font=(FONT_FAMILY, 9, 'bold'))
-        close_btn.pack(side='left', padx=(12, 0))
-        close_btn.bind('<Button-1>', lambda _e: self._dismiss(toast))
+        canvas = tk.Canvas(
+            toast, width=width, height=height,
+            bg=self._KEY if rounded else TOAST_BG,
+            highlightthickness=0, borderwidth=0,
+        )
+        canvas.pack(fill='both', expand=True)
+        if rounded:
+            self._rounded_rect(
+                canvas, 0, 0, width, height, radius,
+                fill=TOAST_BG, outline=BORDER)
+        else:
+            canvas.create_rectangle(
+                0, 0, width, height, fill=TOAST_BG, outline=BORDER)
+        top = (height - body_h) / 2
+        self._rounded_rect(
+            canvas, pad, top, pad + 4, top + body_h, 2, fill=accent, outline='')
+        mid_y = top + body_h / 2
+        icon_x = pad + 4 + 12
+        # Drawn ring + plain letter: no font-fallback boxes on any machine.
+        canvas.create_oval(
+            icon_x, mid_y - icon_d / 2, icon_x + icon_d, mid_y + icon_d / 2,
+            outline=accent, width=2)
+        canvas.create_text(
+            icon_x + icon_d / 2, mid_y, text=glyph, fill=accent,
+            font=font_glyph)
+        canvas.create_text(
+            icon_x + icon_d + 10, mid_y, text=message, fill=TEXT,
+            font=font_msg, anchor='w', justify='left', width=msg_w)
+        canvas.create_text(
+            width - pad, mid_y, text='✕', fill=MUTED,
+            font=font_close, anchor='e', tags=('close',))
+        canvas.tag_bind('close', '<Button-1>', lambda _e: self._dismiss(toast))
+        canvas.tag_bind(
+            'close', '<Enter>', lambda _e: canvas.configure(cursor='hand2'))
+        canvas.tag_bind(
+            'close', '<Leave>', lambda _e: canvas.configure(cursor=''))
 
         self._toasts.append(toast)
         self._position_toasts()

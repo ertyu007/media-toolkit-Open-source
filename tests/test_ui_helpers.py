@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -93,5 +94,25 @@ class DropRoutingTests(unittest.TestCase):
     def test_missing_paths_route_nowhere(self):
         self.assertIsNone(route_dropped_paths(['C:\\no\\such\\file.mp4']))
         self.assertIsNone(route_dropped_paths([]))
+
+
+class DebugLineTests(unittest.TestCase):
+    def test_formats_timestamp_and_message(self):
+        line = format_debug_line(datetime(2026, 9, 28, 20, 5, 9), 'เฟส: กำลังดาวน์โหลด')
+        self.assertEqual(line, '[20:05:09] เฟส: กำลังดาวน์โหลด')
+
+
+class UninstallerTests(unittest.TestCase):
+    def test_finds_uninstaller_next_to_exe(self):
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / 'unins000.exe'
+            target.write_bytes(b'x')
+            self.assertEqual(find_clipora_uninstaller(Path(directory)), target)
+
+    def test_missing_uninstaller_returns_none(self):
+        with TemporaryDirectory() as directory:
+            self.assertIsNone(find_clipora_uninstaller(Path(directory)))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -374,6 +374,9 @@ class CliporaApp(tk.Tk):
         self._active_source_kind = 'file'
         self._source_values = {'file': '', 'url': ''}
         self._progress_action = 'กำลังประมวลผล'
+        self._debug_text: tk.Text | None = None
+        self._last_debug_phase = ''
+        self._last_debug_speed: datetime | None = None
         self._input_widgets: list[ttk.Widget] = []
         self._setup_dialog: ToolSetupDialog | None = None
         self._ytdlp_checking = False
@@ -416,10 +419,6 @@ class CliporaApp(tk.Tk):
         style = ttk.Style(self)
         self._style = style
         style.theme_use('clam')
-        self.option_add('*TCombobox*Listbox.background', FIELD)
-        self.option_add('*TCombobox*Listbox.foreground', TEXT)
-        self.option_add('*TCombobox*Listbox.selectBackground', ACCENT)
-        self.option_add('*TCombobox*Listbox.selectForeground', TEXT)
 
         # ── Base frames / labels ──────────────────────────────────────────────
         style.configure('TFrame', background=BG)
@@ -920,7 +919,7 @@ class CliporaApp(tk.Tk):
         self.rights_row = ttk.Frame(source_body, style='TFrame')
         self.rights_row.grid(row=3, column=0, sticky='w', pady=(8, 0))
         self.rights_check = Switch(
-            self.rights_row, text='ฉันยืนยันว่าอ่านและยอมรับ', variable=self.authorized,
+            self.rights_row, text='ฉันยอมรับ', variable=self.authorized,
         )
         self.rights_check.pack(side='left')
         self.disclaimer_link = tk.Label(
@@ -930,7 +929,7 @@ class CliporaApp(tk.Tk):
         self.disclaimer_link.pack(side='left')
         self.disclaimer_link.bind('<Button-1>', lambda _event: self._open_disclaimer())
         ttk.Label(
-            self.rights_row, text='แล้ว และจะไม่ดาวน์โหลดเนื้อหาที่มีลิขสิทธิ์',
+            self.rights_row, text='แล้ว และไม่โหลดเนื้อหาลิขสิทธิ์',
             style='ModeDesc.TLabel',
         ).pack(side='left')
         self.rights_row.grid_remove()
@@ -1056,12 +1055,12 @@ class CliporaApp(tk.Tk):
         # Trim row for local file jobs (audio/video modes only)
         self._trim_options = ttk.Frame(self._details_box, style='TFrame')
         self._trim_options.grid(row=1, column=0, columnspan=4, sticky='ew', pady=(12, 0))
-        ttk.Label(self._trim_options, text='เริ่ม (วินาที/HH:MM:SS)', style='ModeDesc.TLabel').grid(
+        ttk.Label(self._trim_options, text='เริ่ม (วิ/HH:MM:SS)', style='ModeDesc.TLabel').grid(
             row=0, column=0, padx=(0, 8), sticky='e',
         )
         self.start_time_entry = RoundedEntry(self._trim_options, width=12)
         self.start_time_entry.grid(row=0, column=1, sticky='w')
-        ttk.Label(self._trim_options, text='ระยะเวลา (เว้นว่าง = ทั้งหมด)', style='ModeDesc.TLabel').grid(
+        ttk.Label(self._trim_options, text='ระยะเวลา (ว่าง = ทั้งหมด)', style='ModeDesc.TLabel').grid(
             row=0, column=2, padx=(16, 8), sticky='e',
         )
         self.duration_entry = RoundedEntry(self._trim_options, width=12)
@@ -1101,6 +1100,15 @@ class CliporaApp(tk.Tk):
 
         self.progress = RainbowBar(action_bar, height=14)
         self.progress.grid(row=2, column=0, sticky='ew')
+
+        # Debug log — always visible, no toggle (user request).
+        self._debug_text: tk.Text | None = tk.Text(
+            action_bar, height=6, wrap='word', state='disabled',
+            bg=FIELD, fg=MUTED, relief='flat', borderwidth=0,
+            highlightthickness=1, highlightbackground=BORDER,
+            font=(self.ui_font, FONT_SIZE_SMALL),
+        )
+        self._debug_text.grid(row=4, column=0, sticky='ew', pady=(10, 0))
 
         # Result panel — shown after a job completes
         self.result_panel = ttk.Frame(action_bar, style='Action.TFrame')
@@ -1679,7 +1687,7 @@ class CliporaApp(tk.Tk):
                 self._stems_options.grid()
             self.format_box.grid()
             self.option_label.configure(text='รูปแบบเสียง')
-            self.mode_desc.set('แยกเสียงร้องและดนตรีบนเครื่องด้วย Demucs (ติดตั้งเครื่องมือครั้งแรกครั้งเดียว)')
+            self.mode_desc.set('แยกเสียงร้อง/ดนตรีบนเครื่อง (ติดตั้งเครื่องมือครั้งแรกครั้งเดียว)')
             action_text = 'ดาวน์โหลดและแยกสเต็ม' if is_url else 'เริ่มแยกสเต็ม'
         elif self.mode.get() == 'audio':
             self.video_format_box.grid_remove()
@@ -1703,7 +1711,7 @@ class CliporaApp(tk.Tk):
             self.quality_box.grid()
             self.fps_label.grid()
             self.fps_box.grid()
-            self.mode_desc.set('แปลงเป็น MP4 (H.264) หรือ MOV (ProRes) พร้อมคุมคุณภาพและเฟรมเรต')
+            self.mode_desc.set('แปลงเป็น MP4/MOV พร้อมคุมคุณภาพและเฟรมเรต')
             if is_url:
                 self.quality_box.configure(values=VIDEO_QUALITIES)
                 if self.quality.get() not in VIDEO_QUALITIES:
@@ -2022,9 +2030,60 @@ class CliporaApp(tk.Tk):
         """Update progress with phase-aware status."""
         phase_text = PROGRESS_PHASES.get(phase, phase)
         self.status.set(phase_text)
+        if phase != self._last_debug_phase:
+            self._last_debug_phase = phase
+            self._debug(f'เฟส: {phase_text}')
         if percent > 0:
             self.progress['value'] = percent
-            self.progress_text.set(f'{percent:.0f}%')
+            text = f'{percent:.0f}%'
+            if detail:
+                text += f'  •  {detail}'
+            self.progress_text.set(text)
+
+    def _debug(self, message: str) -> None:
+        """Append a timestamped line to the debug log (main thread only)."""
+        if self._debug_text is None:
+            return
+        line = format_debug_line(datetime.now(), message)
+        try:
+            self._debug_text.configure(state='normal')
+            self._debug_text.insert('end', line + '\n')
+            count = int(float(str(self._debug_text.index('end-1c'))))
+            if count > 300:
+                self._debug_text.delete('1.0', f'{count - 300}.0')
+            self._debug_text.see('end')
+            self._debug_text.configure(state='disabled')
+        except tk.TclError:
+            pass
+
+    @staticmethod
+    def _download_detail_text(speed: str, eta: str) -> str:
+        """Format live 'speed • ETA' text; blank when yt-dlp reports neither."""
+        parts = [speed.strip()] if speed.strip() else []
+        if eta.strip():
+            parts.append(f'เหลือ {eta.strip()}')
+        return '  •  '.join(parts)
+
+    def _on_drop_files(self, paths: list[str]) -> None:
+        """Explorer drop: file → source (switches to file mode), dir → destination."""
+        if self._cancellation is not None or self._closing:
+            return
+        routed = route_dropped_paths(paths)
+        if routed is None:
+            return
+        target, path = routed
+        try:
+            if target == 'destination':
+                self.destination.set(path)
+                self._add_to_destination_history(path)
+                self._validate_destination()
+            else:
+                if self.input_kind.get() != 'file':
+                    self.input_kind.set('file')
+                    self._sync_source_kind()
+                self.source.set(path)
+        except tk.TclError:
+            pass
 
     def _choose_destination(self) -> None:
         path = filedialog.askdirectory(title='เลือกโฟลเดอร์บันทึก')
@@ -2033,6 +2092,17 @@ class CliporaApp(tk.Tk):
             self._add_to_destination_history(path)
             self._validate_destination()
 
+    def _job_summary(self) -> str:
+        """One-line job parameters for the debug log (main thread only)."""
+        mode = self.mode.get()
+        if mode == 'stems':
+            picked = [STEM_LABELS[s] for s, var in self.stem_vars.items() if var.get()]
+            return f'สเต็ม {self._audio_format_value()} [{", ".join(picked)}]'
+        if mode == 'audio':
+            return f'เสียง {self.audio_format.get()}'
+        return (f'วิดีโอ {self.video_format.get()} '
+                f'คุณภาพ={self.quality.get()} fps={self._fps_value()}')
+
     def _start(self) -> None:
         if self._cancellation is not None:
             return
@@ -2040,6 +2110,12 @@ class CliporaApp(tk.Tk):
             return
         if not self._prepare_destination():
             return
+        self._debug(
+            f'เริ่มงาน | โหมด={self.mode.get()} แหล่ง={self.input_kind.get()} '
+            f'| ต้นฉบับ={self.source.get().strip()[:80]} '
+            f'| ปลายทาง={self.destination.get().strip()} '
+            f'| {self._job_summary()}'
+        )
         if self.mode.get() == 'stems':
             if self.input_kind.get() == 'url':
                 self._start_stems_url()
@@ -2496,6 +2572,7 @@ class CliporaApp(tk.Tk):
             else:
                 self.result_summary.configure(text=f'สร้างไฟล์แล้ว {len(targets)} ไฟล์')
             total = sum(target.stat().st_size for target in targets if target.is_file())
+            self._debug(f'ผลลัพธ์: {len(targets)} ไฟล์ รวม {format_file_size(total)}')
             self.result_size.configure(text=format_file_size(total))
             self.open_file_btn.state(['!disabled'])
             if len(targets) != 1:
@@ -2507,6 +2584,7 @@ class CliporaApp(tk.Tk):
     def _cancelled(self, cancellation: CancellationToken) -> None:
         if not self._finish_job(cancellation):
             return
+        self._debug('ยกเลิกงานแล้ว')
         self.progress['value'] = 0
         self.progress_text.set('0%')
         self.status.set('ยกเลิกงานแล้ว')
@@ -2531,6 +2609,7 @@ class CliporaApp(tk.Tk):
     def _failed(self, detail: str, cancellation: CancellationToken) -> None:
         if not self._finish_job(cancellation):
             return
+        self._debug(f'ล้มเหลว: {sanitize_error_message(detail)[:120]}')
         self._set_progress_phase('error', 0)
         safe_detail = sanitize_error_message(detail)
         if hasattr(self, '_toast'):
@@ -2546,6 +2625,7 @@ class CliporaApp(tk.Tk):
         self._start_accent = False
         self.start_button.state(['disabled'])
         self.status.set('กำลังยกเลิก…')
+        self._debug('ขอยกเลิกงาน')
         threading.Thread(target=cancellation.cancel, daemon=True).start()
 
     def _on_close(self) -> None:
