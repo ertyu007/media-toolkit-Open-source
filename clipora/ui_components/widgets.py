@@ -456,6 +456,7 @@ class RoundedCombobox(tk.Frame):
 
     _ROW_H = 34
     _POP_PAD = 8
+    _open_owner: "RoundedCombobox | None" = None  # at most one popup app-wide
 
     def __init__(
         self,
@@ -477,6 +478,8 @@ class RoundedCombobox(tk.Frame):
         self._hover = -1
         self._popup: tk.Toplevel | None = None
         self._pop_canvas: tk.Canvas | None = None
+        self._grab_prev: tk.Misc | None = None
+        self._grabbed = False
         family = font_family or getattr(parent, 'ui_font', FONT_FAMILY)
         self._family = family
         self._font = (family, font_size)
@@ -557,8 +560,19 @@ class RoundedCombobox(tk.Frame):
             self.open()
 
     def open(self) -> None:
-        if not self._enabled or self._popup is not None or not self._values:
+        if not self._enabled or not self._values:
             return
+        if self._popup is not None:
+            try:
+                if self._popup.winfo_exists():
+                    return
+            except tk.TclError:
+                pass
+            self._popup = None
+            self._pop_canvas = None
+        prev_owner = RoundedCombobox._open_owner
+        if prev_owner is not None and prev_owner is not self:
+            prev_owner.close()
         try:
             popup = tk.Toplevel(self)
             popup.overrideredirect(True)
@@ -595,18 +609,42 @@ class RoundedCombobox(tk.Frame):
             self._values.index(current) if current in self._values else 0)
         self._popup = popup
         self._pop_canvas = canvas
+        self._grab_prev: tk.Misc | None = None
+        self._grabbed = False
         self._paint_rows()
         canvas.bind('<Motion>', self._on_pop_motion)
         canvas.bind('<Button-1>', self._on_pop_click)
+        popup.bind('<Button-1>', self._on_popup_button)
         popup.bind('<Escape>', lambda _e: self.close())
         popup.bind('<Up>', lambda _e: self._move_hover(-1))
         popup.bind('<Down>', lambda _e: self._move_hover(1))
         popup.bind('<Return>', lambda _e: self._choose_hovered())
         popup.geometry(f'{width}x{height}+{x}+{y}')
         try:
-            popup.grab_set()
+            self._grab_prev = popup.grab_current()
         except tk.TclError:
-            pass
+            self._grab_prev = None
+        if self._grab_prev is popup:
+            self._grab_prev = None
+        try:
+            popup.grab_set()
+            self._grabbed = True
+        except tk.TclError:
+            self._grabbed = False
+        RoundedCombobox._open_owner = self
+
+    def _on_popup_button(self, event: tk.Event) -> None:
+        """Dismiss when a (grab-redirected) click lands outside the popup."""
+        popup = self._popup
+        if popup is None:
+            return
+        try:
+            px, py = popup.winfo_rootx(), popup.winfo_rooty()
+            pw, ph = popup.winfo_width(), popup.winfo_height()
+        except tk.TclError:
+            return
+        if not (px <= event.x_root < px + pw and py <= event.y_root < py + ph):
+            self.close()
 
     def _row_at(self, y: int) -> int:
         index = (y - self._POP_PAD) // self._ROW_H
@@ -676,9 +714,21 @@ class RoundedCombobox(tk.Frame):
         popup, self._popup = self._popup, None
         self._pop_canvas = None
         self._hover = -1
+        grabbed, self._grabbed = self._grabbed, False
+        prev, self._grab_prev = self._grab_prev, None
+        if RoundedCombobox._open_owner is self:
+            RoundedCombobox._open_owner = None
         if popup is not None:
             try:
+                if grabbed:
+                    popup.grab_release()
                 popup.destroy()
+            except tk.TclError:
+                pass
+        if grabbed and prev is not None:
+            try:
+                if prev.winfo_exists():
+                    prev.grab_set()
             except tk.TclError:
                 pass
 
@@ -1048,7 +1098,7 @@ class ToastManager:
     the platform refuses it); content is drawn straight on the canvas.
     """
     _KEY = _TRANSPARENT_KEY  # transparency key; in neither palette
-    _RADIUS = 8
+    _RADIUS = 14
 
     def __init__(self, root: tk.Tk) -> None:
         self._root = root
