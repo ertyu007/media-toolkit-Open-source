@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import tempfile
 import threading
 import tkinter as tk
@@ -102,9 +104,6 @@ from .ui_components.theme import (
     BG,
     BORDER,
     BORDER_LIGHT,
-    BUTTON_BG,
-    BUTTON_BORDER,
-    BUTTON_HOVER,
     CARD,
     DISABLED_BG,
     DISABLED_FG,
@@ -115,7 +114,6 @@ from .ui_components.theme import (
     FONT_SIZE_SMALL,
     FONT_SIZE_TITLE,
     FONT_SIZE_TOP,
-    MENU_ACTIVE_BG,
     MENU_ACTIVE_FG,
     MENU_BG,
     MUTED,
@@ -126,16 +124,18 @@ from .ui_components.theme import (
     SECTION_ACCENT,
     SUCCESS,
     TEXT,
+    THEME_NAME,
     TOAST_BG,
     TOP_BAR_BG,
     TOPBAR_BUTTON_BG,
     TOPBAR_BUTTON_HOVER,
     TOPBAR_BUTTON_FG,
-    WARNING,
+    normalize_theme,
     pick_ui_font,
 )
 from .ui_components.widgets import (
     InlineError,
+    PILL_HEIGHT,
     RainbowBar,
     RoundedButton,
     RoundedCombobox,
@@ -1404,8 +1404,130 @@ class CliporaApp(tk.Tk):
     def _open_donate_dialog(self) -> None:
         DonateDialog(self)
 
+    def _uninstall_app(self) -> None:
+        """Launch the Inno uninstaller (installed build) or open Apps settings."""
+        if self._cancellation is not None:
+            messagebox.showwarning(
+                'กำลังทำงาน',
+                'รอให้งานปัจจุบันเสร็จหรือยกเลิกก่อนถอนการติดตั้ง',
+                parent=self,
+            )
+            return
+        if getattr(sys, 'frozen', False):
+            try:
+                app_dir = Path(sys.executable).resolve().parent
+            except OSError:
+                app_dir = None
+            uninstaller = find_clipora_uninstaller(app_dir) if app_dir else None
+            if uninstaller is None:
+                messagebox.showinfo(
+                    'ถอนการติดตั้ง',
+                    'ไม่พบตัวถอนการติดตั้ง (unins000.exe) ข้างโปรแกรม',
+                    parent=self,
+                )
+                return
+            if messagebox.askyesno(
+                'ถอนการติดตั้ง Clipora หมดจด',
+                'ปิด Clipora แล้วเปิดตัวถอนการติดตั้ง?\n\n'
+                '• ลบโปรแกรม + เครื่องมือที่โหลดมา\n'
+                '• ลบตั้งค่า/ประวัติในเครื่องด้วย\n'
+                '• ไฟล์งานของคุณไม่ถูกลบ',
+                parent=self,
+            ):
+                try:
+                    subprocess.Popen([str(uninstaller)])
+                except OSError as exc:
+                    messagebox.showerror(
+                        'เปิดตัวถอนการติดตั้งไม่สำเร็จ', str(exc), parent=self)
+                    return
+                self.destroy()
+            return
+        opener = getattr(os, 'startfile', None)
+        try:
+            if opener is None:
+                raise OSError('no startfile')
+            opener('ms-settings:appsfeatures')
+        except OSError:
+            messagebox.showinfo(
+                'ถอนการติดตั้ง',
+                'รันจากซอร์สโค้ด: ลบโฟลเดอร์โปรเจกต์ได้เลย (ไม่มีอะไรติดตั้งเพิ่ม)',
+                parent=self,
+            )
+
     def _open_history(self) -> None:
         self._show_view('history')
+
+    def _open_settings(self) -> None:
+        from .settings_ui import SettingsDialog
+        try:
+            dialog = SettingsDialog(
+                self,
+                initial={
+                    'theme': THEME_NAME,
+                    'chime': self._chime_var.get(),
+                    'auto_update': self._auto_update_var.get(),
+                    'destination': self.destination.get(),
+                    'mode': self.mode.get(),
+                    'audio_format': self.audio_format.get(),
+                    'video_format': self.video_format.get(),
+                    'quality': self.quality.get(),
+                    'fps': self.fps.get(),
+                    'audio_formats': AUDIO_FORMAT_LABELS,
+                    'video_formats': VIDEO_FORMAT_LABELS,
+                    'qualities': VIDEO_QUALITY_PRESETS,
+                    'fps_options': FPS_LABELS,
+                },
+                version=__version__,
+                on_uninstall=self._uninstall_app,
+            )
+            self.wait_window(dialog)
+            result = dialog.result
+        except tk.TclError:
+            return
+        if result:
+            self._apply_settings(result)
+
+    def _apply_settings(self, data: dict) -> None:
+        try:
+            current = load_settings()
+        except Exception:
+            current = {}
+        if not isinstance(current, dict):
+            current = {}
+        current.pop('auto_debug', None)  # removed setting; do not persist it
+        current.update({
+            'theme': data.get('theme', THEME_NAME),
+            'chime_enabled': bool(data.get('chime', True)),
+            'auto_update_check': bool(data.get('auto_update', True)),
+            'destination': data.get('destination', ''),
+            'mode': data.get('mode', 'video'),
+            'audio_format': data.get('audio_format', 'MP3'),
+            'video_format': data.get('video_format', ''),
+            'quality': data.get('quality', 'Balanced'),
+            'fps': data.get('fps', ''),
+        })
+        validated = validate_job_settings(current)
+        try:
+            save_settings({**current, **validated})
+        except Exception:
+            pass
+        self._chime_var.set(validated['chime_enabled'])
+        self._auto_update_var.set(validated['auto_update_check'])
+        self.destination.set(validated['destination'])
+        self._validate_destination_or_hide()
+        self.audio_format.set(validated['audio_format'])
+        self.video_format.set(validated['video_format'])
+        self.quality.set(validated['quality'])
+        self.fps.set(validated['fps'])
+        if self.mode.get() != validated['mode']:
+            self.mode.set(validated['mode'])
+            self._sync_options()
+        if hasattr(self, '_toast'):
+            if validated['theme'] != THEME_NAME:
+                self._toast.show(
+                    'บันทึกแล้ว เปิดแอปใหม่เพื่อใช้ธีมใหม่', 'info', 6000)
+            else:
+                self._toast.show('บันทึกตั้งค่าแล้ว', 'success')
 
     def _toggle_sidebar(self) -> None:
         try:

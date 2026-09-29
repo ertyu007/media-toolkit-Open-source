@@ -9,23 +9,25 @@ from .dependencies import (
     DependencyInstallCancelled,
     DependencySpec,
     SEPARATOR_DEPENDENCIES,
-    WINDOWS_X64_DEPENDENCIES,
     dependencies_to_install,
     install_toolchains,
 )
+from .separator import separator_installed
 from .ui_components.motion import fade_in_window
 from .ui_components.theme import (
-    ACCENT,
-    ACCENT_SOFT,
     BG,
     CARD,
+    ERROR,
     FIELD,
     FONT_FAMILY,
+    SUCCESS,
     TEXT,
 )
-
-
-WIZARD_STEPS = ('ยินดีต้อนรับ', 'ข้อตกลง', 'ตรวจสอบ', 'ติดตั้ง', 'เสร็จสิ้น')
+from scripts.check_environment import (
+    check_javascript_runtime,
+    check_tool,
+    check_ytdlp,
+)
 
 
 def dependency_rows(specs: tuple[DependencySpec, ...]) -> tuple[str, ...]:
@@ -64,9 +66,24 @@ class ToolSetupDialog(tk.Toplevel):
         self._on_ready = on_ready
         self._on_cancelled = on_cancelled
         if repair_mode:
-            self._selected = WINDOWS_X64_DEPENDENCIES
+            # Repair opens a status overview; the missing set is computed
+            # when the user chooses to install (never a blind reinstall).
+            self._selected: tuple[DependencySpec, ...] = ()
+            self._steps: tuple[tuple[str, str, Callable[[], None]], ...] = (
+                ('status', 'สถานะ', self._build_status),
+                ('review', 'ตรวจสอบ', self._build_review),
+                ('install', 'ติดตั้ง', self._build_install),
+                ('complete', 'เสร็จสิ้น', self._build_complete),
+            )
         else:
             self._selected = dependencies_to_install(force=False)
+            self._steps = (
+                ('welcome', 'ยินดีต้อนรับ', self._build_welcome),
+                ('consent', 'ข้อตกลง', self._build_consent),
+                ('review', 'ตรวจสอบ', self._build_review),
+                ('install', 'ติดตั้ง', self._build_install),
+                ('complete', 'เสร็จสิ้น', self._build_complete),
+            )
         if separator:
             self._selected = self._selected + SEPARATOR_DEPENDENCIES
         self._step = 0
@@ -92,7 +109,7 @@ class ToolSetupDialog(tk.Toplevel):
         shell.columnconfigure(0, weight=1)
         shell.rowconfigure(2, weight=1)
 
-        title = 'ซ่อมเครื่องมือ Clipora' if self._repair_mode else 'ตั้งค่า Clipora ครั้งแรก'
+        title = 'เครื่องมือ Clipora' if self._repair_mode else 'ตั้งค่า Clipora ครั้งแรก'
         ttk.Label(shell, text=title, style='Heading.TLabel').grid(
             row=0,
             column=0,
@@ -143,26 +160,19 @@ class ToolSetupDialog(tk.Toplevel):
             child.destroy()
 
     def _show_step(self, step: int) -> None:
-        self._step = max(0, min(step, len(WIZARD_STEPS) - 1))
+        self._step = max(0, min(step, len(self._steps) - 1))
+        key, label, builder = self._steps[self._step]
         self.step_text.set(
-            f'ขั้นตอน {self._step + 1} จาก {len(WIZARD_STEPS)}  •  '
-            f'{WIZARD_STEPS[self._step]}'
+            f'ขั้นตอน {self._step + 1} จาก {len(self._steps)}  •  {label}'
         )
         self._clear_page()
-        self.back_button.state(['!disabled'] if self._step in (1, 2) else ['disabled'])
+        self.back_button.state(
+            ['!disabled'] if key in ('consent', 'review') else ['disabled'])
         self.cancel_button.state(['!disabled'])
         self.cancel_button.configure(text='ยกเลิก')
         self.next_button.state(['!disabled'])
         self.next_button.configure(text='ถัดไป', command=self._go_next)
-
-        builders = (
-            self._build_welcome,
-            self._build_consent,
-            self._build_review,
-            self._build_install,
-            self._build_complete,
-        )
-        builders[self._step]()
+        builder()
 
     def _page_card(self) -> ttk.Frame:
         card = ttk.Frame(self.page, style='Card.TFrame', padding=(24, 22))
@@ -229,7 +239,7 @@ class ToolSetupDialog(tk.Toplevel):
         ).grid(row=1, column=0, sticky='w', pady=(14, 18))
         consent = tk.Checkbutton(
             card,
-            text='ฉันเข้าใจและยินยอมให้ดาวน์โหลดและติดตั้งเครื่องมือที่ระบุ',
+            text='ฉันยินยอมให้ดาวน์โหลดและติดตั้งเครื่องมือ',
             variable=self.accepted,
             command=self._sync_consent,
             bg=CARD,
@@ -248,6 +258,79 @@ class ToolSetupDialog(tk.Toplevel):
             self.next_button.state(['!disabled'])
         else:
             self.next_button.state(['disabled'])
+
+    def _build_status(self) -> None:
+        card = self._page_card()
+        ttk.Label(card, text='สถานะเครื่องมือ', style='Section.TLabel').grid(
+            row=0, column=0, sticky='w'
+        )
+        self._status_rows = ttk.Frame(card, style='Card.TFrame')
+        self._status_rows.grid(row=1, column=0, sticky='ew', pady=(14, 6))
+        self._status_rows.columnconfigure(1, weight=1)
+        ttk.Label(
+            self._status_rows, text='กำลังตรวจสอบ…', style='CardMuted.TLabel',
+        ).grid(row=0, column=0, columnspan=2, sticky='w')
+        ttk.Label(
+            card,
+            text='ตำแหน่งติดตั้ง: %LOCALAPPDATA%\\Clipora\\tools',
+            style='CardMuted.TLabel',
+            wraplength=570,
+            justify='left',
+        ).grid(row=2, column=0, sticky='w')
+        self.next_button.configure(text='กำลังตรวจสอบ…')
+        self.next_button.state(['disabled'])
+        threading.Thread(target=self._status_worker, daemon=True).start()
+
+    def _status_worker(self) -> None:
+        results = [
+            check_tool('ffmpeg'),
+            check_tool('ffprobe'),
+            check_ytdlp(),
+            check_javascript_runtime(),
+        ]
+        try:
+            self.after(0, self._apply_status_results, results)
+        except tk.TclError:
+            pass
+
+    def _apply_status_results(self, results) -> None:
+        try:
+            for child in self._status_rows.winfo_children():
+                child.destroy()
+            rows = [(result.ok, result.name, result.detail) for result in results]
+            sep_ok = separator_installed()
+            rows.append((
+                sep_ok,
+                'แยกสเต็มเสียง (Demucs)',
+                'พร้อมใช้งาน' if sep_ok else 'ยังไม่ติดตั้ง (ไม่บังคับ, ~209 MB)',
+            ))
+            for index, (ok, name, detail) in enumerate(rows):
+                ttk.Label(
+                    self._status_rows, text='✓' if ok else '✕',
+                    style='Card.TLabel',
+                    foreground=SUCCESS if ok else ERROR,
+                    font=(FONT_FAMILY, 11, 'bold'),
+                ).grid(row=index, column=0, sticky='nw', padx=(0, 10))
+                text = ttk.Frame(self._status_rows, style='Card.TFrame')
+                text.grid(row=index, column=1, sticky='ew', pady=(0, 10))
+                ttk.Label(text, text=name, style='Card.TLabel').pack(anchor='w')
+                ttk.Label(
+                    text, text=detail, style='CardMuted.TLabel',
+                    wraplength=480, justify='left',
+                ).pack(anchor='w')
+            missing = (
+                len(dependencies_to_install(force=False))
+                + (0 if sep_ok else len(SEPARATOR_DEPENDENCIES))
+            )
+            if missing:
+                self.next_button.configure(
+                    text=f'ติดตั้งส่วนที่ขาด ({missing})')
+                self.next_button.state(['!disabled'])
+            else:
+                self.next_button.configure(text='ปิด', command=self._close_without_setup)
+                self.next_button.state(['!disabled'])
+        except tk.TclError:
+            pass
 
     def _build_review(self) -> None:
         card = self._page_card()
@@ -326,15 +409,32 @@ class ToolSetupDialog(tk.Toplevel):
         self.next_button.state(['!disabled'])
 
     def _go_next(self) -> None:
-        if self._step == 1 and not self.accepted.get():
+        key = self._steps[self._step][0]
+        if key == 'consent' and not self.accepted.get():
             return
-        if self._step == 2:
-            self._show_step(3)
+        if key == 'status':
+            self._go_from_status()
+            return
+        if key == 'review':
+            self._show_step(self._step + 1)
+            return
+        self._show_step(self._step + 1)
+
+    def _go_from_status(self) -> None:
+        """Status → review with only the missing toolchains selected."""
+        specs = list(dependencies_to_install(force=False))
+        if not separator_installed():
+            self._separator = True
+            for spec in SEPARATOR_DEPENDENCIES:
+                if spec not in specs:
+                    specs.append(spec)
+        self._selected = tuple(specs)
+        if not self._selected:
             return
         self._show_step(self._step + 1)
 
     def _go_back(self) -> None:
-        if self._step in (1, 2):
+        if self._steps[self._step][0] in ('consent', 'review'):
             self._show_step(self._step - 1)
 
     def _start_install(self) -> None:
@@ -354,7 +454,7 @@ class ToolSetupDialog(tk.Toplevel):
             install_toolchains(
                 on_progress=self._report_from_worker,
                 cancel_event=self._cancel_event,
-                force=self._repair_mode,
+                force=False,
                 include_separator=self._separator,
             )
         except DependencyInstallCancelled:

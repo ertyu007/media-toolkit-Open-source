@@ -50,3 +50,8 @@ Name: "desktopicon"; Description: "สร้างไอคอนบน Desktop"
 
 [Run]
 Filename: "{app}\Clipora.exe"; Description: "เปิด Clipora"; Flags: nowait postinstall skipifsilent runascurrentuser
+
+[UninstallDelete]
+; Thorough uninstall: remove Clipora's local data (managed tools, settings, history).
+; Finished user media elsewhere is never touched.
+Type: filesandordirs; Name: "{localappdata}\Clipora"
