@@ -2,12 +2,118 @@
 
 อัปเดตล่าสุด: 2026-09-28
 
+## ทำวันนี้ (2026-09-28) — ไอคอน toast วาดเอง (ยังไม่ bump version)
+
+- **วงกลมขอบๆ**: ตัว `ⓘ` พึ่งฟอนต์ fallback บางเครื่องวาดเป็นกล่อง → เลิกใช้ glyph ผสม เปลี่ยนทุก type เป็นวงแหวนวาดเอง + ตัวอักษร `i/✓/!/✕` (มีใน Segoe UI แน่นอน)
+- **Tests**: full suite ผ่าน (toast ต้องจอจริง — smoke 4 type เปิด/ปิดผ่าน)
+
+- **dropdown มน**: ถอด `ttk.Combobox` ออกจาก `RoundedCombobox` เขียน popup เอง (toplevel มน r=12 ผ่าน `-transparentcolor` + แถวไฮไลต์มน r=8) — ไม่มีขอบเหลี่ยมดั้งเดิมเหลือ; API เดิมครบ (`textvariable/values/state/values=/focus_set/<<ComboboxSelected>>`) + คีย์บอร์ด (เปิด/ลูกศร/Enter/Esc) + flip ขึ้นบนถ้าจอล่างไม่พอ; ลบ style `Pill.TCombobox` + `option_add` ที่ตายตาม
+- **toast ในภาพคือของเก่า**: โค้ดปัจจุบันเป็น canvas มนแล้ว (smoke นับ 15 items) — ผู้ใช้รัน build เก่าอยู่
+- **Tests**: full suite รอรอบนี้ (popup ต้องจอจริง — smoke เปิด/เลือก/ปิดผ่าน); `USER_GUIDE` ไม่ต้องแก้ (พฤติกรรมผู้ใช้เหมือนเดิม)
+
+## ทำวันนี้ (2026-09-28) — โหมดแยกปุ่มมีล็อกสเต็ม (ยังไม่ bump version)
+
+- **แยกปุ่ม+ล็อก**: `SegmentedControl` รับ `gap` (ปุ่มแยกเป็นลูกๆ แต่ pill เลือกยังสไลด์ข้ามทั้งแถวเหมือนเดิม) + `locked`/`on_locked` (ติ๊ก 🔒 เทา กดแล้วไม่เปลี่ยนโหมด); hero ใช้ `gap=8` ล็อก `stems` จนกว่า `separator_installed()` กดตอนล็อกพาไปติดตั้งชุดแยกสเต็ม; รีเฟรชล็อกใน `_sync_options` + `_tools_ready`
+- **Tests**: `test_segmented.py` ใหม่ (math ล้วน ไม่ต้องจอ: layout/hit/edge); `USER_GUIDE` §3 sync ตามจริง
+
+- **เอาออกเหมือนกัน**: ถอดปุ่ม 🗑 ท้ายแถวโหมดปกติด้วย (ถังขยะถอดไปก่อนแล้ว) ลบทุกอย่างผ่านคลิกขวาอย่างเดียว + ลบคอลัมน์ actions/`_history_header` ที่ตายตาม
+- **Tests**: full suite รอรอบนี้; `USER_GUIDE` §9 sync ตามจริง
+
+- **crash ตั้งค่า**: โค้ด footer ปุ่มยกเลิก/บันทึกหลุดเข้าไปใน `_uninstall` (edit ผิดจุด) กดถอนติดตั้งเลย `NameError` → ย้ายกลับ `__init__` + smoke เปิด dialog ยืนยัน
+- **ถังขยะไร้ปุ่ม**: ถอดปุ่มกู้คืน/ลบถาวรท้ายแถว ทำผ่านคลิกขวาอย่างเดียว (เมนูมีครบอยู่แล้ว) + ยุบคอลัมน์ actions ในโหมดถังขยะให้แถวเต็มความกว้าง; กัน `_select_row` ตอน actions เป็น None
+- **Tests**: full suite รอรอบนี้; `USER_GUIDE` §9 sync ตามจริง
+
+## ทำวันนี้ (2026-09-28) — แก้เสียงแจ้งเตือนเพี้ยน (ยังไม่ bump version)
+
+- **สาเหตุ**: ตารางโน้ตป้าย `C#6/E6` แต่ความถี่จริงคือ D6/G6 (1174/1568Hz แหลมแสบหู) → แก้เป็น A-major แท้ `880/1109/1319Hz` + เว้น gap 25ms ไม่ให้เสียงเละ
+- **ลองฟัง**: ตั้งค่าแถวเสียงมีปุ่ม `ลองฟัง` กดเช็กเสียงได้เลย
+- **Tests**: `test_sound.py` ใหม่ (โน้ตตรง major arpeggio ตามสูตร tempered, รวม <600ms, ยิงแล้วไม่พัง)
+
+- **popup ตามวง**: ป้ายธีมเหลือ `ธีม`, แถวโฟลเดอร์เต็มความกว้าง (ช่อง `RoundedEntry` ขยาย ปุ่ม `เลือก…`/`ถอนการติดตั้ง…` กระชับ), เกี่ยวกับมีคำอธิบาย 2 บรรทัดไม่โล่ง, หน้าต่างกว้าง 600
+- **ยืนยัน+ถอนหมดจด**: confirm บอกหมด (ลบโปรแกรม+เครื่องมือ+ตั้งค่า/ประวัติ ไฟล์งานไม่โดน); `clipora.iss` เพิ่ม `[UninstallDelete]` ลบ `%LOCALAPPDATA%\Clipora` ทั้งยวง
+- **toast มน**: `ToastManager` วาดการ์ดมน (r=14) บน canvas + `-transparentcolor` (fallback เหลี่ยมถ้า platform ปฏิเสธ), ข้อความ/ปิดเหมือนเดิม
+- **Tests**: full suite รอรอบนี้ (toast/iss ต้องจอ+ติดตั้งจริง — smoke สร้าง toast + `test_packaging` คุม iss); `USER_GUIDE` §3 sync ตามจริง
+
+- **dropdown เหลี่ยม**: ขอบขาวคือ border ดั้งเดิมของ popup listbox → `option_add` ปิด (`borderWidth/highlightThickness/activeBorderWidth 0` + `relief flat`) เหลือแต่พื้นเข้มตามธีม (เหลี่ยมมนวาดไม่ได้ด้วย Tk ดั้งเดิม — ไร้ขอบแล้วกลืนพอ)
+- **ถอนการติดตั้ง**: เกี่ยวกับใน popup เพิ่มปุ่ม `ถอนการติดตั้ง…` → `_uninstall_app`: รุ่นติดตั้ง (frozen) หา `unins000.exe` ข้าง exe ถามยืนยันแล้วรัน (arg list) + ปิดแอป, หาไม่เจอ/รันซอร์สโค้ดเปิดหน้า Apps settings (มี fallback) — กันกดตอนมีงานรัน; helper บริสุทธิ์ `find_clipora_uninstaller` + เทส 2
+- **Tests**: full suite รอรอบนี้; `USER_GUIDE` §3 sync ตามจริง
+
+- **popup ตามวง**: ป้ายธีมยาวตัดเหลือ `ธีม` (+โน้ตเปิดแอปใหม่ถึงมีผล), แถวโฟลเดอร์บันทึกย้ายเต็มความกว้าง (label บน ช่อง+ปุ่มล่าง) หมดปัญหาพาธขาด, หน้าต่างกว้าง 600
+- **กระชับคำทั้งโปรแกรม**: วางลิงก์/เลือกไฟล์หรือลากมาวาง/เปิดโฟลเดอร์/คู่มือ/ตรวจอัปเดต/เสียงแจ้งเตือน/ค่าเริ่มต้นงาน/ยินยอมติดตั้งเครื่องมือ/คำอธิบายโหมด/trim/Toast ธีม (เลี่ยงข้อความที่เทส pin ไว้ทั้งหมด)
+- **debug เฉพาะ encode**: ตัด log นอกงานแปลง (พรีวิว/ประวัติ/ถังขยะ/ลากวาง/ตั้งค่า/ตรวจอัปเดต/สถานะเครื่องมือ) เหลือพารามิเตอร์งาน/เปลี่ยนเฟส/speed ทุก 5วิ/ผลรวม/ล้มเหลว/ยกเลิก; ถอด `on_log` ที่ตายตาม
+- **Tests**: full suite รอรอบนี้; `USER_GUIDE` §3 sync ตามจริง
+
+- **ตัดซ้ำตามฟีดแบ็ก**: ถอดปุ่ม `ตรวจหาการอัปเดต` ใน popup (มีใน sidebar แล้ว), ถอด `auto_debug` ทั้งยวง (setting/var/hook/dialog เทสอัปเดตตาม, ค่าเก่าในไฟล์ถูกล้างตอนบันทึก)
+- **debug เปิดค้าง**: ถอดปุ่มกาง/พับ + `_debug_visible` กล่อง 6 บรรทัดอยู่ถาวร; เนื้อละเอียดขึ้น — พารามิเตอร์งานเต็ม (`โหมด/แหล่ง/ต้นฉบับ/ปลายทาง/รูปแบบ/คุณภาพ/fps/สเต็ม`), ผลรวมขนาด, ชื่อไฟล์ทุกประวัติ, พรีวิว (ชื่อ/ช่อง/เวลา), ลากวาง, บันทึกตั้งค่า, ประวัติถังขยะทุกแอ็กชัน, สถานะเครื่องมือทีละตัว, ผลตรวจอัปเดต; ตัดซ้ำ (`_done`/`_done_stems` เหลือ phase+ผลรวม+ชื่อประวัติ)
+- **Tests**: full suite รอรอบนี้; `USER_GUIDE` §3 sync ตามจริง
+
+## ทำวันนี้ (2026-09-28) — หน้าต่างเครื่องมือมีสถานะ + dropdown ไม่ขาวแล้ว (ยังไม่ bump version)
+
+- **พื้นขาว dropdown**: ตัวจริงคือ parent map ของ clam บังคับ `readonly → #dcdad5` ทับ `configure` (บทเรียน: style map สืบทอด+รวมกัน configure อย่างเดียวไม่ชนะ state) → เติม `fieldbackground` ทุก state + `selectbackground/selectforeground` ใน map; lookup ยืนยันทุก state ได้ `#232329`/ม่วงแล้ว
+- **เครื่องมือหายแปลก**: โหมดซ่อมเคยเปิด wizard ต้อนรับเต็มยศ+ติดตั้งทับทั้งหมด → เปลี่ยนเป็น 4 ขั้น (สถานะ/ตรวจสอบ/ติดตั้ง/เสร็จสิ้น) หน้าแรกรัน `check_tool/check_ytdlp/check_javascript_runtime` (reuse `scripts/check_environment`, ไม่ freeze เพราะ worker thread) + `separator_installed` โชว์ ✓/✕ ทีละตัวพร้อมเวอร์ชัน; ปุ่ม `ติดตั้งส่วนที่ขาด (N)` ติดตั้งเฉพาะที่หาย (`force=False`) ครบแล้วปุ่มกลายเป็นปิด; ลบ `WIZARD_STEPS`/import ตาย; first-run/separator flow เดิมไม่แตะ
+- **Tests**: full suite รอรอบนี้ (status page ต้องมีจอ+เครื่องมือจริง เลย smoke ด้วย mainloop แทน); `USER_GUIDE` §2 sync ตามจริง
+
+- **debug การทำงาน**: แถบล่างเพิ่มปุ่ม `▸ debug การทำงาน` กาง `tk.Text` 6 บรรทัด (พับอยู่ดีฟอลต์ ปุ่มเริ่มเลยลอยสูงขึ้น) บันทึก `[เวลา] ข้อความ` ตอนเริ่มงาน/เปลี่ยนเฟส/ความเร็วดาวน์โหลด (ทุก 5วิ)/เสร็จ/ล้มเหลว/ยกเลิก/พรีวิว; ตัดเหลือ 300 บรรทัด; `_debug` เรียกเฉพาะ main thread เท่านั้น
+- **crash ลากไฟล์ (critical)**: `widget.after` ใน `WndProc` ทำ interpreter พัง (bisect ยืนยัน) → proc ใหม่แตะแค่ Win32 + queue ส่วน poller (`after` ปกติบน main thread) ค่อยยิง callback; proof ด้วย HDROP จำลองยิง `WM_DROPFILES` จริง end-to-end ผ่าน; เติม argtypes `DragQueryFileW`/`DragFinish` ที่ทำให้ drop จริงรอบแรกพัง
+- **Tests**: `test_ui_helpers` +1 (`format_debug_line`); `USER_GUIDE` §3 sync ตามจริง
+
+## ทำวันนี้ (2026-09-28) — ลากไฟล์วางจาก Explorer (ยังไม่ bump version)
+
+- **ไม่เพิ่ม dependency**: Tk รับ `WM_DROPFILES` ไม่ได้ → `clipora/dragdrop.py` ใหม่ ใช้ ctypes ล้วน (`DragAcceptFiles` + subclass `WndProc`, คืน proc เดิมตอน destroy) callback กลับ main thread ผ่าน `after`
+- **วางแล้วฉลาด**: ไฟล์→ช่องแหล่งสื่อ (อยู่โหมด URL สลับเป็นโหมดไฟล์ให้เอง) โฟลเดอร์→ช่องบันทึกที่ เลือกไฟล์แรกถ้าลากมาหลายอัน ไม่รับตอนมีงานรันอยู่; hint ใต้ช่องไฟล์บอกว่าลากวางได้
+- **Tests**: `test_ui_helpers` +4 (`route_dropped_paths` ล้วน, ctypes ทดสอบ headless ไม่ได้); `USER_GUIDE` §3 sync ตามจริง
+
+## ทำวันนี้ (2026-09-28) — ปุ่ม ☰/« ตัวเดียว + ตั้งค่าท้าย sidebar (ยังไม่ bump version)
+
+- **ปุ่มเดียวสลับกัน**: ปุ่มบน topbar แสดง « ตอนแถบเปิด (กด=ซ่อน) / ☰ ตอนแถบปิด (กด=เปิด) ผ่าน `_sync_sidebar_toggle`; ถอดปุ่ม « ซ่อน ท้ายแถบออกประหยัดที่
+- **ตั้งค่าท้ายแถบ** (จำลง `settings.json`, เขียนแบบไม่พังงาน): 📁 **โฟลเดอร์บันทึก** (เรียก `_choose_destination` ตัวเดียวกับฟอร์มหลัก), สวิตช์**เสียงแจ้งเตือน** (`chime_enabled` ตัด `play_completion_chime` ใน `_show_result`), สวิตช์**ตรวจอัปเดตอัตโนมัติ** (`auto_update_check` ตัด startup check yt-dlp+app — กดตรวจมือยังได้เสมอ)
+- **Tests**: full suite รอรอบนี้; `USER_GUIDE` §3 sync ตามจริง
+
+## ทำวันนี้ (2026-09-28) — ประวัติคอลัมน์ Explorer + จำรายการที่เลือก (ยังไม่ bump version)
+
+- **ปุ่มถังขยะแยกขวาสุด**: กลุ่ม filter เหลือ 4 pill (ทั้งหมด/เพลง/วิดีโอ/สเต็ม) ปุ่มถังขยะแยกเป็นปุ่มเดี่ยวขวามือ กดสลับโหมดถังขยะ/ทั้งหมด (`_toggle_trash_filter`) ติดไฮไลต์ `SideActive` ตอนอยู่ในถังขยะ (`_sync_trash_button` ท้าย `_render`)
+
+- **คอลัมน์แบบ Explorer**: header คงที่ **ชื่อ/ประเภท/วันที่/ขนาด** + แถว grid คอลัมน์กว้างพิกเซลคงที่ (`_HISTORY_COLUMN_MINSIZES`) header ตรงกับแถวเสมอ; ขนาดอ่านจากไฟล์จริง ไฟล์หายขึ้น `—` แถวเป็นสีจาง; ชื่อยาวตัด 40 ตัวอักษร (ซ่อม `rowconfigure` ผิดแถวที่ทำลิสต์ไม่ยืดด้วย)
+- **จำ path ที่เลือก**: คลิกแถวไหนจำ `id` ลง `settings.json` (`selected_history_id`, เขียนแบบไม่พังงาน) เปลี่ยนฟิลเตอร์/สลับ view/เปิดแอปใหม่ยังเลือกที่เดิม (`find_history_index` มี fallback เทียบ target path); ลบรายการที่จำไว้ล้างค่าทิ้ง
+- **Tests**: `test_ui_helpers` +3 (หา id เจอ/fallback target/ไม่เจอได้ None); full suite รอรอบนี้; `USER_GUIDE` §9 sync ตามจริง
+
+## ทำวันนี้ (2026-09-28) — ประวัติมีถังขยะ 30 วัน + เมนูคลิกขวา (ยังไม่ bump version)
+
+- **ช่องโหว่ลบแล้วหายเลย**: ปุ่ม 🗑 เดิมลบถาวรทันที → ถามยืนยันก่อนทุกครั้ง แล้วย้ายไปถังขยะ (`trashed_at`) แทน; ของในถังขยะถูก purge อัตโนมัติตอนโหลดเมื่อเกิน 30 วัน (`TRASH_RETENTION_SECONDS`); ไฟล์จริงไม่ถูกแตะทุกกรณี
+- **ถังขยะมองเห็นได้**: pill เพิ่ม **ถังขยะ** แถวในนั้นมีปุ่ม **กู้คืน** + **ลบถาวร** (ถามยืนยัน); `history.py` เพิ่ม `trash_entry`/`restore_entry`/`trash_all`/`empty_trash`/`load_trash` (ฟิลด์ใหม่มี default ไฟล์เก่าอ่านได้); เติมบั๊กแฝง `add_entry` ที่เคยเขียนทับถังขยะทิ้ง (ใช้ `_read_all` แทน `load_history`)
+- **ปุ่มล่างหายไป**: **เปิดตำแหน่งไฟล์**/**ลบทั้งหมด** ถูกถอด → คลิกขวาที่ว่าง/ที่แถวเปิด `tk.Menu` (เปิดตำแหน่งไฟล์/ลบรายการนี้/ลบทั้งหมด…/ล้างถังขยะ…, ปิดเองเมื่อคลิกที่อื่นแบบ Windows, โทนเดียวกับเมนู history ของ destination)
+- **Tests**: `test_history` +5 (ซ่อน/กู้คืน/purge เกินอายุ/trash_all+empty/new ไม่ทับถังขยะ); `USER_GUIDE` §9 sync ตามจริง
+
+## ทำวันนี้ (2026-09-28) — skeleton shimmer + ปกอัตราส่วนจริง (ยังไม่ bump version)
+
+- **shimmer แทน pulse**: placeholder เดิมเป็นข้อความกระพริบ → วาดบน Canvas ตรงเลย์เอาต์จริง (กล่องรูปซ้าย + แถบข้อความขวา 2 แถบ) มีแถบแสงกวาดซ้าย→ขวาทุก 50ms (`_tick_skeleton_shimmer`, สี `SECONDARY_BORDER` บนพื้น `FIELD`); วาดตามความกว้างจริงผ่าน `<Configure>`, หยุด loop ตอนข้อมูลมา/ซ่อน/พิมพ์ใหม่ (`_stop_preview_anim`)
+- **เลย์เอาต์ล็อก**: แยก `_preview_body` (รูปซ้าย ข้อความขวา) ออกจาก `_skel` สลับ show/hide ไม่กระโดด; ปก `fit_photo_image(…, 168, 120)` คงอัตราส่วนจริงไม่ครอป (แนวตั้งโชว์สูงเต็ม ไม่โดนบีบเป็น 16:9)
+- **Tests**: full suite รอรอบนี้ (animation ทดสอบ headless ไม่ได้ — logic บริสุทธิ์ไม่มีเพิ่ม); `USER_GUIDE` §4 sync ตามจริง
+
+## ทำวันนี้ (2026-09-28) — ประวัติเหลือปุ่มถังขยะรายแถว (ยังไม่ bump version)
+
+- **ลดความซับซ้อนตามฟีดแบ็ก**: checkbox + เลือกทั้งหมด + ตัวนับ + ลบที่เลือก → แถวละปุ่ม 🗑 ลบทันที (ไม่ถาม, ไม่โดนไฟล์จริง) + คง **ลบทั้งหมด** (ถามยืนยัน) ไว้ขวาสุด; คลิกแถวเลือก (ไฮไลต์) ดับเบิลคลิก/ปุ่มเปิดตำแหน่งไฟล์เหมือนเดิม ชื่อยาวตัด 55 ตัวอักษร
+- **Tests**: full suite รอรอบนี้; `USER_GUIDE` §9 sync ตามจริง
+
+## ทำวันนี้ (2026-09-28) — พรีวิว skeleton + ขนาดไฟล์ + speed/ETA (ยังไม่ bump version)
+
+- **skeleton**: การ์ดพรีวิวลิงก์โชว์ placeholder ทันทีที่ URL ถูกต้อง (`_show_preview_skeleton` + pulse สลับสี 450ms) แทนที่จะว่างจน worker ตอบ; หยุด pulse ตอนข้อมูลมาจริง/ซ่อน/ยกเลิก (กัน loop ซ้อนด้วย `_stop_preview_pulse`)
+- **ข้อมูลดีขึ้น**: `preview.py` ขอเพิ่ม `duration` (วินาที), `filesize_approx`, `filesize` จาก yt-dlp; UI โชว์ `ช่อง • ระยะเวลา • ≈ขนาด` — ไม่มีขนาดจริง + โหมดเสียง = ประมาณจากความยาว (192kbps) ติดป้าย "(ประมาณ)"
+- **speed/ETA ตอนโหลด**: progress template เพิ่ม `|speed|ETA`, parser ใหม่ `parse_import_progress_detail` (ตัวเก่า `parse_import_progress` ยังคืน float เหมือนเดิม, รองรับบรรทัดเก่าไม่มี `|`), `on_detail` optional ไหลผ่าน `_run_import_process`/`_run_import_with_fallback`/`import_url`/`import_audio_for_processing` (default None ไม่แตก caller เก่า); UI ต่อ `% • speed • เหลือ ETA` ทั้งงาน URL ตรงและ stems-URL
+- **Tests**: `test_preview` +4 (7 ฟิลด์, fallback exact, NA, estimate), `test_importer` +3 (speed/ETA, NA, legacy); `USER_GUIDE` §4 sync ตามจริง
+
 ## ทำวันนี้ (2026-09-28) — สเต็มเดี่ยวไม่ zip + ประวัติ + พรีวิวลิงก์ (ยังไม่ bump version)
 
 - **สเต็มเดี่ยวไม่ zip**: `separate_audio` เลือกสเต็มเดียวคืนไฟล์เสียงเปล่า (`เพลง_vocals.mp3`) เลือกหลายสเต็มค่อย zip; helper บริสุทธิ์ใหม่ `separate_expected_outputs()` ให้ UI เช็ก overwrite + เทสต์ได้โดยไม่รัน demucs; อัปเดต integration test ที่เคย assume zip; `USER_GUIDE` §6/§9 แก้ตามจริง (ของเดิมอ้างว่าไฟล์แยกยังอยู่ด้วย — ไม่จริง มันอยู่ใน workspace ชั่วคราวที่ถูกล้าง)
 - **ประวัติ** (`clipora/history.py` ใหม่ + `tests/test_history.py` 8 tests): JSON capped 200 ต่อท้าย settings บันทึกทุกงานสำเร็จใน `_show_result` จุดเดียว (ไม่พังงานถ้าเขียนไม่ได้); dialog ใน `ui.py` (เปิดจาก ☰) มีกรอง pill ทั้งหมด/เพลง/วิดีโอ/สเต็ม, เปิดตำแหน่งไฟล์, ลบทีละอัน/ลบทั้งหมด (ถามยืนยัน, ไม่ลบไฟล์จริง), แต้ม (ไฟล์หาย)
 - **พรีวิวลิงก์** (`clipora/preview.py` ใหม่ + `tests/test_preview.py` 7 tests): `yt-dlp --skip-download --print` ดึง title/uploader/duration/thumbnail, โหลดปก (cap 5MB) แปลงเป็น PNG ผ่าน FFmpeg ในเครื่อง (ไม่เพิ่ม dependency, stdlib PhotoImage อ่านได้); UI debounce 1.2วิ + generation กันงานซ้อน, พังเงียบ (ไม่มีการ์ด ไม่ใช่ error), การ์ดค้างโชว์ตอนโหลดต่อ
 - **Tests**: full suite รอรอบสุดท้าย
+
+## ทำวันนี้ (2026-09-28) — sidebar แทน popup ประวัติ (ยังไม่ bump version)
+
+- **sidebar ซ้ายพับได้**: ปุ่ม ☰ บน topbar + « ซ่อน ท้ายแถบ; มีมุมมองงาน/ประวัติ + แอ็กชันเครื่องมือ/อัปเดต yt-dlp/อัปเดตแอป/สนับสนุน/คู่มือ/รายงานปัญหา — ลบ `tk.Menu` ☰ ทั้งยวง
+- **ประวัติฝังในหน้าหลัก**: `HistoryDialog` → `HistoryPanel` สลับ view กับฟอร์มงาน (footer ค้าง); `_open_history` → `_show_view('history')`; ลบ import `MENU_ACTIVE_BG` ที่ตาย
+- **Tests**: full suite 231 ผ่าน + smoke sidebar (พับ/กาง/สลับ view/กรอง) ผ่าน; `USER_GUIDE` §3/§7/§9 sync ตามจริง
 
 ## ทำวันนี้ (2026-09-28) — ลบ DMCA + pill widgets + toast มุมขวาล่าง + เสียงเสร็จงาน (ยังไม่ bump version)
 
@@ -200,11 +306,11 @@
 - การอัปเดตเป็นกรณีพิเศษที่ยอมให้ใช้ "ล่าสุด" (ต่างจากกติกา pin ทุกอย่าง) — ยืนยัน checksum จาก `SHA2-256SUMS` ของ GitHub เสมอ
 
 ### ไฟล์ที่แก้/เพิ่ม
-| ไฟล์ | งาน |
-|---|---|
-| `clipora/ytdlp_update.py` (ใหม่) | `latest_ytdlp_version()` (GitHub API `releases/latest`), `installed_ytdlp_version()` (อ่านจาก exe + `installed.json`), `is_newer_available()`, `parse_ytdlp_version()`, `update_ytdlp()` — ดาวน์โหลด `yt-dlp.exe` + `SHA2-256SUMS`, ตรวจ sha256, `os.replace` แบบ atomic ลง `managed_tools_dir()/yt-dlp.exe`, เขียน `installed.json` ใหม่ผ่าน `_write_install_record`; HTTPS เท่านั้น, รองรับ progress callback + cancel check |
-| `clipora/ui.py` | ปุ่ม "อัปเดต yt-dlp" ที่ header (คอลัมน์ 4), ตรวจอัตโนมัติหลังเปิดแอป 3 วินาที (`self.after(3000, self._maybe_check_ytdlp_update)`), worker ผ่าน thread + `self.after(0, ...)`, guard: ไม่ทำงานตอนมีงานกำลังรัน/เปิด setup dialog, โหมด auto เงียบเมื่อ error/ยังไม่ติดตั้ง, โหมด manual แสดง messagebox; ทำงานผ่าน job infra (`_begin_job/_set_progress/_finish_job/_cancelled`) |
-| `tests/test_ytdlp_update.py` (ใหม่) | 16 tests: version parse/compare, GitHub checksum parse, checksum verify, `os.replace` atomic, installed record, HTTPS-only, cancel, update รุ่นที่ไม่ใหม่กว่าข้าม |
+| ไฟล์                                | งาน                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clipora/ytdlp_update.py` (ใหม่)    | `latest_ytdlp_version()` (GitHub API `releases/latest`), `installed_ytdlp_version()` (อ่านจาก exe + `installed.json`), `is_newer_available()`, `parse_ytdlp_version()`, `update_ytdlp()` — ดาวน์โหลด `yt-dlp.exe` + `SHA2-256SUMS`, ตรวจ sha256, `os.replace` แบบ atomic ลง `managed_tools_dir()/yt-dlp.exe`, เขียน `installed.json` ใหม่ผ่าน `_write_install_record`; HTTPS เท่านั้น, รองรับ progress callback + cancel check |
+| `clipora/ui.py`                    | ปุ่ม "อัปเดต yt-dlp" ที่ header (คอลัมน์ 4), ตรวจอัตโนมัติหลังเปิดแอป 3 วินาที (`self.after(3000, self._maybe_check_ytdlp_update)`), worker ผ่าน thread + `self.after(0, ...)`, guard: ไม่ทำงานตอนมีงานกำลังรัน/เปิด setup dialog, โหมด auto เงียบเมื่อ error/ยังไม่ติดตั้ง, โหมด manual แสดง messagebox; ทำงานผ่าน job infra (`_begin_job/_set_progress/_finish_job/_cancelled`)                                                                     |
+| `tests/test_ytdlp_update.py` (ใหม่) | 16 tests: version parse/compare, GitHub checksum parse, checksum verify, `os.replace` atomic, installed record, HTTPS-only, cancel, update รุ่นที่ไม่ใหม่กว่าข้าม                                                                                                                                                                                                                                                             |
 
 ### UI flow (ทำงานอย่างไร)
 1. เปิดแอป → 3 วิ → `_maybe_check_ytdlp_update()` → thread เช็ค → ถ้ามีรุ่นใหม่ (และไม่ใช่ auto-silent) ถาม `askyesno` → `_start_ytdlp_update`
@@ -220,19 +326,19 @@
 
 ## ไฟล์ที่แก้/เพิ่ม
 
-| ไฟล์ | งาน |
-|---|---|
-| `clipora/separator.py` (ใหม่) | pipeline หลัก: `demucs -n htdemucs_6s --repo <dir>` offline, parse progress, workspace (`.clipora-separate-*`) + cleanup, amix ประกอบ instrumental, แปลง/บันทึกแต่ละสเต็ม, collision/overwrite |
-| `clipora/dependencies.py` | `SEPARATOR_DEPENDENCIES` (32 specs แบบ pin: python-embed 3.13.14, torch 2.13.0+cpu, numpy 2.5.2, demucs 4.1.0 + deps, model `5c90dfd2-34c22ccb.th`), staging แบบ `python-embed`/`python-wheel` (แก้ `._pth` ให้เปิด site-packages), `install_separator_toolchain()`, `install_toolchains()` |
-| `clipora/ui.py` | โหมด `stems` ใหม่ (radio), ติ๊กเลือกสเต็ม (`stem_vars`), `_start_stems_local/_url`, `_run_stems_*`, `_done_stems`, progress/phase ของสเต็ม, เรียก `_open_tool_setup(separator=True)` เมื่อยังไม่ติดตั้ง |
-| `clipora/setup_ui.py` | พารามิเตอร์ `separator` ใน `ToolSetupDialog`, ใช้ `install_toolchains()`, ข้อความ welcome/summary เพิ่มตอนติดตั้ง separator |
-| `clipora/importer.py` | `import_audio_for_processing()` (โหลดเสียงลง workspace โดยยังไม่ finalize) + `cleanup_import_workspace` |
-| `clipora/tools.py` | `CLIPORA_SEPARATOR_PYTHON` ใน `TOOL_ENVIRONMENT_VARIABLES` + `bundled_tool_directories()` |
-| `scripts/check_environment.py` | `check_separator()` (รายงานสถานะ แต่ไม่บังคับ) |
-| `tests/test_separator.py` (ใหม่) | unit: command, progress parse, output paths, workspace security |
-| `tests/test_separator_integration.py` (ใหม่) | integration: skip ถ้า `separator_installed()` ไม่จริง |
-| `tests/test_dependencies.py` | staging embed/wheel, `install_separator_toolchain`, `install_toolchains` |
-| `tests/test_check_environment.py` | `check_separator` ด้วย mock |
+| ไฟล์                                         | งาน                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clipora/separator.py` (ใหม่)                | pipeline หลัก: `demucs -n htdemucs_6s --repo <dir>` offline, parse progress, workspace (`.clipora-separate-*`) + cleanup, amix ประกอบ instrumental, แปลง/บันทึกแต่ละสเต็ม, collision/overwrite                                                                                                |
+| `clipora/dependencies.py`                   | `SEPARATOR_DEPENDENCIES` (32 specs แบบ pin: python-embed 3.13.14, torch 2.13.0+cpu, numpy 2.5.2, demucs 4.1.0 + deps, model `5c90dfd2-34c22ccb.th`), staging แบบ `python-embed`/`python-wheel` (แก้ `._pth` ให้เปิด site-packages), `install_separator_toolchain()`, `install_toolchains()` |
+| `clipora/ui.py`                             | โหมด `stems` ใหม่ (radio), ติ๊กเลือกสเต็ม (`stem_vars`), `_start_stems_local/_url`, `_run_stems_*`, `_done_stems`, progress/phase ของสเต็ม, เรียก `_open_tool_setup(separator=True)` เมื่อยังไม่ติดตั้ง                                                                                                |
+| `clipora/setup_ui.py`                       | พารามิเตอร์ `separator` ใน `ToolSetupDialog`, ใช้ `install_toolchains()`, ข้อความ welcome/summary เพิ่มตอนติดตั้ง separator                                                                                                                                                                       |
+| `clipora/importer.py`                       | `import_audio_for_processing()` (โหลดเสียงลง workspace โดยยังไม่ finalize) + `cleanup_import_workspace`                                                                                                                                                                                     |
+| `clipora/tools.py`                          | `CLIPORA_SEPARATOR_PYTHON` ใน `TOOL_ENVIRONMENT_VARIABLES` + `bundled_tool_directories()`                                                                                                                                                                                                |
+| `scripts/check_environment.py`              | `check_separator()` (รายงานสถานะ แต่ไม่บังคับ)                                                                                                                                                                                                                                               |
+| `tests/test_separator.py` (ใหม่)             | unit: command, progress parse, output paths, workspace security                                                                                                                                                                                                                          |
+| `tests/test_separator_integration.py` (ใหม่) | integration: skip ถ้า `separator_installed()` ไม่จริง                                                                                                                                                                                                                                       |
+| `tests/test_dependencies.py`                | staging embed/wheel, `install_separator_toolchain`, `install_toolchains`                                                                                                                                                                                                                 |
+| `tests/test_check_environment.py`           | `check_separator` ด้วย mock                                                                                                                                                                                                                                                               |
 
 ## สิ่งที่แก้ bug ระหว่างทาง (สำคัญ)
 
