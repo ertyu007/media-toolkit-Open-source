@@ -56,6 +56,7 @@ from .dependencies import DependencyInstallError
 from .donate import DONATE_BODY, DONATE_HEADING, DONATE_NOTE, donate_image_path
 from .history import KIND_LABELS, add_entry, clear_history, load_history, remove_entry
 from .preview import LinkPreview, download_thumbnail, fetch_link_preview
+from .dragdrop import drop_files_supported, register_drop_files
 from .legal import DISCLAIMER_TEXT
 from .setup_ui import ToolSetupDialog
 from .tools import missing_required_tools
@@ -175,6 +176,16 @@ def destination_path(value: str) -> Path:
     return Path(text)
 
 
+def route_dropped_paths(paths: list[str]) -> tuple[str, str] | None:
+    """Route an Explorer drop: first existing file → source, else dir → destination."""
+    cleaned = [(raw or '').strip().strip('"') for raw in paths]
+    for path in cleaned:
+        if path and os.path.isfile(path):
+            return ('source', path)
+    for path in cleaned:
+        if path and os.path.isdir(path):
+            return ('destination', path)
+    return None
 def fit_photo_image(image: tk.PhotoImage, max_width: int, max_height: int) -> tk.PhotoImage:
     """Scale a PhotoImage to fit inside a bounding box (stdlib only)."""
     width, height = image.width(), image.height()
@@ -252,7 +263,7 @@ class CliporaApp(tk.Tk):
         self.authorized = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value='พร้อมเริ่มงาน')
         self.source_detail = tk.StringVar(value=source_summary(''))
-        self.source_hint = tk.StringVar(value='เลือกวิดีโอที่ต้องการประมวลผล')
+        self.source_hint = tk.StringVar(value='เลือกไฟล์ หรือลากมาวางที่นี่')
         self.source_button_text = tk.StringVar(value='เลือกไฟล์')
         self.progress_text = tk.StringVar(value='0%')
         self._cancellation: CancellationToken | None = None
@@ -268,6 +279,10 @@ class CliporaApp(tk.Tk):
         self._result_targets: list[Path] = []
         self._build()
         self._toast = ToastManager(self)
+        self._drop_unregister = (
+            register_drop_files(self, self._on_drop_files)
+            if drop_files_supported() else None
+        )
         self._bind_shortcuts()
         self.source.trace_add('write', self._on_source_changed)
         self.bind_all('<Control-KeyPress>', self._on_control_keypress, add='+')
@@ -1384,7 +1399,7 @@ class CliporaApp(tk.Tk):
             self.source_button_text.set('วางจากคลิปบอร์ด')
             self.rights_row.grid()
         else:
-            self.source_hint.set('เลือกวิดีโอที่ต้องการประมวลผล')
+            self.source_hint.set('เลือกไฟล์ หรือลากมาวางที่นี่')
             self.source_button_text.set('เลือกไฟล์')
             self.rights_row.grid_remove()
         self._on_source_changed()
