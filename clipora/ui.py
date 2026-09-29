@@ -136,7 +136,6 @@ from .ui_components.theme import (
     SUCCESS,
     TEXT,
     THEME_NAME,
-    TOAST_BG,
     TOP_BAR_BG,
     TOPBAR_BUTTON_BG,
     TOPBAR_BUTTON_HOVER,
@@ -692,7 +691,6 @@ class CliporaApp(tk.Tk):
 
         # ── Misc widget styles ────────────────────────────────────────────────
         style.configure('Error.TLabel', background=CARD, foreground=ERROR, font=(self.ui_font, FONT_SIZE_SMALL))
-        style.configure('Toast.TFrame', background=TOAST_BG, borderwidth=1, relief='solid', bordercolor=BORDER)
         style.configure(
             'Heading.TLabel',
             background=BG,
@@ -1328,7 +1326,11 @@ class CliporaApp(tk.Tk):
                 )
             return
         if auto:
-            self._start_ytdlp_update(latest)
+            # Never download silently: just notify, user updates via Ctrl+U.
+            if hasattr(self, '_toast'):
+                self._toast.show(
+                    f'มี yt-dlp ใหม่ ({latest}) — อัปเดตได้ที่ Ctrl+U',
+                    'info', 8000)
             return
         if not messagebox.askyesno(
             'อัปเดต yt-dlp',
