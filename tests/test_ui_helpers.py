@@ -80,10 +80,12 @@ class DropRoutingTests(unittest.TestCase):
             target.write_bytes(b'x')
             self.assertEqual(
                 route_dropped_paths([str(target)]), ('source', str(target)))
+
     def test_directory_routes_to_destination(self):
         with TemporaryDirectory() as directory:
             self.assertEqual(
                 route_dropped_paths([directory]), ('destination', directory))
+
     def test_file_wins_over_directory(self):
         with TemporaryDirectory() as directory:
             target = Path(directory) / 'a.mp3'
@@ -91,6 +93,7 @@ class DropRoutingTests(unittest.TestCase):
             self.assertEqual(
                 route_dropped_paths([directory, str(target)]),
                 ('source', str(target)))
+
     def test_missing_paths_route_nowhere(self):
         self.assertIsNone(route_dropped_paths(['C:\\no\\such\\file.mp4']))
         self.assertIsNone(route_dropped_paths([]))

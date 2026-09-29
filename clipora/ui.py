@@ -47,6 +47,7 @@ from .importer import (
 )
 from .separator import (
     SELECTABLE_STEMS,
+    STEM_DISPLAY_ORDER,
     STEM_LABELS,
     SeparatorError,
     separate_audio,
@@ -691,7 +692,7 @@ class CliporaApp(tk.Tk):
 
         # ── Misc widget styles ────────────────────────────────────────────────
         style.configure('Error.TLabel', background=CARD, foreground=ERROR, font=(self.ui_font, FONT_SIZE_SMALL))
-        style.configure('Toast.TFrame', background=TOAST_BG, borderwidth=1, relief='solid', bordercolor=ACCENT)
+        style.configure('Toast.TFrame', background=TOAST_BG, borderwidth=1, relief='solid', bordercolor=BORDER)
         style.configure(
             'Heading.TLabel',
             background=BG,
@@ -876,6 +877,9 @@ class CliporaApp(tk.Tk):
             ],
             variable=self.mode,
             command=self._on_mode_change,
+            gap=8,
+            locked=() if separator_installed() else ('stems',),
+            on_locked=self._on_mode_locked,
         )
         self._mode_control.grid(row=0, column=0, sticky='ew')
         ttk.Label(
@@ -1039,13 +1043,17 @@ class CliporaApp(tk.Tk):
         )
         self._stem_check_widgets: list[Switch] = []
         stem_row = ttk.Frame(self._stems_options, style='TFrame')
-        stem_row.grid(row=1, column=0, sticky='w', pady=(8, 0))
-        for stem in SELECTABLE_STEMS:
+        stem_row.grid(row=1, column=0, sticky='ew', pady=(8, 0))
+        for column in range(3):
+            stem_row.columnconfigure(column, weight=1)
+        # Priority order (vocals/instrumental first); wraps to 3 columns
+        # so nothing overflows horizontally at the 700px min window size.
+        for index, stem in enumerate(STEM_DISPLAY_ORDER):
             check = Switch(
                 stem_row, text=STEM_LABELS[stem],
                 variable=self.stem_vars[stem],
             )
-            check.pack(side='left', padx=(0, 14))
+            check.grid(row=index // 3, column=index % 3, sticky='w', padx=(0, 18), pady=(0, 10))
             self._stem_check_widgets.append(check)
         self._stems_options.grid_remove()
 
@@ -1237,6 +1245,7 @@ class CliporaApp(tk.Tk):
 
     def _tools_ready(self) -> None:
         self._first_run_setup = False
+        self._sync_mode_lock()
         self.deiconify()
         self.lift()
         self.status.set('พร้อมเริ่มงาน')
@@ -1568,6 +1577,7 @@ class CliporaApp(tk.Tk):
             self._sync_sidebar_toggle()
         except tk.TclError:
             pass
+
     def _sync_sidebar_toggle(self) -> None:
         """Topbar button doubles as the hide button: « when open, ☰ when shut."""
         try:
@@ -1575,6 +1585,7 @@ class CliporaApp(tk.Tk):
                 text='«' if self._sidebar_visible else '☰')
         except (tk.TclError, AttributeError):
             pass
+
     def _show_view(self, name: str) -> None:
         """Switch between the job form and the embedded history view."""
         self._view = name
@@ -1597,6 +1608,7 @@ class CliporaApp(tk.Tk):
                 )
             except tk.TclError:
                 pass
+
     def _record_history(self, targets: list[Path]) -> None:
         """Remember where finished outputs were saved; never breaks the job."""
         try:
@@ -1697,6 +1709,7 @@ class CliporaApp(tk.Tk):
             self.details_toggle.grid_remove() if not has_details else self.details_toggle.grid()
 
     def _sync_options(self) -> None:
+        self._sync_mode_lock()
         is_url = self.input_kind.get() == 'url'
         if self.mode.get() == 'stems':
             self.video_format_box.grid_remove()
@@ -1763,6 +1776,20 @@ class CliporaApp(tk.Tk):
         self._flash_hero()
         self._sync_options()
 
+    def _on_mode_locked(self, value: str) -> None:
+        """Locked option clicked (stems without separator tools): offer install."""
+        self._debug(f'โหมดถูกล็อก ต้องติดตั้งเครื่องมือก่อน: {value}')
+        if hasattr(self, '_toast'):
+            self._toast.show('แยกสเต็มเสียงต้องติดตั้งเครื่องมือก่อน', 'info')
+        self._open_tool_setup(separator=True)
+
+    def _sync_mode_lock(self) -> None:
+        try:
+            self._mode_control.set_locked(
+                () if separator_installed() else ('stems',))
+        except (tk.TclError, AttributeError):
+            pass
+
     def _sync_source_kind(self) -> None:
         new_kind = self.input_kind.get()
         if new_kind not in {'file', 'url'}:
@@ -1774,10 +1801,9 @@ class CliporaApp(tk.Tk):
             self.source.set(self._source_values[new_kind])
         if new_kind == 'url':
             self.source_hint.set(
-                'วางลิงก์สาธารณะจาก YouTube, Facebook, Instagram หรือเว็บที่รองรับ '
-                '• เลือกความละเอียด 360p ถึง 4K ได้'
+                'วางลิงก์สาธารณะที่นี่'
             )
-            self.source_button_text.set('วางจากคลิปบอร์ด')
+            self.source_button_text.set('วางลิงก์')
             self.rights_row.grid()
         else:
             self.source_hint.set('เลือกไฟล์ หรือลากมาวางที่นี่')
@@ -1987,7 +2013,7 @@ class CliporaApp(tk.Tk):
             if image is not None:
                 self._preview_image = image
                 self._preview_thumb.configure(image=image)
-                self._preview_thumb.pack(side='left', padx=(0, 12))
+                self._preview_thumb.pack(side='left', anchor='n', padx=(0, 12))
             else:
                 self._preview_thumb.pack_forget()
         else:
@@ -2961,7 +2987,7 @@ class HistoryPanel(ttk.Frame):
         shell = ttk.Frame(self, padding=(28, 22, 28, 20))
         shell.pack(fill='both', expand=True)
         shell.columnconfigure(0, weight=1)
-        shell.rowconfigure(2, weight=1)
+        shell.rowconfigure(4, weight=1)
 
         ttk.Label(shell, text='ประวัติดาวน์โหลด', style='Heading.TLabel').grid(
             row=0, column=0, sticky='w'
@@ -3224,6 +3250,7 @@ class HistoryPanel(ttk.Frame):
         ):
             empty_trash()
             self._render()
+
     def _popup_menu(self, event: tk.Event, index: int | None = None) -> None:
         """Right-click menu (dismisses itself on outside click, like Windows)."""
         if index is not None:

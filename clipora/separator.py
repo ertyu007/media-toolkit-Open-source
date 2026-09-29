@@ -40,6 +40,10 @@ STEM_LABELS = {
     'other': 'อื่นๆ',
     'instrumental': 'ดนตรีรวม',
 }
+# Display order by importance: most-used stems first (UI only, logic untouched).
+STEM_DISPLAY_ORDER = (
+    'vocals', 'instrumental', 'drums', 'bass', 'guitar', 'piano', 'other',
+)
 WORKSPACE_PREFIX = '.clipora-separate-'
 _PROGRESS_PATTERN = re.compile(r'(\d+(?:\.\d+)?)%')
 _PROGRESS_PHASE_LOAD = 0.05

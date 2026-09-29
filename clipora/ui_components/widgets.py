@@ -58,7 +58,7 @@ class InlineError(ttk.Frame):
 PILL_HEIGHT = 48
 
 
-def segment_index_at(x: float, width: float, count: int) -> int:
+def segment_index_at(x: float, width: float, count: int, gap: float = 0.0) -> int:
     """Pure hit-test: which of *count* equal segments contains canvas-x *x*."""
     if count <= 0 or width <= 0:
         return 0
@@ -134,6 +134,10 @@ class SegmentedControl(tk.Canvas):
     Drop-in replacement for the previous ttk.Radiobutton version: same
     constructor, syncs from *variable*, fires *command* only on user clicks.
     *frame_style*/*button_style* are accepted for compatibility and ignored.
+
+    *gap* separates the options into individual pills while the selection
+    still slides across all of them. Options in *locked* show a 🔒 prefix,
+    cannot be picked, and fire *on_locked* instead.
     """
 
     def __init__(
@@ -144,6 +148,9 @@ class SegmentedControl(tk.Canvas):
         command: Optional[Callable[[str], None]] = None,
         frame_style: str = 'Card.TFrame',
         button_style: str = 'Segment.TRadiobutton',
+        gap: float = 0,
+        locked: Sequence[str] = (),
+        on_locked: Optional[Callable[[str], None]] = None,
         **kwargs,
     ) -> None:
         self._values = [value for value, _ in options]
@@ -151,8 +158,12 @@ class SegmentedControl(tk.Canvas):
         self._variable = variable
         self._command = command
         self._enabled = True
+        self._gap = max(0.0, float(gap))
+        self._locked = set(locked)
+        self._on_locked = on_locked
         self._font_family = getattr(parent, 'ui_font', FONT_FAMILY)
         self._track = FIELD
+        self._surface = parent_surface_bg(parent)
         self._target = self._index_of(variable.get())
         self._pos = float(self._target)
         super().__init__(
@@ -160,7 +171,7 @@ class SegmentedControl(tk.Canvas):
             height=PILL_HEIGHT,
             highlightthickness=0,
             borderwidth=0,
-            bg=self._track,
+            bg=self._surface,
             takefocus=True,
             **kwargs,
         )
@@ -195,26 +206,33 @@ class SegmentedControl(tk.Canvas):
         if width <= 1 or height <= 1 or not self._values:
             return
         self.delete('all')
-        self.configure(bg=self._track)
+        self.configure(bg=self._surface)
         count = len(self._values)
-        self._stadium(2, 2, width - 2, height - 2, self._track)
-        seg_width = width / count
+        seg_width, _stride = segment_layout(width, count, self._gap)
         inset = 5
+        for index in range(count):
+            x0 = segment_origin(index, width, count, self._gap)
+            self._stadium(x0 + 2, inset, x0 + seg_width - 2, height - inset, self._track)
         pill = ACCENT if self._enabled else DISABLED_BG
+        px0 = segment_origin(self._pos, width, count, self._gap)
         self._stadium(
-            self._pos * seg_width + inset, inset,
-            (self._pos + 1) * seg_width - inset, height - inset, pill,
+            px0 + inset, inset,
+            px0 + seg_width - inset, height - inset, pill,
         )
         for index, label in enumerate(self._labels):
             if not self._enabled:
                 fill = DISABLED_FG
             elif index == self._target:
                 fill = TEXT
+            elif self._values[index] in self._locked:
+                fill = DISABLED_FG
             else:
                 fill = MUTED
+            text = f'🔒 {label}' if self._values[index] in self._locked else label
             self.create_text(
-                seg_width * (index + 0.5), height / 2,
-                text=label, fill=fill, font=(self._font_family, 11, 'bold'),
+                segment_origin(index, width, count, self._gap) + seg_width / 2,
+                height / 2,
+                text=text, fill=fill, font=(self._font_family, 11, 'bold'),
             )
 
     def _on_trace(self) -> None:
@@ -243,19 +261,39 @@ class SegmentedControl(tk.Canvas):
         if not self._enabled or not 0 <= index < len(self._values):
             return
         value = self._values[index]
+        if value in self._locked:
+            if self._on_locked is not None:
+                try:
+                    self._on_locked(value)
+                except tk.TclError:
+                    pass
+            return
         if value != self._variable.get():
             self._variable.set(value)
         if self._command:
             self._command(value)
 
+    def set_locked(self, values: Sequence[str]) -> None:
+        """Update which options show 🔒 (redraws only on change)."""
+        locked = set(values)
+        if locked != self._locked:
+            self._locked = locked
+            self._draw()
+
     def _on_click(self, event: tk.Event) -> None:
         self.focus_set()
-        self._select(segment_index_at(event.x, self.winfo_width(), len(self._values)))
+        self._select(segment_index_at(
+            event.x, self.winfo_width(), len(self._values), self._gap))
 
     def _step(self, direction: int) -> None:
         if not self._values:
             return
-        self._select((self._target + direction) % len(self._values))
+        index = self._target
+        for _ in range(len(self._values)):
+            index = (index + direction) % len(self._values)
+            if self._values[index] not in self._locked:
+                break
+        self._select(index)
 
     def flash(self) -> None:
         """Brief track glow, used as mode-change feedback (replaces HeroBox flash)."""
@@ -432,6 +470,8 @@ class RoundedCombobox(tk.Frame):
     ) -> None:
         bg = bg or parent_surface_bg(parent)
         super().__init__(parent, bg=bg, **kwargs)
+        self._variable = textvariable
+        self._values = list(values)
         self._enabled = True
         self._focused = False
         self._hover = -1
@@ -665,8 +705,6 @@ class RoundedButton(tk.Canvas):
         self._text = text
         self._variable = textvariable
         self._command = command
-        self._variable = textvariable
-        self._values = list(values)
         self._enabled = True
         self._hover = False
         self._pressed = False
