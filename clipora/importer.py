@@ -42,7 +42,9 @@ ALLOWED_OUTPUT_SUFFIXES = {
     '.webm',
 }
 VIDEO_QUALITIES = ('สูงสุด', '2160p', '1080p', '720p', '480p', '360p')
-_PROGRESS_PATTERN = re.compile(r'^clipora-progress:\s*([0-9]+(?:\.[0-9]+)?)%')
+_PROGRESS_PATTERN = re.compile(
+    r'^clipora-progress:\s*([0-9]+(?:\.[0-9]+)?)%(?:\|([^|]*)\|([^|]*))?'
+)
 _OUTPUT_PREFIX = 'clipora-output:'
 _BLOCK_SIGNATURES = (
     'http error 403',
@@ -384,7 +386,7 @@ def build_import_command(
         '--progress-delta',
         '0.2',
         '--progress-template',
-        'download:clipora-progress:%(progress._percent_str)s',
+        'download:clipora-progress:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s',
         '--print',
         'after_move:clipora-output:%(filepath)j',
         '--windows-filenames',
@@ -464,6 +466,18 @@ def build_import_command(
 
 
 def parse_import_progress(raw_line: str) -> float | None:
+    detail = parse_import_progress_detail(raw_line)
+    return detail[0] if detail is not None else None
+
+
+def _clean_progress_field(value: str | None) -> str:
+    """Drop yt-dlp 'NA'/empty placeholders from speed/ETA fields."""
+    text = (value or '').strip()
+    return '' if not text or text.upper() == 'NA' else text
+
+
+def parse_import_progress_detail(raw_line: str) -> tuple[float, str, str] | None:
+    """Parse percent + download speed + ETA; old percent-only lines still work."""
     match = _PROGRESS_PATTERN.match(raw_line.strip())
     if not match:
         return None
@@ -471,7 +485,12 @@ def parse_import_progress(raw_line: str) -> float | None:
         percent = float(match.group(1))
     except ValueError:
         return None
-    return max(0.0, min(percent / 100, 1.0))
+    fraction = max(0.0, min(percent / 100, 1.0))
+    return (
+        fraction,
+        _clean_progress_field(match.group(2)),
+        _clean_progress_field(match.group(3)),
+    )
 
 
 def parse_reported_output(raw_line: str) -> Path | None:
@@ -675,6 +694,7 @@ def _run_import_process(
     workspace: Path,
     on_progress: Callable[[float], None],
     cancellation: CancellationToken,
+    on_detail: Callable[[str, str], None] | None = None,
 ) -> Path:
     if cancellation.cancelled:
         raise ConversionCancelled('ยกเลิกงานแล้ว')
@@ -693,9 +713,11 @@ def _run_import_process(
     assert process.stdout is not None
     try:
         for raw_line in process.stdout:
-            progress = parse_import_progress(raw_line)
-            if progress is not None:
-                on_progress(progress)
+            detail = parse_import_progress_detail(raw_line)
+            if detail is not None:
+                on_progress(detail[0])
+                if on_detail is not None and (detail[1] or detail[2]):
+                    on_detail(detail[1], detail[2])
                 continue
             output = parse_reported_output(raw_line)
             if output is not None:
@@ -740,6 +762,7 @@ def _run_import_with_fallback(
     workspace: Path,
     on_progress: Callable[[float], None],
     token: CancellationToken,
+    on_detail: Callable[[str, str], None] | None = None,
 ) -> Path:
     """Run yt-dlp, retrying with escalating workarounds when the site blocks us.
 
@@ -767,7 +790,7 @@ def _run_import_with_fallback(
         if token.cancelled:
             raise ConversionCancelled('ยกเลิกงานแล้ว')
         try:
-            return _run_import_process(command, workspace, on_progress, token)
+            return _run_import_process(command, workspace, on_progress, token, on_detail)
         except URLImportBlocked as exc:
             last_blocked = exc
             if (
@@ -797,6 +820,7 @@ def import_url(
     cancellation: CancellationToken | None = None,
     tool_command: Sequence[str] | None = None,
     on_conflict: Callable[[Path], bool] | None = None,
+    on_detail: Callable[[str, str], None] | None = None,
 ) -> Path:
     validate_url(spec.url)
     command_prefix = list(tool_command) if tool_command is not None else find_ytdlp_command()
@@ -810,7 +834,7 @@ def import_url(
                 on_progress(value * 0.85)
 
             completed = _run_import_with_fallback(
-                command_prefix, spec, workspace, download_progress, token
+                command_prefix, spec, workspace, download_progress, token, on_detail
             )
             info = probe(completed)
             validate_operation(info, 'video')
@@ -830,7 +854,7 @@ def import_url(
             completed.unlink()
             return finalize_import_output(mov_output, spec.destination, on_conflict=on_conflict)
         completed = _run_import_with_fallback(
-            command_prefix, spec, workspace, on_progress, token
+            command_prefix, spec, workspace, on_progress, token, on_detail
         )
         return finalize_import_output(completed, spec.destination, on_conflict=on_conflict)
     finally:
@@ -842,6 +866,7 @@ def import_audio_for_processing(
     on_progress: Callable[[float], None],
     cancellation: CancellationToken | None = None,
     tool_command: Sequence[str] | None = None,
+    on_detail: Callable[[str, str], None] | None = None,
 ) -> tuple[Path, Path]:
     """Download audio into a workspace without finalizing it.
 
@@ -856,7 +881,7 @@ def import_audio_for_processing(
     workspace = create_import_workspace(spec.destination)
     try:
         completed = _run_import_with_fallback(
-            command_prefix, spec, workspace, on_progress, token
+            command_prefix, spec, workspace, on_progress, token, on_detail
         )
         return completed, workspace
     except BaseException:

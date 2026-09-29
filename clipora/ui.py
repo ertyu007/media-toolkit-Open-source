@@ -56,9 +56,19 @@ from .separator import (
 )
 from .dependencies import DependencyInstallError
 from .donate import DONATE_BODY, DONATE_HEADING, DONATE_NOTE, donate_image_path
-from .history import KIND_LABELS, add_entry, clear_history, load_history, remove_entry
-from .preview import LinkPreview, download_thumbnail, fetch_link_preview
 from .dragdrop import drop_files_supported, register_drop_files
+from .history import (
+    KIND_LABELS,
+    TRASH_RETENTION_DAYS,
+    add_entry,
+    empty_trash,
+    load_history,
+    load_trash,
+    remove_entry,
+    restore_entry,
+    trash_entry,
+)
+from .preview import LinkPreview, download_thumbnail, estimate_audio_bytes, fetch_link_preview
 from .legal import DISCLAIMER_TEXT
 from .setup_ui import ToolSetupDialog
 from .tools import missing_required_tools
@@ -934,12 +944,20 @@ class CliporaApp(tk.Tk):
         ).pack(side='left')
         self.rights_row.grid_remove()
 
-        # Link preview card (URL mode only, filled by a debounced worker)
+        # Link preview card (URL mode only, filled by a debounced worker).
+        # Layout: thumbnail LEFT, info RIGHT; skeleton canvas reserves the
+        # same space while loading so nothing jumps when data arrives.
         self._preview_frame = ttk.Frame(source_body, style='Card.TFrame')
         self._preview_frame.grid(row=4, column=0, sticky='ew', pady=(10, 0))
-        self._preview_thumb = ttk.Label(self._preview_frame, style='Card.TLabel')
-        self._preview_thumb.pack(side='left', padx=(0, 12))
-        preview_text = ttk.Frame(self._preview_frame, style='Card.TFrame')
+        self._skel = tk.Canvas(
+            self._preview_frame, bg=CARD, highlightthickness=0,
+            borderwidth=0, height=96,
+        )
+        self._skel.bind('<Configure>', lambda _e: self._draw_skeleton_base())
+        self._preview_body = ttk.Frame(self._preview_frame, style='Card.TFrame')
+        self._preview_thumb = ttk.Label(self._preview_body, style='Card.TLabel')
+        self._preview_thumb.pack(side='left', anchor='n', padx=(0, 12))
+        preview_text = ttk.Frame(self._preview_body, style='Card.TFrame')
         preview_text.pack(side='left', fill='both', expand=True)
         self._preview_title = ttk.Label(
             preview_text, text='', style='Card.TLabel',
@@ -959,6 +977,9 @@ class CliporaApp(tk.Tk):
         self._preview_token = None
         self._preview_url = ''
         self._preview_image = None
+        self._preview_loading = False
+        self._preview_anim_after = None
+        self._skel_x = -70
         self._preview_tmp: tempfile.TemporaryDirectory | None = None
 
         _divider(content, row=2)
@@ -1788,6 +1809,7 @@ class CliporaApp(tk.Tk):
             return
         if not url or url == self._preview_url:
             return
+        self._show_preview_skeleton()
         try:
             self._preview_after = self.after(1200, self._fetch_preview)
         except tk.TclError:
@@ -1811,10 +1833,91 @@ class CliporaApp(tk.Tk):
     def _hide_preview(self) -> None:
         self._preview_url = ''
         self._preview_image = None
+        self._stop_preview_anim()
         try:
             self._preview_frame.grid_remove()
         except tk.TclError:
             pass
+
+    def _show_preview_skeleton(self) -> None:
+        """Shimmer placeholder in the card's real layout (thumb left)."""
+        self._stop_preview_anim()
+        self._preview_loading = True
+        self._preview_image = None
+        try:
+            self._preview_body.pack_forget()
+            self._skel.pack(fill='x')
+            self._preview_frame.grid()
+        except tk.TclError:
+            return
+        self._skel_x = -70
+        self._draw_skeleton_base()
+        self._tick_skeleton_shimmer()
+
+    def _skeleton_blocks(self, width: int) -> list[tuple[int, int, int, int]]:
+        """Placeholder geometry: thumb box left, two text bars right."""
+        return [
+            (0, 4, 150, 94),
+            (162, 10, max(200, width - 8), 34),
+            (162, 46, max(200, int(width * 0.5)), 66),
+        ]
+
+    def _draw_skeleton_base(self) -> None:
+        if not self._preview_loading:
+            return
+        try:
+            width = self._skel.winfo_width()
+        except tk.TclError:
+            return
+        if width <= 1:
+            return
+        self._skel.delete('base')
+        for x0, y0, x1, y1 in self._skeleton_blocks(width):
+            self._skel.create_rectangle(
+                x0, y0, x1, y1, fill=FIELD, outline='', tags='base')
+
+    def _tick_skeleton_shimmer(self) -> None:
+        """Light band sweeping left→right over the placeholder blocks."""
+        if not self._preview_loading:
+            return
+        try:
+            width = self._skel.winfo_width()
+        except tk.TclError:
+            self._preview_loading = False
+            self._preview_anim_after = None
+            return
+        if width <= 1:
+            try:
+                self._preview_anim_after = self.after(80, self._tick_skeleton_shimmer)
+            except tk.TclError:
+                self._preview_loading = False
+                self._preview_anim_after = None
+            return
+        self._skel_x += 18
+        if self._skel_x > width + 70:
+            self._skel_x = -70
+        try:
+            self._skel.delete('shine')
+            for x0, y0, x1, y1 in self._skeleton_blocks(width):
+                ix0, ix1 = max(x0, self._skel_x), min(x1, self._skel_x + 64)
+                if ix1 > ix0:
+                    self._skel.create_rectangle(
+                        ix0, y0, ix1, y1, fill=SECONDARY_BORDER,
+                        outline='', tags='shine')
+        except tk.TclError:
+            self._preview_loading = False
+            self._preview_anim_after = None
+            return
+        self._preview_anim_after = self.after(50, self._tick_skeleton_shimmer)
+
+    def _stop_preview_anim(self) -> None:
+        self._preview_loading = False
+        if self._preview_anim_after is not None:
+            try:
+                self.after_cancel(self._preview_anim_after)
+            except tk.TclError:
+                pass
+            self._preview_anim_after = None
 
     def _fetch_preview(self) -> None:
         self._preview_after = None
@@ -1823,6 +1926,7 @@ class CliporaApp(tk.Tk):
             validate_url(url)
         except ValueError:
             return
+        self._show_preview_skeleton()
         self._preview_gen += 1
         generation = self._preview_gen
         token = CancellationToken()
@@ -1860,13 +1964,24 @@ class CliporaApp(tk.Tk):
         if not preview.title and not png_path:
             self._hide_preview()
             return
+        self._stop_preview_anim()
         self._preview_url = url
         self._preview_title.configure(text=preview.title[:80] or url)
-        meta = '  •  '.join(part for part in (preview.uploader, preview.duration) if part)
-        self._preview_meta.configure(text=meta[:100])
+        size_text = ''
+        if preview.size_bytes:
+            size_text = f'≈{format_file_size(preview.size_bytes)}'
+        elif self.mode.get() == 'audio':
+            estimated = estimate_audio_bytes(preview.duration_secs)
+            if estimated:
+                size_text = f'≈{format_file_size(estimated)} (ประมาณ)'
+        meta = '  •  '.join(
+            part for part in (preview.uploader, preview.duration, size_text) if part
+        )
+        self._preview_meta.configure(text=meta[:120])
         if png_path:
             try:
-                image = fit_photo_image(tk.PhotoImage(file=png_path), 160, 90)
+                # Fit inside the box, never crop: true aspect ratio kept.
+                image = fit_photo_image(tk.PhotoImage(file=png_path), 168, 120)
             except tk.TclError:
                 image = None
             if image is not None:
@@ -1878,6 +1993,8 @@ class CliporaApp(tk.Tk):
         else:
             self._preview_thumb.pack_forget()
         try:
+            self._skel.pack_forget()
+            self._preview_body.pack(fill='x')
             self._preview_frame.grid()
         except tk.TclError:
             pass
@@ -2026,7 +2143,7 @@ class CliporaApp(tk.Tk):
         self.bind('<F1>', lambda _e: webbrowser.open('https://github.com/ertyu007/media-toolkit-Open-source/blob/main/docs/USER_GUIDE.md'))
 
     # Phase-aware progress
-    def _set_progress_phase(self, phase: str, percent: float = 0) -> None:
+    def _set_progress_phase(self, phase: str, percent: float = 0, detail: str = '') -> None:
         """Update progress with phase-aware status."""
         phase_text = PROGRESS_PHASES.get(phase, phase)
         self.status.set(phase_text)
@@ -2336,6 +2453,8 @@ class CliporaApp(tk.Tk):
                 spec,
                 lambda value: self.after(0, self._set_progress_phase, 'downloading', value * 50),
                 cancellation,
+                on_detail=lambda speed, eta: self.after(
+                    0, self._set_download_detail, cancellation, speed, eta),
             )
             try:
                 self.after(0, self._set_progress_phase, 'separating', 50)
@@ -2509,6 +2628,8 @@ class CliporaApp(tk.Tk):
                 lambda value: self.after(0, self._set_progress_phase, 'downloading', value * 100),
                 cancellation,
                 on_conflict=self._ask_overwrite,
+                on_detail=lambda speed, eta: self.after(
+                    0, self._set_download_detail, cancellation, speed, eta),
             )
         except ConversionCancelled:
             self.after(0, self._cancelled, cancellation)
@@ -2517,6 +2638,26 @@ class CliporaApp(tk.Tk):
         else:
             self.after(0, self._set_progress_phase, 'finalizing', 90)
             self.after(0, self._done, target, cancellation)
+
+    def _set_download_detail(
+        self, cancellation: CancellationToken, speed: str, eta: str
+    ) -> None:
+        """Append live speed/ETA to the percent text (URL downloads only)."""
+        if cancellation is not self._cancellation or cancellation.cancelled:
+            return
+        detail = self._download_detail_text(speed, eta)
+        if not detail:
+            return
+        now = datetime.now()
+        if (self._last_debug_speed is None
+                or (now - self._last_debug_speed).total_seconds() >= 5):
+            self._last_debug_speed = now
+            self._debug(f'ดาวน์โหลด: {detail}')
+        try:
+            percent = float(self.progress['value'])
+        except (tk.TclError, TypeError, ValueError):
+            return
+        self.progress_text.set(f'{percent:.0f}%  •  {detail}')
 
     def _set_progress(self, value: float, cancellation: CancellationToken) -> None:
         if cancellation is not self._cancellation or cancellation.cancelled:

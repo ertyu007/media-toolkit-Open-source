@@ -32,6 +32,7 @@ from clipora.importer import (
     is_network_block_error,
     normalize_output_permissions,
     parse_import_progress,
+    parse_import_progress_detail,
     parse_reported_output,
     site_workaround_extractor_args,
     site_workaround_headers,
@@ -416,7 +417,7 @@ class ImportFallbackTests(unittest.TestCase):
             workspace = create_import_workspace(destination)
             attempts = []
 
-            def simulate(command, _workspace, on_progress, _token):
+            def simulate(command, _workspace, on_progress, _token, *_args):
                 attempts.append(command)
                 on_progress(0.5)
                 if len(attempts) == 1:
@@ -470,7 +471,7 @@ class ImportFallbackTests(unittest.TestCase):
             destination = Path(directory)
             workspace = create_import_workspace(destination)
 
-            def simulate(command, _workspace, on_progress, _token):
+            def simulate(command, _workspace, on_progress, _token, *_args):
                 raise URLImportBlocked('HTTP Error 403: Forbidden')
 
             run_process.side_effect = simulate
@@ -494,7 +495,7 @@ class ImportFallbackTests(unittest.TestCase):
             workspace = create_import_workspace(destination)
             attempts = []
 
-            def simulate(command, _workspace, on_progress, _token):
+            def simulate(command, _workspace, on_progress, _token, *_args):
                 attempts.append(command)
                 if len(attempts) < 3:
                     raise URLImportBlocked('HTTP Error 403: Forbidden')
@@ -525,7 +526,7 @@ class ImportFallbackTests(unittest.TestCase):
             destination = Path(directory)
             workspace = create_import_workspace(destination)
 
-            def simulate(command, _workspace, on_progress, _token):
+            def simulate(command, _workspace, on_progress, _token, *_args):
                 raise URLImportBlocked('HTTP Error 403: Forbidden')
 
             run_process.side_effect = simulate
@@ -548,6 +549,24 @@ class ImportProgressTests(unittest.TestCase):
         self.assertEqual(parse_import_progress('clipora-progress: 42.5%'), 0.425)
         self.assertEqual(parse_import_progress('clipora-progress:120.0%'), 1.0)
         self.assertIsNone(parse_import_progress('[download] 20%'))
+
+    def test_parses_speed_and_eta(self):
+        self.assertEqual(
+            parse_import_progress_detail('clipora-progress: 42.5%|3.21MiB/s|00:12'),
+            (0.425, '3.21MiB/s', '00:12'),
+        )
+
+    def test_na_speed_and_eta_become_empty(self):
+        self.assertEqual(
+            parse_import_progress_detail('clipora-progress: 10.0%|NA|NA'),
+            (0.1, '', ''),
+        )
+
+    def test_legacy_percent_only_line_still_works(self):
+        self.assertEqual(
+            parse_import_progress_detail('clipora-progress:1%'), (0.01, '', '')
+        )
+        self.assertEqual(parse_import_progress('clipora-progress: 42.5%|1MiB/s|00:05'), 0.425)
 
     def test_parses_json_reported_output(self):
         expected = Path('C:\\Videos\\คลิป.mp4')
@@ -709,7 +728,7 @@ class ImportWorkspaceTests(unittest.TestCase):
             existing = destination / 'คลิป.mp4'
             existing.write_bytes(b'original')
 
-            def complete(_command, workspace, on_progress, _cancellation):
+            def complete(_command, workspace, on_progress, _cancellation, *_args):
                 result = workspace / 'คลิป.mp4'
                 result.write_bytes(b'downloaded')
                 on_progress(1.0)

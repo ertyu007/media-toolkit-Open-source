@@ -8,6 +8,7 @@ from clipora.preview import (
     LinkPreview,
     build_preview_command,
     download_thumbnail,
+    estimate_audio_bytes,
     parse_preview_output,
 )
 
@@ -35,9 +36,9 @@ class PreviewCommandTests(unittest.TestCase):
 
 
 class PreviewParsingTests(unittest.TestCase):
-    def test_parses_four_fields_in_order(self):
+    def test_parses_fields_in_order(self):
         preview = parse_preview_output(
-            'Some Title\n3:45\nhttps://cdn.example.com/t.jpg\nSome Channel'
+            'Some Title\n3:45\nhttps://cdn.example.com/t.jpg\nSome Channel\n225\n8680000\nNA'
         )
         self.assertEqual(
             preview,
@@ -46,8 +47,16 @@ class PreviewParsingTests(unittest.TestCase):
                 uploader='Some Channel',
                 duration='3:45',
                 thumbnail_url='https://cdn.example.com/t.jpg',
+                duration_secs='225',
+                size_bytes=8680000,
             ),
         )
+
+    def test_exact_size_used_when_approx_missing(self):
+        preview = parse_preview_output(
+            'Some Title\n3:45\nhttps://cdn.example.com/t.jpg\nSome Channel\n225\nNA\n512000'
+        )
+        self.assertEqual(preview.size_bytes, 512000)
 
     def test_na_and_short_output_become_empty(self):
         preview = parse_preview_output('Only Title\nNA\n')
@@ -55,6 +64,18 @@ class PreviewParsingTests(unittest.TestCase):
         self.assertEqual(preview.duration, '')
         self.assertEqual(preview.thumbnail_url, '')
         self.assertEqual(preview.uploader, '')
+        self.assertEqual(preview.duration_secs, '')
+        self.assertIsNone(preview.size_bytes)
+
+
+class PreviewEstimateTests(unittest.TestCase):
+    def test_estimates_audio_size_from_duration(self):
+        self.assertEqual(estimate_audio_bytes('225'), 225 * 24_000)
+
+    def test_invalid_duration_has_no_estimate(self):
+        self.assertIsNone(estimate_audio_bytes(''))
+        self.assertIsNone(estimate_audio_bytes('NA'))
+        self.assertIsNone(estimate_audio_bytes('0'))
 
 
 class ThumbnailDownloadTests(unittest.TestCase):

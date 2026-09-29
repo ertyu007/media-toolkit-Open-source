@@ -19,9 +19,19 @@ from .ffmpeg import CancellationToken, ConversionCancelled
 from .importer import find_ytdlp_command, validate_url
 from .tools import find_executable
 
-PREVIEW_FIELDS = ('title', 'duration_string', 'thumbnail', 'uploader')
+PREVIEW_FIELDS = (
+    'title',
+    'duration_string',
+    'thumbnail',
+    'uploader',
+    'duration',
+    'filesize_approx',
+    'filesize',
+)
 MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024
 THUMBNAIL_WIDTH = 320
+# Rough MP3 bitrate used when yt-dlp reports no size (192 kbps ≈ 24 kB/s).
+AUDIO_ESTIMATE_BYTES_PER_SEC = 24_000
 
 
 @dataclass(frozen=True)
@@ -30,6 +40,8 @@ class LinkPreview:
     uploader: str
     duration: str
     thumbnail_url: str
+    duration_secs: str = ''
+    size_bytes: int | None = None
 
 
 def build_preview_command(tool_command: Sequence[str], url: str) -> list[str]:
@@ -58,14 +70,37 @@ def _clean_field(value: str) -> str:
 
 
 def parse_preview_output(text: str) -> LinkPreview:
-    """Parse the four ``--print`` lines in field order; short output → ''."""
+    """Parse the ``--print`` lines in field order; short output → ''."""
     lines = [_clean_field(line) for line in text.splitlines()]
     while len(lines) < len(PREVIEW_FIELDS):
         lines.append('')
-    title, duration, thumbnail_url, uploader = lines[: len(PREVIEW_FIELDS)]
+    title, duration, thumbnail_url, uploader, duration_secs, approx, exact = lines[
+        : len(PREVIEW_FIELDS)
+    ]
     return LinkPreview(
-        title=title, uploader=uploader, duration=duration, thumbnail_url=thumbnail_url
+        title=title,
+        uploader=uploader,
+        duration=duration,
+        thumbnail_url=thumbnail_url,
+        duration_secs=duration_secs if duration_secs.isdigit() else '',
+        size_bytes=_parse_size_bytes(approx, exact),
     )
+
+
+def _parse_size_bytes(*candidates: str) -> int | None:
+    """First positive integer among size candidates; None when all NA/empty."""
+    for candidate in candidates:
+        cleaned = candidate.strip().lower()
+        if cleaned.isdigit() and int(cleaned) > 0:
+            return int(cleaned)
+    return None
+
+
+def estimate_audio_bytes(duration_secs: str) -> int | None:
+    """Rough MP3 size from duration when yt-dlp reports no size; else None."""
+    if not duration_secs.isdigit() or int(duration_secs) <= 0:
+        return None
+    return int(duration_secs) * AUDIO_ESTIMATE_BYTES_PER_SEC
 
 
 def fetch_link_preview(
