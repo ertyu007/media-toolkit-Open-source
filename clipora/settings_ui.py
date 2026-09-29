@@ -149,12 +149,27 @@ class SettingsDialog(tk.Toplevel):
             text='ข้อมูลในเครื่อง: %LOCALAPPDATA%\\Clipora (ถอนหมดจดเมื่อถอนติดตั้ง)',
             style='Muted.TLabel', wraplength=500, justify='left',
         ).grid(row=15, column=0, columnspan=2, sticky='w')
-        about = ttk.Frame(body, style='TFrame')
-        about.grid(row=16, column=0, columnspan=2, sticky='e', pady=(8, 0))
+        self._danger_expanded = False
+        self._danger_toggle = ttk.Button(
+            body, text='▸ ถอนการติดตั้ง', style='Ghost.TButton',
+            command=self._toggle_danger,
+        )
+        self._danger_toggle.grid(
+            row=16, column=0, columnspan=2, sticky='w', pady=(8, 0))
+        self._danger_box = ttk.Frame(body, style='TFrame')
+        self._danger_box.grid(
+            row=17, column=0, columnspan=2, sticky='ew', pady=(4, 0))
+        self._danger_box.columnconfigure(0, weight=1)
+        ttk.Label(
+            self._danger_box,
+            text='ลบโปรแกรม + เครื่องมือ + ตั้งค่าในเครื่อง (ไฟล์งานของคุณไม่ถูกลบ)',
+            style='Muted.TLabel', wraplength=500, justify='left',
+        ).grid(row=0, column=0, sticky='w')
         RoundedButton(
-            about, text='ถอนการติดตั้ง…', width=12,
+            self._danger_box, text='ถอนการติดตั้ง…', width=12,
             command=self._uninstall,
-        ).pack(side='right')
+        ).grid(row=1, column=0, sticky='w', pady=(8, 0))
+        self._danger_box.grid_remove()
 
         actions = ttk.Frame(shell, style='TFrame')
         actions.grid(row=2, column=0, sticky='e', pady=(16, 0))
@@ -170,6 +185,18 @@ class SettingsDialog(tk.Toplevel):
         fade_in_window(self, self.after)
         self.grab_set()
         self.after_idle(self.focus_set)
+
+    def _toggle_danger(self) -> None:
+        self._danger_expanded = not self._danger_expanded
+        try:
+            if self._danger_expanded:
+                self._danger_toggle.configure(text='▾ ถอนการติดตั้ง')
+                self._danger_box.grid()
+            else:
+                self._danger_toggle.configure(text='▸ ถอนการติดตั้ง')
+                self._danger_box.grid_remove()
+        except tk.TclError:
+            pass
 
     def _uninstall(self) -> None:
         if self._on_uninstall is not None:

@@ -456,6 +456,7 @@ class RoundedCombobox(tk.Frame):
 
     _ROW_H = 34
     _POP_PAD = 8
+    _POP_SHADOW = 8  # transparent margin around the body for the drop shadow
     _open_owner: "RoundedCombobox | None" = None  # at most one popup app-wide
 
     @classmethod
@@ -603,20 +604,31 @@ class RoundedCombobox(tk.Frame):
             width = max(self._canvas.winfo_width(), 160)
             rows = len(self._values)
             height = self._POP_PAD * 2 + rows * self._ROW_H
-            x = self._canvas.winfo_rootx()
-            y = self._canvas.winfo_rooty() + self._canvas.winfo_height() + 6
-            if y + height > popup.winfo_screenheight():
-                y = self._canvas.winfo_rooty() - height - 6
+            pad = self._POP_SHADOW
+            x = self._canvas.winfo_rootx() - pad
+            y = self._canvas.winfo_rooty() + self._canvas.winfo_height() + 6 - pad
+            if y + height + pad * 2 > popup.winfo_screenheight():
+                y = self._canvas.winfo_rooty() - height - 6 - pad
         except tk.TclError:
             popup.destroy()
             return
         canvas = tk.Canvas(
-            popup, width=width, height=height, bg=base_bg,
+            popup, width=width + pad * 2, height=height + pad * 2, bg=base_bg,
             highlightthickness=0, borderwidth=0,
         )
         canvas.pack(fill='both', expand=True)
+        # Drop shadow: dithered black layer so it stays soft on light/dark themes.
         _rounded_rect(
-            canvas, 0, 0, width, height, 12, fill=FIELD, outline='')
+            canvas, pad, pad + 3, pad + width, pad + 3 + height, 12,
+            fill='#000000', stipple='gray50', outline='')
+        # Stroke: 1px BORDER ring behind the body (cleaner than outlining
+        # each sub-shape of the rounded rect).
+        _rounded_rect(
+            canvas, pad - 1, pad - 1, pad + width + 1, pad + height + 1, 13,
+            fill=BORDER, outline='')
+        _rounded_rect(
+            canvas, pad, pad, pad + width, pad + height, 12,
+            fill=FIELD, outline='')
         current = self._variable.get() if self._variable is not None else None
         self._hover = (
             self._values.index(current) if current in self._values else 0)
@@ -632,7 +644,7 @@ class RoundedCombobox(tk.Frame):
         popup.bind('<Up>', lambda _e: self._move_hover(-1))
         popup.bind('<Down>', lambda _e: self._move_hover(1))
         popup.bind('<Return>', lambda _e: self._choose_hovered())
-        popup.geometry(f'{width}x{height}+{x}+{y}')
+        popup.geometry(f'{width + pad * 2}x{height + pad * 2}+{x}+{y}')
         try:
             self._grab_prev = popup.grab_current()
         except tk.TclError:
@@ -677,15 +689,16 @@ class RoundedCombobox(tk.Frame):
         if popup is None:
             return
         try:
-            px, py = popup.winfo_rootx(), popup.winfo_rooty()
-            pw, ph = popup.winfo_width(), popup.winfo_height()
+            pad = self._POP_SHADOW
+            px, py = popup.winfo_rootx() + pad, popup.winfo_rooty() + pad
+            pw, ph = popup.winfo_width() - pad * 2, popup.winfo_height() - pad * 2
         except tk.TclError:
             return
         if not (px <= event.x_root < px + pw and py <= event.y_root < py + ph):
             self.close()
 
     def _row_at(self, y: int) -> int:
-        index = (y - self._POP_PAD) // self._ROW_H
+        index = (y - self._POP_SHADOW - self._POP_PAD) // self._ROW_H
         if 0 <= index < len(self._values):
             return index
         return -1
@@ -695,22 +708,23 @@ class RoundedCombobox(tk.Frame):
         if canvas is None:
             return
         try:
-            width = int(canvas.cget('width'))
+            width = int(canvas.cget('width')) - self._POP_SHADOW * 2
         except tk.TclError:
             return
         canvas.delete('row')
         current = self._variable.get() if self._variable is not None else None
+        pad = self._POP_SHADOW
         for index, value in enumerate(self._values):
-            top = self._POP_PAD + index * self._ROW_H
+            top = pad + self._POP_PAD + index * self._ROW_H
             if index == self._hover:
                 canvas.create_rectangle(
-                    2, top + 2, width - 2, top + self._ROW_H - 2,
+                    pad + 2, top + 2, pad + width - 2, top + self._ROW_H - 2,
                     fill=ACCENT, outline='', tags=('row',))
                 fg = '#ffffff'
             else:
                 fg = ACCENT if value == current else TEXT
             canvas.create_text(
-                self._POP_PAD + 10, top + self._ROW_H / 2, text=value,
+                pad + self._POP_PAD + 10, top + self._ROW_H / 2, text=value,
                 fill=fg, font=self._font, anchor='w', tags=('row',))
 
     def _on_pop_motion(self, event: tk.Event) -> None:
@@ -1177,6 +1191,7 @@ class ToastManager:
         accent = colors.get(type_, colors['info'])
 
         pad = 16
+        shadow = 6  # transparent margin around the body for the drop shadow
         radius = self._RADIUS if rounded else 0
         max_msg = 340
         font_msg = tkfont.Font(font=(FONT_FAMILY, 10))
@@ -1188,24 +1203,36 @@ class ToastManager:
         height = body_h + pad * 2
 
         canvas = tk.Canvas(
-            toast, width=width, height=height,
+            toast, width=width + shadow * 2, height=height + shadow * 2,
             bg=self._KEY if rounded else TOAST_BG,
             highlightthickness=0, borderwidth=0,
         )
         canvas.pack(fill='both', expand=True)
         if rounded:
             self._rounded_rect(
-                canvas, 0, 0, width, height, radius,
+                canvas, shadow, shadow + 2, shadow + width, shadow + 2 + height,
+                radius, fill='#000000', stipple='gray50', outline='')
+            self._rounded_rect(
+                canvas, shadow - 1, shadow - 1,
+                shadow + width + 1, shadow + height + 1, radius + 1,
+                fill=BORDER, outline='')
+            self._rounded_rect(
+                canvas, shadow, shadow, shadow + width, shadow + height, radius,
                 fill=TOAST_BG, outline='')
         else:
             canvas.create_rectangle(
-                0, 0, width, height, fill=TOAST_BG, outline=BORDER)
-        top = (height - body_h) / 2
+                shadow, shadow + 2, shadow + width, shadow + 2 + height,
+                fill='#000000', stipple='gray50', outline='')
+            canvas.create_rectangle(
+                shadow, shadow, shadow + width, shadow + height,
+                fill=TOAST_BG, outline=BORDER)
+        top = shadow + (height - body_h) / 2
         self._rounded_rect(
-            canvas, pad, top, pad + 4, top + body_h, 2, fill=accent, outline='')
+            canvas, shadow + pad, top, shadow + pad + 4, top + body_h,
+            2, fill=accent, outline='')
         mid_y = top + body_h / 2
         canvas.create_text(
-            pad + 4 + 12, mid_y, text=message, fill=TEXT,
+            shadow + pad + 4 + 12, mid_y, text=message, fill=TEXT,
             font=font_msg, anchor='w', justify='left', width=msg_w)
         canvas.bind('<Button-1>', lambda _e: self._dismiss(toast))
         canvas.configure(cursor='hand2')

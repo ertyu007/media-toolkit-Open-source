@@ -145,7 +145,6 @@ from .ui_components.theme import (
 )
 from .ui_components.widgets import (
     InlineError,
-    PILL_HEIGHT,
     RainbowBar,
     RoundedButton,
     RoundedCombobox,
@@ -3018,15 +3017,11 @@ class HistoryPanel(ttk.Frame):
                 ('audio', 'เพลง'),
                 ('video', 'วิดีโอ'),
                 ('stems', 'Stem'),
+                ('trash', 'ถังขยะ'),
             ],
             variable=self._filter,
             command=lambda _value: self._render(),
         ).grid(row=0, column=0, sticky='ew')
-        self._trash_button = RoundedButton(
-            filter_row, text='ถังขยะ', width=6, height=PILL_HEIGHT,
-            command=self._toggle_trash_filter,
-        )
-        self._trash_button.grid(row=0, column=1, padx=(8, 0), sticky='ns')
 
         header = ttk.Frame(shell, style='TFrame')
         header.grid(row=3, column=0, sticky='ew', pady=(0, 4))
@@ -3077,18 +3072,6 @@ class HistoryPanel(ttk.Frame):
 
     def _in_trash(self) -> bool:
         return self._filter.get() == 'trash'
-
-    def _toggle_trash_filter(self) -> None:
-        self._filter.set('all' if self._in_trash() else 'trash')
-
-    def _sync_trash_button(self) -> None:
-        try:
-            if self._in_trash():
-                self._trash_button.set_fill(ACCENT_SOFT)
-            else:
-                self._trash_button.reset_fill()
-        except tk.TclError:
-            pass
 
     def _render(self) -> None:
         wanted = self._filter.get()
@@ -3153,7 +3136,6 @@ class HistoryPanel(ttk.Frame):
         restored = find_history_index(self._entries, self._selected_id)
         if restored is not None:
             self._select_row(restored, persist=False)
-        self._sync_trash_button()
         try:
             self._canvas.yview_moveto(0.0)
         except tk.TclError:
