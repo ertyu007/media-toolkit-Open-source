@@ -1048,7 +1048,7 @@ class ToastManager:
     the platform refuses it); content is drawn straight on the canvas.
     """
     _KEY = _TRANSPARENT_KEY  # transparency key; in neither palette
-    _RADIUS = 14
+    _RADIUS = 8
 
     def __init__(self, root: tk.Tk) -> None:
         self._root = root
@@ -1075,26 +1075,22 @@ class ToastManager:
         toast.configure(bg=self._KEY if rounded else TOAST_BG)
 
         colors = {
-            'info': (ACCENT, 'i'),
-            'success': (SUCCESS, '✓'),
-            'warning': (WARNING, '!'),
-            'error': (ERROR, '✕'),
+            'info': ACCENT,
+            'success': SUCCESS,
+            'warning': WARNING,
+            'error': ERROR,
         }
-        accent, glyph = colors.get(type_, colors['info'])
+        accent = colors.get(type_, colors['info'])
 
         pad = 16
         radius = self._RADIUS if rounded else 0
         max_msg = 340
-        icon_d = 22
-        font_glyph = tkfont.Font(font=(FONT_FAMILY, 11, 'bold'))
         font_msg = tkfont.Font(font=(FONT_FAMILY, 10))
-        font_close = tkfont.Font(font=(FONT_FAMILY, 9))
-        close_w = font_close.measure('✕')
         msg_w = min(max(font_msg.measure(message), 60), max_msg)
         lines = max(1, -(-font_msg.measure(message) // max(msg_w, 1)))
         line_h = font_msg.metrics('linespace')
-        body_h = max(icon_d, lines * line_h)
-        width = pad + 4 + 12 + icon_d + 10 + msg_w + 12 + close_w + pad
+        body_h = max(18, lines * line_h)
+        width = pad + 4 + 12 + msg_w + pad
         height = body_h + pad * 2
 
         canvas = tk.Canvas(
@@ -1114,25 +1110,11 @@ class ToastManager:
         self._rounded_rect(
             canvas, pad, top, pad + 4, top + body_h, 2, fill=accent, outline='')
         mid_y = top + body_h / 2
-        icon_x = pad + 4 + 12
-        # Drawn ring + plain letter: no font-fallback boxes on any machine.
-        canvas.create_oval(
-            icon_x, mid_y - icon_d / 2, icon_x + icon_d, mid_y + icon_d / 2,
-            outline=accent, width=2)
         canvas.create_text(
-            icon_x + icon_d / 2, mid_y, text=glyph, fill=accent,
-            font=font_glyph)
-        canvas.create_text(
-            icon_x + icon_d + 10, mid_y, text=message, fill=TEXT,
+            pad + 4 + 12, mid_y, text=message, fill=TEXT,
             font=font_msg, anchor='w', justify='left', width=msg_w)
-        canvas.create_text(
-            width - pad, mid_y, text='✕', fill=MUTED,
-            font=font_close, anchor='e', tags=('close',))
-        canvas.tag_bind('close', '<Button-1>', lambda _e: self._dismiss(toast))
-        canvas.tag_bind(
-            'close', '<Enter>', lambda _e: canvas.configure(cursor='hand2'))
-        canvas.tag_bind(
-            'close', '<Leave>', lambda _e: canvas.configure(cursor=''))
+        canvas.bind('<Button-1>', lambda _e: self._dismiss(toast))
+        canvas.configure(cursor='hand2')
 
         self._toasts.append(toast)
         self._position_toasts()
@@ -1140,11 +1122,10 @@ class ToastManager:
         self._root.after(duration, lambda: self._dismiss(toast))
 
     def _animate_in(self, toast: tk.Toplevel) -> None:
-        """Slide the toast up a few pixels while fading in."""
+        """Slide the toast up a few pixels (no fade: -alpha breaks rounded corners)."""
         try:
             info = toast.geometry().split('+')
             target_x, target_y = int(info[1]), int(info[2])
-            toast.attributes('-alpha', 0.0)
         except (tk.TclError, ValueError, IndexError):
             return
         start_y = target_y + 18
@@ -1152,7 +1133,6 @@ class ToastManager:
 
         def frame(progress: float) -> None:
             try:
-                toast.attributes('-alpha', progress)
                 current_y = round(start_y + (target_y - start_y) * progress)
                 toast.geometry(f'+{target_x}+{current_y}')
             except tk.TclError:
