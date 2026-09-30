@@ -1,5 +1,7 @@
 # Clipora
 
+[![Release](https://img.shields.io/github/v/release/ertyu007/media-toolkit-Open-source)](https://github.com/ertyu007/media-toolkit-Open-source/releases) [![Downloads](https://img.shields.io/github/downloads/ertyu007/media-toolkit-Open-source/total)](https://github.com/ertyu007/media-toolkit-Open-source/releases) [![License](https://img.shields.io/github/license/ertyu007/media-toolkit-Open-source)](LICENSE)
+
 Clipora คือโปรแกรมเดสก์ท็อปโอเพนซอร์สสำหรับ Windows แปลงวิดีโอ แยกเสียง และดาวน์โหลดสื่อสาธารณะที่ได้รับอนุญาต — ฟรี ไม่มีโฆษณา ไม่มีบัญชี ประมวลผลบนเครื่องทั้งหมด
 
 พัฒนาโดย `ertyu007` • License [GPL-3.0](LICENSE)
