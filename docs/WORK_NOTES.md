@@ -2,6 +2,10 @@
 
 อัปเดตล่าสุด: 2026-09-29
 
+## ทำวันนี้ (2026-09-29) — ช่องทางรีวิว (ยังไม่ bump version)
+
+- เปิด GitHub Discussions แล้ว + ปุ่ม `รีวิว & พูดคุย` ในแถบข้างแอป (ข้างรายงานปัญหา) — USER_GUIDE ตามแล้ว
+
 ## Release 0.6.4 — bump PC 0.6.3 → 0.6.4 (patch — dropdown/คำศัพท์/UI)
 
 - sync `__init__.py`, `version_info.txt`, `.iss`, `.manifest`, README แล้ว; full suite 266 ผ่าน (skip 4 = เน็ต/Demucs) + test_packaging 6/6; commit → tag `pc-v0.6.4` → push → รอ `build-windows` ปล่อย Setup + portable ZIP + `.sha256`

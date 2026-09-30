@@ -5,122 +5,110 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Clipora — ภาพรวม สถาปัตยกรรม และเว็บจำลองการทำงาน</title>
 <meta name="description" content="ภาพรวม สถาปัตยกรรม และการไหลทำงานของ Clipora พร้อมเว็บจำลองการทำงาน (ไม่ประมวลผลจริง)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0f172a;--card:#1e293b;--line:#334155;--txt:#f1f5f9;--mut:#94a3b8;--acc:#38bdf8;--ok:#4ade80;--warn:#fbbf24;--err:#f87171}
-*{box-sizing:border-box}body{margin:0;font-family:"Leelawadee UI","Segoe UI",Tahoma,sans-serif;background:var(--bg);color:var(--txt);line-height:1.7}
-a{color:var(--acc)}header{padding:28px 20px;text-align:center;border-bottom:1px solid var(--line)}
-header .ver{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 12px;color:var(--mut);font-size:14px;margin-top:8px}
-main{max-width:960px;margin:0 auto;padding:20px}
-section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin:16px 0}
-h1{margin:0;font-size:28px}h2{margin:0 0 10px;font-size:20px;border-left:4px solid var(--acc);padding-left:10px}
-p.mut,li.mut{color:var(--mut)}.grid{display:grid;gap:10px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr 1fr}
-@media(max-width:720px){.g2,.g3{grid-template-columns:1fr}}
-.box{border:1px solid var(--line);border-radius:10px;padding:12px;background:#0b1220}
-.box b{color:var(--acc)}.tag{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:6px;padding:0 8px;color:var(--mut);margin:2px 4px 2px 0}
-.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
-.step{border:1px solid var(--acc);border-radius:8px;padding:6px 10px;font-size:14px;background:#082f49}
+:root{--bg:#f2f3f1;--panel:#fbfbfa;--ink:#1b1f23;--mut:#586067;--line:#c8ccca;--tint:#e6e8e5;--tally:#c8321f;--tally-bg:#f8e3df}
+*{box-sizing:border-box}
+body{margin:0;font-family:"IBM Plex Sans Thai","Leelawadee UI","Segoe UI",Tahoma,sans-serif;font-size:16px;line-height:1.75;background:var(--bg);color:var(--ink)}
+a{color:var(--ink);text-underline-offset:3px}a:hover{color:var(--tally)}
+a:focus-visible{outline:3px solid var(--tally);outline-offset:3px}
+.wrap,main{max-width:1040px;margin:0 auto;padding:0 20px}
+header{border-bottom:2px solid var(--ink);padding:64px 0 32px}
+h1{margin:0;display:flex;align-items:center;gap:.16em;font-size:clamp(56px,11vw,112px);line-height:1.1;font-weight:700;letter-spacing:-.02em}
+h1:before{content:"";flex:none;width:.24em;height:.24em;border-radius:50%;background:var(--tally)}
+.lead{max-width:38em;margin:16px 0 22px;font-size:19px}
+.links{display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px;margin:0 0 12px}
+.btn{background:var(--ink);color:#fff;padding:8px 20px;border-radius:4px;text-decoration:none;font-weight:600}
+.btn:hover{background:var(--tally);color:#fff}
+.note{margin:.5em 0 0;font-size:14px;color:var(--mut)}
+section{display:grid;grid-template-columns:190px minmax(0,1fr);column-gap:40px;padding:32px 0 36px;border-top:1px solid var(--ink)}
+main>section:first-child{border-top:0}
+section>*{grid-column:2;margin-top:0}
+section>h2{grid-column:1;grid-row:1}
+section.wide>*{grid-column:1/-1}
+section.wide>h2{grid-row:auto;margin-bottom:16px}
+h2{margin:0 0 12px;font-size:22px;line-height:1.35;font-weight:700}
+section p{margin:0 0 12px}
+.mut{color:var(--mut)}
+.grid{display:grid;gap:24px;margin:16px 0}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}
+.box{border-top:2px solid var(--ink);padding-top:10px;font-size:15px}
+code{font-family:"IBM Plex Mono",Consolas,monospace;font-size:.86em;background:var(--tint);border-radius:3px;padding:1px 5px}
+.tag{display:inline-block;margin:2px 4px 2px 0;padding:0 8px;font-size:13px;color:var(--mut);background:var(--tint);border-radius:3px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 16px}
+.step{border:1px solid var(--ink);border-radius:3px;padding:4px 10px;font-size:14px;background:var(--panel)}
 .arrow{color:var(--mut)}
-code{background:#0b1220;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px}
-.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.tabs button{background:#0b1220;color:var(--txt);border:1px solid var(--line);border-radius:999px;padding:6px 14px;cursor:pointer}
-.tabs button.on{background:var(--acc);color:#06202e;border-color:var(--acc);font-weight:bold}
-.panel{display:none}.panel.on{display:block}
+.docs a{margin-right:24px}
+footer{max-width:1040px;margin:0 auto;padding:24px 20px 40px;border-top:1px solid var(--ink);font-size:14px;color:var(--mut)}
 /* flow tree */
-.tree-shell{position:relative;border:1px solid var(--line);border-radius:20px;background:
-linear-gradient(180deg,rgba(8,17,31,.98),rgba(5,12,23,.98));padding:22px;overflow:hidden}
-.tree-shell:before{content:"";position:absolute;inset:0;background:
-radial-gradient(circle at 50% 0%,rgba(56,189,248,.12),transparent 32%),
-radial-gradient(circle at 18% 70%,rgba(74,222,128,.055),transparent 24%),
-radial-gradient(circle at 82% 70%,rgba(167,139,250,.06),transparent 24%);pointer-events:none}
-.tree-head{position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
-.tree-live{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:.2px}
-.tree-live-dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(74,222,128,.45);animation:treePulse 1.5s infinite}
-@keyframes treePulse{70%{box-shadow:0 0 0 8px rgba(74,222,128,0)}}
-.tree-status{font-size:12px;color:var(--mut);border:1px solid var(--line);background:#07101e;border-radius:999px;padding:5px 11px}
-.tree-canvas{position:relative;z-index:1;min-height:620px;padding:2px 0 6px}
-.tree-node{position:relative;border:1px solid var(--line);background:#0a1424;border-radius:14px;padding:11px 12px;transition:.35s ease;min-width:0}
-.tree-node .eyebrow{font:700 10px/1.2 Consolas,monospace;letter-spacing:.9px;color:var(--mut);text-transform:uppercase;margin-bottom:4px}
-.tree-node .title{font-weight:800;font-size:14px;line-height:1.35}
-.tree-node .sub{font-size:11.5px;line-height:1.45;color:var(--mut);margin-top:3px}
-.tree-node.active{border-color:var(--acc);background:#08283d;box-shadow:0 0 0 1px rgba(56,189,248,.12),0 10px 28px rgba(2,132,199,.14);transform:translateY(-2px)}
-.tree-node.done{border-color:rgba(74,222,128,.34);background:#0a1b19}
-.tree-node.done .eyebrow{color:var(--ok)}
-.root-node{width:min(320px,88%);margin:0 auto;text-align:center}
-.core-node{width:min(350px,90%);margin:38px auto 0;text-align:center;border-color:#475569;background:#0d1728}
-.core-node .core-mark{width:34px;height:34px;border-radius:10px;margin:0 auto 7px;display:grid;place-items:center;background:#111f34;border:1px solid var(--line);font-weight:900;color:var(--acc)}
-.branches{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:62px;align-items:start}
-.branch{position:relative;min-width:0}
-.branch-card{min-height:88px;text-align:center;padding:13px 10px;border:1px solid var(--line);border-radius:15px;background:#0b1526;transition:.35s ease}
-.branch-card .branch-icon{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;margin:0 auto 6px;background:#121f33;border:1px solid var(--line);font-weight:800;font-size:12px;color:var(--mut)}
-.branch-card b{display:block;font-size:13px}.branch-card span{display:block;font-size:11px;color:var(--mut);margin-top:2px}
-.branch.active .branch-card{border-color:var(--acc);background:#08283d;box-shadow:0 8px 28px rgba(2,132,199,.13)}
-.branch.active .branch-icon{border-color:var(--acc);color:var(--acc);background:#071d2c}
-.branch.done .branch-card{border-color:rgba(74,222,128,.34);background:#0a1b19}
-.branch.done .branch-icon{color:var(--ok);border-color:rgba(74,222,128,.4)}
-.branch-steps{position:relative;display:grid;gap:11px;margin-top:28px;padding-left:15px}
-.branch-steps:before{content:"";position:absolute;left:5px;top:-19px;bottom:14px;width:2px;background:#1e293b;border-radius:99px}
-.mini-step{position:relative;border:1px solid var(--line);border-radius:11px;background:#08111f;padding:9px 9px 9px 12px;min-height:66px;transition:.3s ease}
-.mini-step:before{content:"";position:absolute;left:-15px;top:25px;width:10px;height:10px;border-radius:50%;background:#17243a;border:2px solid #08111f;box-shadow:0 0 0 1px var(--line);transition:.3s ease}
-.mini-step .n{font:700 10px Consolas,monospace;color:var(--mut);margin-bottom:2px}.mini-step b{display:block;font-size:12.5px;line-height:1.35}.mini-step span{display:block;font-size:10.5px;color:var(--mut);line-height:1.4;margin-top:2px}
-.mini-step.active{border-color:var(--acc);background:#08283d;transform:translateX(2px);box-shadow:0 7px 18px rgba(2,132,199,.1)}
-.mini-step.active:before{background:var(--acc);box-shadow:0 0 0 4px rgba(56,189,248,.12)}
-.mini-step.done{border-color:rgba(74,222,128,.3);background:#0a1a18}
-.mini-step.done:before{background:var(--ok);box-shadow:0 0 0 3px rgba(74,222,128,.08)}
-.tree-output{width:min(360px,90%);margin:56px auto 0;text-align:center;border-color:#475569;background:#0d1728}
-.tree-output.active{border-color:var(--ok);background:#0b241c;box-shadow:0 0 0 1px rgba(74,222,128,.12),0 10px 28px rgba(34,197,94,.12)}
-.tree-output .check{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;border:1px solid var(--line);margin-bottom:6px;color:var(--ok);background:#0b1c18}
-/* connector geometry */
-.trunk{position:absolute;left:50%;width:2px;background:#1e293b;transform:translateX(-50%);overflow:hidden}
-.trunk.t1{top:69px;height:40px}.trunk.t2{top:183px;height:46px}.trunk.t3{bottom:72px;height:42px}
-.fork{position:absolute;left:16.67%;right:16.67%;top:228px;height:2px;background:#1e293b;overflow:hidden}
-.branch-drop{position:absolute;top:228px;width:2px;height:54px;background:#1e293b;overflow:hidden}
-.branch-drop.b1{left:16.67%}.branch-drop.b2{left:50%}.branch-drop.b3{left:83.33%}
-.flowing:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent,var(--acc),var(--ok),transparent);transform:translateY(-110%);animation:treeFlowY .9s linear infinite}
-.fork.flowing:after{background:linear-gradient(90deg,transparent,var(--acc),var(--ok),transparent);transform:translateX(-110%);animation:treeFlowX 1.2s linear infinite}
-.branch-drop.flowing:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent,var(--acc),var(--ok),transparent);transform:translateY(-110%);animation:treeFlowY .9s linear infinite}
-@keyframes treeFlowY{to{transform:translateY(110%)}}@keyframes treeFlowX{to{transform:translateX(110%)}}
-.tree-meta{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}
-.live-card{border:1px solid var(--line);background:#06101d;border-radius:14px;padding:13px}
-.live-card h3{font-size:12px;margin:0 0 8px;color:var(--mut);font-weight:700}
-.live-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;margin:5px 0}.live-row b{color:var(--txt);text-align:right}
-.tree-progress{height:9px;background:#030914;border:1px solid var(--line);border-radius:99px;overflow:hidden;margin-top:10px}
-.tree-progress>div{height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--ok));transition:width .35s ease}
-.tree-log{height:132px;overflow:auto;background:#020617;border:1px solid var(--line);border-radius:10px;padding:9px;font:11px/1.55 Consolas,monospace;white-space:pre-wrap;color:#cbd5e1}
-.tree-log .ok{color:var(--ok)}.tree-log .inf{color:var(--acc)}
+.tree-shell{border:1px solid var(--ink);border-radius:4px;background:var(--panel);padding:22px}
+.tree-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.tree-live{font-weight:700}
+.tree-status{font-size:13px;color:var(--mut)}
+.tree-node,.branch-card,.mini-step{border:1px solid var(--line);border-radius:4px;background:var(--panel);transition:background .3s,border-color .3s;min-width:0}
+.tree-node{padding:11px 12px}
+.tree-node .title{font-weight:700;font-size:14px;line-height:1.35}
+.tree-node .sub{margin-top:3px;font-size:12px;line-height:1.5;color:var(--mut)}
+.root-node,.core-node{width:min(340px,90%);margin:0 auto;text-align:center}
+.tree-output{width:min(360px,90%);margin:0 auto;text-align:center}
+.tree-output .check{font-weight:700;line-height:1.2;color:var(--mut)}
+.active{border-color:var(--tally)!important;background:var(--tally-bg)!important}
+.done{border-color:var(--ink)!important;background:var(--tint)!important}
+.tree-output.active{border-color:var(--ink)!important;background:var(--ink)!important;color:#fff}
+.tree-output.active .sub,.tree-output.active .check{color:#d5d9dc}
+/* connectors sit between nodes, so they never depend on node heights */
+.link{position:relative;height:40px}.link-fork{height:60px}
+.link>*{position:absolute;background:var(--line)}
+.link .trunk{left:50%;top:0;bottom:0;width:2px;margin-left:-1px}
+.link-fork .trunk{bottom:50%}
+.link-fork .fork{left:calc((100% - 36px)/6);right:calc((100% - 36px)/6);top:50%;height:2px}
+.link-fork .drop{top:50%;bottom:0;width:2px;margin-left:-1px}
+.drop.b1{left:calc((100% - 36px)/6)}.drop.b2{left:50%}.drop.b3{left:calc(100% - (100% - 36px)/6)}
+.link .flowing{background:var(--tally)}
+.branches{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start}
+.branch-card{padding:12px;text-align:center}
+.branch-card b{display:block;font-size:14px}.branch-card span{display:block;font-size:12px;color:var(--mut)}
+.branch-steps{position:relative;display:grid;gap:10px;margin-top:20px;padding-left:16px}
+.branch-steps:before{content:"";position:absolute;left:5px;top:-12px;bottom:14px;width:2px;background:var(--line)}
+.mini-step{position:relative;min-height:66px;padding:9px 10px}
+.mini-step:before{content:"";position:absolute;left:-15px;top:22px;width:10px;height:10px;border-radius:50%;background:var(--bg);border:2px solid var(--line)}
+.mini-step.active:before{background:var(--tally);border-color:var(--tally)}
+.mini-step.done:before{background:var(--ink);border-color:var(--ink)}
+.mini-step .n{font-size:11px;color:var(--mut);font-variant-numeric:tabular-nums}
+.mini-step b{display:block;font-size:13px;line-height:1.4}
+.mini-step span{display:block;margin-top:2px;font-size:11.5px;line-height:1.5;color:var(--mut)}
+.tree-meta{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:22px}
+.live-card{border-top:2px solid var(--ink);padding-top:10px}
+.live-card h3{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--mut)}
+.live-row{display:flex;justify-content:space-between;gap:10px;margin:5px 0;font-size:13px}.live-row b{text-align:right}
+.tree-progress{height:6px;margin-top:12px;background:var(--tint)}
+.tree-progress>div{height:100%;width:0;background:var(--tally);transition:width .35s}
+.tree-log{height:132px;overflow:auto;padding:9px 11px;background:var(--ink);border-radius:4px;font:12px/1.6 "IBM Plex Mono",Consolas,monospace;white-space:pre-wrap;color:#c6cbcf}
+.tree-log .inf{color:#fff}.tree-log .ok{color:#fff;font-weight:700}
 @media(max-width:820px){
- .tree-canvas{min-height:auto}.branches{grid-template-columns:1fr;gap:18px;margin-top:40px}.branch{padding-left:0}.branch-card{text-align:left;display:grid;grid-template-columns:38px 1fr;align-items:center}.branch-card .branch-icon{margin:0}.branch-card b,.branch-card span{grid-column:2}.branch-steps{margin-top:14px}.tree-output{margin-top:34px}.trunk,.fork,.branch-drop{display:none}.tree-meta{grid-template-columns:1fr}.branch:not(.active){opacity:.58}.branch.active{opacity:1}
+ section{display:block}
+ .branches,.tree-meta{grid-template-columns:1fr}.branches{gap:16px}
+ .branch-card{text-align:left}
+ .link{height:24px}.link>*{display:none}
 }
-@media(prefers-reduced-motion:reduce){.tree-live-dot,.flowing:after{animation:none}.tree-node,.branch-card,.mini-step{transition:none}}
-
-/* mock app */
-.mock{border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.mockbar{background:#0b1220;padding:10px 14px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
-.dot{width:12px;height:12px;border-radius:50%}.r{background:#f87171}.y{background:#fbbf24}.g{background:#4ade80}
-.mockbody{padding:14px;display:grid;gap:12px}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-select,input[type=text]{background:#0b1220;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px}
-select:disabled,input:disabled{opacity:.5}
-button.act{background:var(--acc);color:#06202e;border:0;border-radius:8px;padding:9px 18px;font-weight:bold;cursor:pointer}
-button.ghost{background:transparent;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:9px 14px;cursor:pointer}
-button:disabled{opacity:.45;cursor:not-allowed}
-.pbar{height:14px;background:#0b1220;border:1px solid var(--line);border-radius:999px;overflow:hidden}
-.pbar>div{height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--ok));transition:width .25s}
-.log{background:#020617;border:1px solid var(--line);border-radius:8px;padding:10px;height:190px;overflow:auto;font-family:Consolas,monospace;font-size:12.5px;white-space:pre-wrap}
-.log .ok{color:var(--ok)}.log .inf{color:var(--acc)}.log .wr{color:var(--warn)}.log .er{color:var(--err)}
-.note{font-size:13px;color:var(--mut)}footer{text-align:center;color:var(--mut);padding:20px;font-size:13px}
+@media(max-width:720px){.g2,.g3{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
 <header>
+<div class="wrap">
 <h1>Clipora</h1>
-<p class="mut" style="margin:6px 0">โปรแกรมเดสก์ท็อป Windows แปลงวิดีโอ แยกเสียง ดาวน์โหลดสื่อสาธารณะที่ได้รับอนุญาต — ประมวลผลบนเครื่องทั้งหมด ฟรี ไม่มีโฆษณา ไม่ต้องสมัครบัญชี</p>
-<span class="ver">เวอร์ชัน 0.6.4 · Python 3.10+ · Tkinter · FFmpeg + yt-dlp + Demucs</span><br>
-<span class="note"><a href="https://github.com/ertyu007/media-toolkit-Open-source/releases">ดาวน์โหลด (tag pc-v*)</a> · <a href="https://github.com/ertyu007/media-toolkit-Open-source">ซอร์สโค้ด</a> · <a href="USER_GUIDE.html" onerror="this.remove()">คู่มือผู้ใช้</a> <a href="USER_GUIDE.md">คู่มือผู้ใช้ (md)</a></span>
+<p class="lead">โปรแกรม Windows สำหรับแปลงวิดีโอ แยกเสียง และดาวน์โหลดสื่อสาธารณะที่ได้รับอนุญาต ประมวลผลบนเครื่องทั้งหมด ฟรี ไม่มีโฆษณา ไม่ต้องสมัครบัญชี</p>
+<p class="links"><a class="btn" href="https://github.com/ertyu007/media-toolkit-Open-source/releases">ดาวน์โหลด</a><a href="https://github.com/ertyu007/media-toolkit-Open-source">ซอร์สโค้ด</a><a href="USER_GUIDE.md">คู่มือผู้ใช้</a></p>
+<p class="note">เวอร์ชัน 0.6.4 สร้างด้วย Python 3.10+, Tkinter, FFmpeg, yt-dlp และ Demucs</p>
+</div>
 </header>
 <main>
 
 <section>
-<h2>1. ภาพรวมระบบ</h2>
+<h2>ภาพรวมระบบ</h2>
 <p>Clipora เป็นแอป <b>local-first</b>: ไฟล์ต้นฉบับไม่ถูกแก้ไข ไม่ส่งไฟล์/ลิงก์ไปเซิร์ฟเวอร์ของ Clipora เก็บ output เดิมไว้จนกว่างานใหม่จะสำเร็จ ใช้งาน 3 ขั้นตอน: <b>วางลิงก์/เลือกไฟล์ → เลือกรูปแบบ → กดเริ่ม</b></p>
 <div class="grid g3">
 <div class="box"><b>ไฟล์ในเครื่อง</b><br><span class="mut">แยกเสียง MP3/M4A/WAV/FLAC/OPUS · แปลง MP4 (H.264/AAC) · MOV ProRes 422 · ตัดช่วงเวลา · เลือก FPS สูงสุด/60/30 · คุณภาพ High/Balanced/Small</span></div>
@@ -131,7 +119,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 </section>
 
 <section>
-<h2>2. สถาปัตยกรรม</h2>
+<h2>สถาปัตยกรรม</h2>
 <div class="flow">
 <span class="step"><code>app.py</code> (entry)</span><span class="arrow">→</span>
 <span class="step">CliporaApp <code>clipora/ui.py</code> (main thread)</span><span class="arrow">→</span>
@@ -149,40 +137,39 @@ button:disabled{opacity:.45;cursor:not-allowed}
 <p><span class="tag">clipora/tools.py ค้นหา FFmpeg/yt-dlp/Deno</span><span class="tag">dependencies.py พิน URL+SHA-256</span><span class="tag">history.py ประวัติ/ถังขยะ</span><span class="tag">preview.py พรีวิวลิงก์</span><span class="tag">app_update.py / ytdlp_update.py อัปเดต</span></p>
 </section>
 
-<section>
-<h2>3. Flow Tree — การไหลของระบบแบบอัตโนมัติ</h2>
+<section class="wide">
+<h2>ลำดับการทำงานของระบบ</h2>
 <div class="tree-shell" id="flowTree">
   <div class="tree-head">
-    <div class="tree-live"><span class="tree-live-dot"></span><span>LIVE SYSTEM FLOW</span></div>
+    <div class="tree-live">ตัวอย่างการไหลของงาน</div>
     <span class="tree-status" id="treeStatus">กำลังรับงานเข้า Clipora</span>
   </div>
 
   <div class="tree-canvas">
-    <div class="trunk t1" id="lineInputCore"></div>
-    <div class="trunk t2" id="lineCoreFork"></div>
-    <div class="fork" id="lineFork"></div>
-    <div class="branch-drop b1" data-branch-line="file"></div>
-    <div class="branch-drop b2" data-branch-line="url"></div>
-    <div class="branch-drop b3" data-branch-line="stem"></div>
-    <div class="trunk t3" id="lineOutput"></div>
 
     <div class="tree-node root-node" id="inputNode">
-      <div class="eyebrow">INPUT GATEWAY</div>
       <div class="title">รับงานจากผู้ใช้</div>
-      <div class="sub">ไฟล์ในเครื่อง · URL สาธารณะ · งานแยก Stem</div>
+      <div class="sub">ไฟล์ในเครื่อง, URL สาธารณะ, งานแยก Stem</div>
     </div>
 
+    <div class="link"><div class="trunk" id="lineInputCore"></div></div>
+
     <div class="tree-node core-node" id="coreNode">
-      <div class="core-mark">C</div>
-      <div class="eyebrow">CLIPORA CORE</div>
       <div class="title">Snapshot JobSpec → Worker Thread</div>
-      <div class="sub">ตรวจค่า · ล็อกสถานะ UI · ตรวจพื้นที่ดิสก์ · เลือก engine ที่ตรงกับงาน</div>
+      <div class="sub">ตรวจค่า, ล็อกสถานะ UI, ตรวจพื้นที่ดิสก์, เลือก engine ที่ตรงกับงาน</div>
+    </div>
+
+    <div class="link link-fork">
+      <div class="trunk" id="lineCoreFork"></div>
+      <div class="fork" id="lineFork"></div>
+      <div class="drop b1" data-branch-line="file"></div>
+      <div class="drop b2" data-branch-line="url"></div>
+      <div class="drop b3" data-branch-line="stem"></div>
     </div>
 
     <div class="branches">
       <div class="branch" data-branch="file">
         <div class="branch-card">
-          <div class="branch-icon">FILE</div>
           <b>Local File Pipeline</b>
           <span>FFprobe + FFmpeg</span>
         </div>
@@ -196,7 +183,6 @@ button:disabled{opacity:.45;cursor:not-allowed}
 
       <div class="branch" data-branch="url">
         <div class="branch-card">
-          <div class="branch-icon">URL</div>
           <b>Public URL Pipeline</b>
           <span>yt-dlp + FFmpeg</span>
         </div>
@@ -210,7 +196,6 @@ button:disabled{opacity:.45;cursor:not-allowed}
 
       <div class="branch" data-branch="stem">
         <div class="branch-card">
-          <div class="branch-icon">AI</div>
           <b>Stem Separation</b>
           <span>Demucs · Offline</span>
         </div>
@@ -223,11 +208,12 @@ button:disabled{opacity:.45;cursor:not-allowed}
       </div>
     </div>
 
+    <div class="link"><div class="trunk" id="lineOutput"></div></div>
+
     <div class="tree-node tree-output" id="outputNode">
       <div class="check">✓</div>
-      <div class="eyebrow">OUTPUT READY</div>
       <div class="title">งานเสร็จ → after() อัปเดต UI</div>
-      <div class="sub">ต้นฉบับไม่ถูกแตะ · เก็บเฉพาะ output ที่สำเร็จ · พร้อมเปิดโฟลเดอร์ผลลัพธ์</div>
+      <div class="sub">ต้นฉบับไม่ถูกแตะ, เก็บเฉพาะ output ที่สำเร็จ, พร้อมเปิดโฟลเดอร์ผลลัพธ์</div>
     </div>
   </div>
 
@@ -250,13 +236,13 @@ button:disabled{opacity:.45;cursor:not-allowed}
 
 
 <section>
-<h2>5. ลิงก์เอกสาร</h2>
-<p><a href="USER_GUIDE.md">คู่มือผู้ใช้</a> · <a href="TROUBLESHOOTING.md">แก้ปัญหา + Error Log</a> · <a href="DEVELOPMENT.md">คู่มือนักพัฒนา/Architecture</a> · <a href="https://github.com/ertyu007/media-toolkit-Open-source/releases">Releases</a></p>
-<p class="note">สัญญาอนุญาต GPL-3.0-only · ประมวลผลบนเครื่อง · ไม่แก้ไขไฟล์ต้นฉบับ · งาน URL รับเฉพาะสื่อสาธารณะที่ผู้ใช้มีสิทธิ์ตามกฎหมายและเงื่อนไขแหล่งนั้น</p>
+<h2>เอกสาร</h2>
+<p class="docs"><a href="USER_GUIDE.md">คู่มือผู้ใช้</a><a href="TROUBLESHOOTING.md">แก้ปัญหา + Error Log</a><a href="DEVELOPMENT.md">คู่มือนักพัฒนา/Architecture</a><a href="https://github.com/ertyu007/media-toolkit-Open-source/releases">Releases</a></p>
+<p class="note">สัญญาอนุญาต GPL-3.0-only ประมวลผลบนเครื่อง และไม่แก้ไขไฟล์ต้นฉบับ งาน URL รับเฉพาะสื่อสาธารณะที่ผู้ใช้มีสิทธิ์ตามกฎหมายและเงื่อนไขของแหล่งนั้น</p>
 </section>
 
 </main>
-<footer>Clipora 0.6.4 · หน้าเว็บจำลองนี้ไม่มีการประมวลผลสื่อจริง</footer>
+<footer>Clipora 0.6.4 หน้านี้เป็นเว็บจำลอง ไม่มีการประมวลผลสื่อจริง</footer>
 <script>
 (function(){
   var reduceMotion=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -303,18 +289,18 @@ button:disabled{opacity:.45;cursor:not-allowed}
         if(i<si)el.classList.add('done');
         else if(i===si)el.classList.add('active');
       }
-      status.textContent=f.mode+' · '+f.labels[si];stepText.textContent=f.labels[si];setBar(38+si*15);
+      status.textContent=f.mode+': '+f.labels[si];stepText.textContent=f.labels[si];setBar(38+si*15);
     }
     if(phase===7){
       branches[f.key].classList.add('done');
       for(var j=0;j<4;j++)steps[f.key+'-'+j].classList.add('done');
       lineOut.classList.add('flowing');out.classList.add('active');
-      status.textContent='Output Ready · งานสำเร็จ';stepText.textContent='Finalize → after() → UI';setBar(100);
+      status.textContent='งานสำเร็จ พร้อมใช้ผลลัพธ์';stepText.textContent='Finalize → after() → UI';setBar(100);
     }
   }
   function next(){
     var f=flows[flowIndex];
-    if(phase===0){log.textContent='';addLog('AUTO FLOW — '+f.mode,'inf');addLog('input received → snapshot job','');}
+    if(phase===0){log.textContent='';addLog('เริ่มงาน: '+f.mode,'inf');addLog('input received → snapshot job','');}
     else if(phase===1){addLog('Clipora Core: snapshot + disk check [OK]','inf');}
     else if(phase===2){addLog('route → '+f.engine,'inf');}
     else if(phase>=3&&phase<=6){var si=phase-3;addLog(f.logs[si],si===3?'ok':'');}

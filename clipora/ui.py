@@ -739,6 +739,8 @@ class CliporaApp(tk.Tk):
                 'https://github.com/ertyu007/media-toolkit-Open-source/blob/main/docs/USER_GUIDE.md')),
             ('รายงานปัญหา', lambda: webbrowser.open(
                 'https://github.com/ertyu007/media-toolkit-Open-source/issues')),
+            ('รีวิว & พูดคุย', lambda: webbrowser.open(
+                'https://github.com/ertyu007/media-toolkit-Open-source/discussions')),
             ('สนับสนุนโครงการ', self._open_donate_dialog),
         ):
             ttk.Button(
