@@ -4,6 +4,7 @@ __pycache__/
 build/
 dist/
 *.spec
+!android/buildozer.spec
 .idea/
 .vscode/
 .pytest_cache/

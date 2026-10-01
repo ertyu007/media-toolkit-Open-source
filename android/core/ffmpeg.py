@@ -1,0 +1,571 @@
+"""Android port of ``clipora/ffmpeg.py``.
+
+Kept byte-for-byte compatible with the PC module wherever the platform allows
+so ``android/tests/test_core.py`` can assert both sides build the same ffmpeg
+command line. Platform deltas:
+
+* no ``creationflags`` (``subprocess`` rejects the kwarg off Windows),
+* ``CancellationToken`` signals SIGTERM then SIGKILL instead of ``taskkill``,
+* ``probe`` falls back to ``ffmpeg -i`` when the p4a recipe ships no ffprobe.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import re
+import shutil
+import subprocess
+import threading
+import uuid
+from collections import deque
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
+from .tools import find_executable
+
+
+AUDIO_FORMATS = ('mp3', 'm4a', 'wav', 'flac', 'opus')
+VIDEO_CONTAINERS = ('mp4', 'mov')
+VIDEO_QUALITY_PRESETS = ('High', 'Balanced', 'Small')
+FPS_OPTIONS = ('สูงสุด', '60', '30')
+PRORES_PROFILES = {
+    'High': '3',
+    'Balanced': '2',
+    'Small': '1',
+    'สูงสุด': '3',
+    '1080p': '3',
+    '720p': '2',
+    '480p': '1',
+}
+
+
+class FFmpegError(RuntimeError):
+    pass
+
+
+class UnsupportedMediaError(FFmpegError):
+    pass
+
+
+class ConversionCancelled(FFmpegError):
+    pass
+
+
+@dataclass(frozen=True)
+class MediaInfo:
+    duration: float | None
+    has_video: bool
+    has_audio: bool
+    width: int | None = None
+    height: int | None = None
+
+
+@dataclass(frozen=True)
+class JobSpec:
+    source: Path
+    destination: Path
+    mode: str
+    quality: str
+    audio_format: str
+    video_format: str = 'mp4'
+    fps: str = 'สูงสุด'
+    trim_start: float | None = None
+    trim_duration: float | None = None
+
+
+class CancellationToken:
+    def __init__(self) -> None:
+        self._cancelled = threading.Event()
+        self._lock = threading.Lock()
+        self._process: subprocess.Popen[str] | None = None
+
+    @property
+    def cancelled(self) -> bool:
+        return self._cancelled.is_set()
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+        with self._lock:
+            process = self._process
+        if process is not None and process.poll() is None:
+            self._terminate(process)
+
+    @staticmethod
+    def _terminate(process: subprocess.Popen[str]) -> None:
+        try:
+            process.terminate()
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                process.kill()
+            except OSError:
+                pass
+        except OSError:
+            pass
+
+    def attach(self, process: subprocess.Popen[str]) -> None:
+        with self._lock:
+            self._process = process
+            cancelled = self._cancelled.is_set()
+        if cancelled and process.poll() is None:
+            self._terminate(process)
+
+    def detach(self, process: subprocess.Popen[str]) -> None:
+        with self._lock:
+            if self._process is process:
+                self._process = None
+
+
+PROGRESS_KEYS = {
+    'bitrate',
+    'drop_frames',
+    'dup_frames',
+    'fps',
+    'frame',
+    'out_time',
+    'out_time_ms',
+    'out_time_us',
+    'progress',
+    'speed',
+    'stream_0_0_q',
+    'total_size',
+}
+
+
+def tools_available() -> bool:
+    return find_executable('ffmpeg') is not None
+
+
+def _duration(value: object) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) and parsed > 0 else None
+
+
+_DURATION_RE = re.compile(r'Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)')
+_VIDEO_STREAM_RE = re.compile(r'Stream #\d+:\d+.*?:\s*Video:')
+_AUDIO_STREAM_RE = re.compile(r'Stream #\d+:\d+.*?:\s*Audio:')
+_SIZE_RE = re.compile(r'\b(\d{2,5})x(\d{2,5})\b')
+
+
+def _probe_with_ffmpeg(path: Path) -> MediaInfo:
+    """Fallback probe: read the stream table out of ``ffmpeg -i`` output.
+
+    The p4a ffmpeg recipe ships no ffprobe. ``ffmpeg -i`` with no output always
+    exits non-zero; the stream table is the useful part.
+    """
+    ffmpeg = find_executable('ffmpeg')
+    if ffmpeg is None:
+        raise FFmpegError('ไม่พบ FFmpeg ในแอป กรุณาติดตั้งแอปใหม่')
+    result = subprocess.run(
+        [str(ffmpeg), '-hide_banner', '-i', str(path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding='utf-8',
+        errors='replace',
+        check=False,
+    )
+    report = result.stdout or ''
+    if 'Invalid data found' in report or 'No such file' in report:
+        raise FFmpegError('อ่านไฟล์ไม่ได้ หรือไฟล์เสียหาย')
+
+    seconds = None
+    match = _DURATION_RE.search(report)
+    if match:
+        hours, minutes, secs = match.group(1), match.group(2), match.group(3)
+        seconds = _duration(int(hours) * 3600 + int(minutes) * 60 + float(secs))
+
+    lines = report.splitlines()
+    video_line = next((line for line in lines if _VIDEO_STREAM_RE.search(line)), None)
+    has_audio = any(_AUDIO_STREAM_RE.search(line) for line in lines)
+    if video_line is None and not has_audio and seconds is None:
+        raise FFmpegError('อ่านข้อมูลไฟล์ไม่สำเร็จ')
+
+    width = height = None
+    size = _SIZE_RE.search(video_line) if video_line else None
+    if size:
+        width, height = int(size.group(1)), int(size.group(2))
+    return MediaInfo(
+        duration=seconds,
+        has_video=video_line is not None,
+        has_audio=has_audio,
+        width=width,
+        height=height,
+    )
+
+
+def probe(path: Path) -> MediaInfo:
+    ffprobe = find_executable('ffprobe')
+    if ffprobe is None:
+        return _probe_with_ffmpeg(path)
+    command = [
+        str(ffprobe),
+        '-v',
+        'error',
+        '-show_entries',
+        'format=duration:stream=codec_type,width,height',
+        '-of',
+        'json',
+        str(path),
+    ]
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        raise FFmpegError(result.stderr.strip() or 'อ่านข้อมูลไฟล์ไม่สำเร็จ')
+
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise FFmpegError('ข้อมูลที่ได้รับจาก ffprobe ไม่ถูกต้อง') from exc
+
+    streams = data.get('streams', [])
+    video_stream = next((stream for stream in streams if stream.get('codec_type') == 'video'), None)
+    has_audio = any(stream.get('codec_type') == 'audio' for stream in streams)
+    return MediaInfo(
+        duration=_duration(data.get('format', {}).get('duration')),
+        has_video=video_stream is not None,
+        has_audio=has_audio,
+        width=video_stream.get('width') if video_stream else None,
+        height=video_stream.get('height') if video_stream else None,
+    )
+
+
+def validate_operation(info: MediaInfo, mode: str) -> None:
+    if mode == 'audio' and not info.has_audio:
+        raise UnsupportedMediaError('ไฟล์นี้ไม่มีเสียงให้แยก')
+    if mode == 'video' and not info.has_video:
+        raise UnsupportedMediaError('ไฟล์นี้ไม่มีภาพวิดีโอสำหรับแปลง')
+
+
+def temporary_output_path(target: Path) -> Path:
+    unique = uuid.uuid4().hex
+    return target.with_name(f'.{target.stem}.clipora-{unique}{target.suffix}')
+
+
+def _is_temporary_output_for(temporary: Path, target: Path) -> bool:
+    try:
+        same_parent = temporary.parent.resolve() == target.parent.resolve()
+    except OSError:
+        return False
+    prefix = f'.{target.stem}.clipora-'
+    return (
+        temporary != target
+        and same_parent
+        and temporary.suffix.lower() == target.suffix.lower()
+        and temporary.name.startswith(prefix)
+    )
+
+
+def cleanup_temporary_output(temporary: Path, target: Path) -> None:
+    if not _is_temporary_output_for(temporary, target):
+        raise ValueError('ปฏิเสธการลบไฟล์ชั่วคราวที่ไม่ได้เป็นของงานนี้')
+    if temporary.is_file():
+        temporary.unlink()
+
+
+def finalize_output(temporary: Path, target: Path) -> None:
+    if not _is_temporary_output_for(temporary, target):
+        raise ValueError('ไฟล์ชั่วคราวไม่ตรงกับไฟล์ผลลัพธ์ของงาน')
+    if not temporary.is_file() or temporary.stat().st_size == 0:
+        raise FFmpegError('ไม่พบไฟล์ผลลัพธ์ชั่วคราวที่สมบูรณ์')
+    temporary.replace(target)
+
+
+def output_path(
+    source: Path,
+    destination: Path,
+    mode: str,
+    audio_format: str,
+    video_format: str = 'mp4',
+) -> Path:
+    if mode == 'audio':
+        suffix = f'.{audio_format.lower()}'
+        operation = 'audio'
+    else:
+        suffix = f'.{video_format.lower()}'
+        operation = 'converted'
+    return destination / f'{source.stem}_{operation}{suffix}'
+
+
+def prores_encoder() -> str | None:
+    ffmpeg = find_executable('ffmpeg')
+    if ffmpeg is None:
+        return None
+    try:
+        result = subprocess.run(
+            [str(ffmpeg), '-hide_banner', '-encoders'],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if result.returncode:
+        return None
+    for candidate in ('prores_ks', 'prores', 'prores_aw'):
+        if re.search(rf'(?m)^\s*[VFS.]+\s+{candidate}\b', result.stdout):
+            return candidate
+    return None
+
+
+def _fps_value(fps: str) -> str | None:
+    digits = ''.join(character for character in fps if character.isdigit())
+    if not digits:
+        return None
+    value = int(digits)
+    if value < 1:
+        return None
+    return str(value)
+
+
+def parse_trim_seconds(text: str | None) -> float | None:
+    """Parse a trim time field into seconds.
+
+    Accepts plain seconds (``90``, ``90.5``) or clock formats (``MM:SS``,
+    ``HH:MM:SS``). Blank input returns ``None`` (no trim). Raises
+    ``ValueError`` with a Thai message for anything else.
+    """
+    if text is None:
+        return None
+    cleaned = text.strip()
+    if not cleaned:
+        return None
+    parts = cleaned.split(':')
+    if len(parts) > 3:
+        raise ValueError(f'รูปแบบเวลาไม่ถูกต้อง: {cleaned} (ใช้ วินาที หรือ HH:MM:SS)')
+    try:
+        numbers = [float(part) for part in parts]
+    except ValueError:
+        raise ValueError(f'รูปแบบเวลาไม่ถูกต้อง: {cleaned} (ใช้ วินาที หรือ HH:MM:SS)') from None
+    if any(not math.isfinite(number) or number < 0 for number in numbers):
+        raise ValueError(f'เวลาในการตัดต้องไม่ติดลบ: {cleaned}')
+    if len(parts) == 2 and (numbers[0] >= 60 or numbers[1] >= 60):
+        raise ValueError(f'รูปแบบเวลาไม่ถูกต้อง: {cleaned} (ใช้ MM:SS โดยนาทีและวินาทีไม่เกิน 59)')
+    if len(parts) == 3 and (numbers[1] >= 60 or numbers[2] >= 60):
+        raise ValueError(f'รูปแบบเวลาไม่ถูกต้อง: {cleaned} (ใช้ HH:MM:SS โดยนาทีและวินาทีไม่เกิน 59)')
+    multipliers = (1.0, 60.0, 3600.0)
+    total = sum(number * multiplier for number, multiplier in zip(reversed(numbers), multipliers))
+    return total
+
+
+def normalize_trim(
+    start: float | None,
+    duration: float | None,
+    media_duration: float | None,
+) -> tuple[str | None, str | None, float | None]:
+    """Normalize trim bounds against the probed media duration.
+
+    Returns ``(start_arg, duration_arg, effective_duration)`` where the args
+    are formatted for ``build_command`` and ``effective_duration`` is the
+    expected output length for progress reporting. Raises ``ValueError``
+    with a Thai message when the bounds are out of range.
+    """
+    if start is not None and (not math.isfinite(start) or start < 0):
+        raise ValueError('จุดเริ่มตัดต้องไม่ติดลบ')
+    if duration is not None and (not math.isfinite(duration) or duration <= 0):
+        raise ValueError('ระยะเวลาที่ตัดต้องมากกว่า 0')
+    if media_duration is not None and start is not None and start >= media_duration:
+        raise ValueError(
+            f'จุดเริ่มตัด ({start:.1f} วินาที) เกินความยาวไฟล์ ({media_duration:.1f} วินาที)',
+        )
+    if media_duration is None:
+        start_arg = f'{start:.3f}' if start is not None else None
+        duration_arg = f'{duration:.3f}' if duration is not None else None
+        return start_arg, duration_arg, None
+    base = start or 0.0
+    remaining = media_duration - base
+    if (start is not None or duration is not None) and remaining <= 0:
+        raise ValueError('ไฟล์สั้นกว่าจุดเริ่มตัดที่ระบุ')
+    if duration is None:
+        effective = remaining if (start is not None or duration is not None) else media_duration
+        return (f'{start:.3f}' if start is not None else None, None, effective)
+    effective = min(duration, remaining)
+    return (f'{start:.3f}' if start is not None else None, f'{effective:.3f}', effective)
+
+
+def build_command(
+    source: Path,
+    target: Path,
+    mode: str,
+    quality: str,
+    audio_format: str,
+    video_format: str = 'mp4',
+    fps: str = 'สูงสุด',
+    start_time: str | None = None,
+    duration_time: str | None = None,
+) -> list[str]:
+    ffmpeg = find_executable('ffmpeg')
+    command = [str(ffmpeg) if ffmpeg is not None else 'ffmpeg']
+    if start_time:
+        command += ['-ss', start_time]
+    command += ['-y', '-loglevel', 'error', '-i', str(source)]
+    if duration_time:
+        command += ['-t', duration_time]
+    if mode == 'audio':
+        codecs = {
+            'mp3': ['-c:a', 'libmp3lame', '-q:a', '2'],
+            'm4a': ['-c:a', 'aac', '-b:a', '192k'],
+            'wav': ['-c:a', 'pcm_s16le'],
+            'flac': ['-c:a', 'flac'],
+            'opus': ['-c:a', 'libopus', '-b:a', '160k'],
+        }
+        try:
+            codec = codecs[audio_format.lower()]
+        except KeyError as exc:
+            raise ValueError(f'ไม่รองรับรูปแบบเสียง: {audio_format}') from exc
+        command += ['-map', '0:a:0', '-vn', *codec]
+    elif mode == 'video':
+        container = video_format.lower()
+        if container == 'mp4':
+            try:
+                crf = {'High': '18', 'Balanced': '23', 'Small': '28'}[quality]
+            except KeyError as exc:
+                raise ValueError(f'ไม่รองรับระดับคุณภาพ: {quality}') from exc
+            command += [
+                '-map',
+                '0:v:0',
+                '-map',
+                '0:a:0?',
+                '-c:v',
+                'libx264',
+                '-crf',
+                crf,
+                '-preset',
+                'medium',
+                '-c:a',
+                'aac',
+                '-b:a',
+                '192k',
+                '-movflags',
+                '+faststart',
+            ]
+        elif container == 'mov':
+            encoder = prores_encoder()
+            if encoder is None:
+                raise ValueError(
+                    'FFmpeg ที่ติดตั้งไม่รองรับ ProRes กรุณาเลือก MP4 หรืออัปเดตเครื่องมือ'
+                )
+            try:
+                profile = PRORES_PROFILES[quality]
+            except KeyError as exc:
+                raise ValueError(f'ไม่รองรับระดับคุณภาพ: {quality}') from exc
+            command += [
+                '-map',
+                '0:v:0',
+                '-map',
+                '0:a:0?',
+                '-c:v',
+                encoder,
+                '-profile:v',
+                profile,
+                '-pix_fmt',
+                'yuv422p10le',
+                '-c:a',
+                'pcm_s16le',
+            ]
+        else:
+            raise ValueError(f'ไม่รองรับรูปแบบไฟล์วิดีโอ: {video_format}')
+        fps_value = _fps_value(fps)
+        if fps_value is not None:
+            command += ['-r', fps_value]
+    else:
+        raise ValueError(f'ไม่รองรับโหมด: {mode}')
+    return [*command, '-progress', 'pipe:1', '-nostats', str(target)]
+
+
+def _timestamp_seconds(value: str) -> float | None:
+    try:
+        hours, minutes, seconds = value.split(':')
+        parsed = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) and parsed >= 0 else None
+
+
+def parse_progress_line(raw_line: str, duration: float | None) -> float | None:
+    key, separator, value = raw_line.strip().partition('=')
+    if not separator:
+        return None
+    if key == 'progress' and value == 'end':
+        return 1.0
+    if not duration:
+        return None
+    if key == 'out_time':
+        elapsed = _timestamp_seconds(value)
+    elif key == 'out_time_us':
+        try:
+            elapsed = float(value) / 1_000_000
+        except ValueError:
+            return None
+    else:
+        return None
+    if elapsed is None:
+        return None
+    return max(0.0, min(elapsed / duration, 1.0))
+
+
+def check_disk_space(destination: Path, required_bytes: int = 50 * 1024 * 1024) -> None:
+    """Check if the destination disk has enough free space (default 50 MB buffer)."""
+    try:
+        resolved = destination.resolve()
+        while not resolved.exists() and resolved.parent != resolved:
+            resolved = resolved.parent
+        usage = shutil.disk_usage(resolved)
+        if usage.free < required_bytes:
+            raise FFmpegError(
+                f'พื้นที่ดิสก์ไม่เพียงพอ (เหลือ {usage.free / (1024*1024):.1f} MB, '
+                f'ต้องการอย่างน้อย {required_bytes / (1024*1024):.1f} MB)'
+            )
+    except OSError:
+        pass
+
+
+def convert(
+    command: list[str],
+    target: Path,
+    duration: float | None,
+    on_progress: Callable[[float], None],
+    cancellation: CancellationToken | None = None,
+) -> None:
+    token = cancellation or CancellationToken()
+    if token.cancelled:
+        raise ConversionCancelled('ยกเลิกงานแล้ว')
+    diagnostics: deque[str] = deque(maxlen=40)
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding='utf-8',
+        errors='replace',
+    )
+    token.attach(process)
+    assert process.stdout is not None
+    try:
+        for raw_line in process.stdout:
+            progress = parse_progress_line(raw_line, duration)
+            if progress is not None:
+                on_progress(progress)
+            key = raw_line.strip().partition('=')[0]
+            if key not in PROGRESS_KEYS and raw_line.strip():
+                diagnostics.append(raw_line.strip())
+    finally:
+        process.stdout.close()
+        return_code = process.wait()
+        token.detach(process)
+    if token.cancelled:
+        raise ConversionCancelled('ยกเลิกงานแล้ว')
+    if return_code != 0:
+        detail = '\n'.join(diagnostics)
+        raise FFmpegError(detail or f'FFmpeg หยุดทำงานด้วยรหัส {return_code}')
+    if not target.is_file() or target.stat().st_size == 0:
+        raise FFmpegError('FFmpeg ทำงานเสร็จแต่ไม่พบไฟล์ผลลัพธ์ที่สมบูรณ์')

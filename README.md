@@ -64,6 +64,18 @@ Clipora คือโปรแกรมเดสก์ท็อปโอเพน
 
 โหมดลิงก์รองรับทีละรายการและไม่รับ playlist, live stream, private/paid media, login, cookies หรือ DRM เว็บไซต์อาจเปลี่ยนระบบจนต้องอัปเดต yt-dlp ผู้ใช้ต้องเป็นเจ้าของสื่อ ได้รับอนุญาต หรือมีสิทธิ์ตามกฎหมายและเงื่อนไขของแหล่งนั้น
 
+## Android (กำลังทำ — โครงพร้อม build แล้ว)
+
+สาขา Android อยู่ใน `android/` แยกจากตัว PC — ประมวลผลบนเครื่อง Android ทั้งหมด ไม่ต้องมีเซิร์ฟเวอร์
+
+- แปลงเป็น MP3, M4A, WAV, FLAC, OPUS และแปลงวิดีโอเป็น MP4 (H.264/AAC)
+- ตัดช่วงเวลา, จำกัดเฟรมเรต, เลือกคุณภาพ, แปลงทีละหลายไฟล์, ยกเลิกงานได้
+- ดาวน์โหลดลิงก์สาธารณะทีละรายการผ่าน yt-dlp (เสียง/วิดีโอ)
+- ไม่มีแยก Stem (Demucs ไม่มี wheel สำหรับ Android) และไม่มี ProRes
+- ผลลัพธ์อยู่ใน `Android/data/com.clipora/files/output`
+
+รายละเอียดการ build และข้อจำกัดด้านแพลตฟอร์ม: [`android/README.md`](android/README.md)
+
 ## สิ่งที่ต้องมีสำหรับรุ่น Setup
 
 | รายการ | รายละเอียด |
@@ -148,6 +160,7 @@ python -m pip install -r requirements-dev.txt
 - [คู่มือผู้ใช้](docs/USER_GUIDE.md)
 - [แก้ปัญหาและเก็บ Error Log](docs/TROUBLESHOOTING.md)
 - [คู่มือพัฒนาและ Architecture](docs/DEVELOPMENT.md)
+- [คู่มือสาขา Android](android/README.md)
 - [ลงนาม Code Signing เพื่อลดคำเตือน SmartScreen/ไวรัส](docs/CODE_SIGNING.md)
 - [แนวทางร่วมพัฒนา](CONTRIBUTING.md)
 - [รายงานช่องโหว่](SECURITY.md)
@@ -155,11 +168,13 @@ python -m pip install -r requirements-dev.txt
 ## ทดสอบ
 
 ```powershell
-python -m compileall -q app.py clipora tests scripts
+python -m compileall -q app.py clipora tests scripts android
 python -W error::ResourceWarning -m unittest discover -s tests -v
 ```
 
 Integration tests สร้างสื่อขนาดเล็กใน temporary directory และ skip เมื่อไม่พบ FFmpeg
+
+`tests/test_android_core.py` เทียบ core ฝั่ง Android กับ `clipora/` ฝั่ง PC — ถ้าแก้โมดูลฝั่ง PC ต้อง mirror มาที่ `android/core/` ด้วย ไม่งั้นเทสต์จะแจ้ง
 
 ## Roadmap ระยะใกล้
 

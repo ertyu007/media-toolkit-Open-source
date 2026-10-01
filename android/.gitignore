@@ -1,0 +1,13 @@
+# buildozer / p4a artefacts
+.buildozer/
+build/
+bin/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# local tooling
+__pycache__/
+*.py[cod]
+.venv/

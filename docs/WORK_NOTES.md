@@ -1,6 +1,47 @@
 # บันทึกงาน (Work Notes) — ฟีเจอร์แยก Stem เสียง (Stem Separation) + อัปเดต yt-dlp
 
-อัปเดตล่าสุด: 2026-09-29
+อัปเดตล่าสุด: 2026-09-30
+
+## ทำวันนี้ (2026-09-30) — วางโครงสาขา Android (offline, ยังไม่ bump version ฝั่ง PC)
+
+เพิ่ม `android/` เป็นเป้าหมายที่สอง แยกจากตัว Windows แต่อยู่ repo เดียวกัน เพื่อไม่ต้องมี sync script
+วิธีที่เลือก: **port core เดิม + เขียน UI ใหม่บน Kivy** เพราะโค้ดฝั่ง PC ที่ยากที่สุด (ต่อคำสั่ง ffmpeg,
+parse progress, กันไฟล์เสียหายทับของเดิม) เป็น stdlib + subprocess ล้วน → portable ได้เกือบทั้งก้อน
+ส่วน Tkinter 184 KB ไม่มีบน Android ต้องเขียนใหม่
+
+**ตัดออกโดยตั้งใจ** (ไม่ใช่ของทำไม่ทัน): Demucs stem (torch ไม่มี wheel Android), ProRes/After Effects,
+yt-dlp `--js-runtimes` (ไม่มี Deno/Node) และ `--impersonate` (`curl_cffi` ไม่มี wheel Android),
+light theme, batch URL, playlist
+
+- `android/core/ffmpeg.py` — port จาก `clipora/ffmpeg.py`
+- `android/core/ytdlp.py` — port เฉพาะส่วน URL จาก `clipora/importer.py`
+- `android/core/tools.py` — หา binary ใน APK
+- `android/main.py` — UI ใหม่ 2 หน้าจอ (แปลงไฟล์ / ดาวน์โหลดลิงก์), batch เลือกได้หลายไฟล์
+- `android/theme.py` — สีจาก `clipora/ui_components/theme.py` (dark palette)
+- `tests/test_android_core.py` — **parity test** import ทั้งสองฝั่งมาเทียบกัน
+- `.github/workflows/android.yml` — tag `android-v*` → debug APK
+
+**ข้อค้นพบสำคัญตอนสืบค้น p4a recipe** (ได้แต่ก็จำไว้ คนถัดไปจะเสียเวลา):
+
+- p4a `ffmpeg` recipe **ไม่มี ffprobe** มีแต่ `ffmpeg` → ต้อง parse stream table จาก `ffmpeg -i`
+  (เขียน fallback ใน `core.ffmpeg._probe_with_ffmpeg` + เทสต์ครบ: มีวิดีโอ/มีเสียง/ไม่มีไฟล์)
+- Android อนุญาต `execve` เฉพาะใน native path → recipe เปลี่ยนชื่อ `ffmpeg` เป็น **`libffmpegbin.so`**
+  และอยู่ใน `nativeLibraryDir` (ไม่ใช่ private dir) ต้องตั้ง `LD_LIBRARY_PATH` ด้วยไม่งั้น loader หา `libav*.so` ไม่เจอ
+- **ไม่มี `ffpyplayer_codecs` + `libx264` ใน `requirements` = ได้ ffmpeg ที่มีแค่ mp4/aac และไม่มี H.264
+  encoder → แปลงวิดีโอไม่ได้เลย** (สำคัญที่สุด)
+- ไม่ต้องขอ storage permission: เลือกไฟล์ผ่าน SAF (plyer) + output ไป `Android/data/<pkg>/files`
+  (แต่โฟลเดอร์นี้หายตอนถอนแอป — ทำ `ponytail:` note ไว้)
+
+**ตรวจแล้วเห็นว่าจริง** (headless, ใช้ ffmpeg ตัวจริงบนเครื่อง):
+
+- probe fallback อ่าน duration/stream/resolution ถูก
+- แปลงเสียง+ตัดช่วง → mp3 จริง, แปลงวิดีโอ+จำกัด 30fps → mp4 จริง, progress ไปถึง 1.0
+- trim เกินความยาวไฟล์ → error ภาษาไทยถูกต้อง
+- กดยกเลิก → process ตาย (`ConversionCancelled`) และ**ไม่เหลือไฟล์ชั่วคราว**
+- `build_import_command` ประกอบ flag ถูก (มี youtube client workaround, ไม่มี flag ที่ Android ใช้ไม่ได้)
+
+**ยังไม่ทำ**: build APK จริง (ต้องใช้ Linux/WSL + Android SDK, ผมรันบน Windows ไม่ได้),
+คีย์ลงนามสำหรับ release, แอปปรับตามหน้าจอเล็ก/แท็บเล็ต, เก็บประวัติงาน
 
 ## ทำวันนี้ (2026-09-29) — ช่องทางรีวิว (ยังไม่ bump version)
 
