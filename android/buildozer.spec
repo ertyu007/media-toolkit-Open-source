@@ -23,11 +23,10 @@ version = 0.1.0
 # ffmpeg             : compiled by the p4a recipe (ffprobe is NOT included)
 # ffpyplayer_codecs  : opt-dep that flips the ffmpeg build to full codec set
 # libx264            : H.264 encoder; without it video conversion is impossible
-# yt-dlp             : pip module, runs as "python -m yt_dlp" (no managed binary)
+# yt-dlp             : pure-python pip module, runs as "python -m yt_dlp" (no managed binary)
 # plyer              : SAF file picker
 # android            : jnius bridge (nativeLibraryDir / app dirs)
-# requests           : pulls in certifi + urllib3 that yt-dlp needs
-requirements = python3,kivy,ffmpeg,ffpyplayer_codecs,libx264,yt-dlp,plyer,android,requests
+requirements = python3,kivy,ffmpeg,ffpyplayer_codecs,libx264,yt-dlp,plyer,android
 
 # (str) Supported orientation. p4a only accepts portrait / landscape /
 # portrait-reverse / landscape-reverse (no "all"), so this stays portrait:
