@@ -35,7 +35,7 @@ jobs:
       - name: Install system deps (p4a host builds)
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zip unzip autoconf libtool pkg-config \
+          sudo apt-get install -y git zip unzip autoconf automake libtool libltdl-dev pkg-config \
             zlib1g-dev libncurses-dev cmake \
             libffi-dev libssl-dev
 
