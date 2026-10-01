@@ -26,7 +26,9 @@ version = 0.1.0
 # yt-dlp             : pure-python pip module, runs as "python -m yt_dlp" (no managed binary)
 # plyer              : SAF file picker
 # android            : jnius bridge (nativeLibraryDir / app dirs)
-requirements = python3,kivy,ffmpeg,ffpyplayer_codecs,libx264,yt-dlp,plyer,android
+# charset-normalizer  : pinned to 3.3.2 (py3-none-any); 3.5+ ships android wheels
+# that host pip rejects at install time. Pulled in via kivy -> requests.
+requirements = python3,kivy,ffmpeg,ffpyplayer_codecs,libx264,yt-dlp,plyer,android,charset-normalizer==3.3.2
 
 # (str) Supported orientation. p4a only accepts portrait / landscape /
 # portrait-reverse / landscape-reverse (no "all"), so this stays portrait:
