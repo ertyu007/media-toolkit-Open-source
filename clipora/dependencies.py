@@ -742,7 +742,10 @@ def _replace_directory(staged: Path, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     backup = target.with_name(f'.{target.name}.clipora-old')
     if backup.exists():
-        shutil.rmtree(backup)
+        if target.exists():
+            shutil.rmtree(backup)
+        else:
+            os.replace(backup, target)
     moved = False
     if target.exists():
         os.replace(target, backup)

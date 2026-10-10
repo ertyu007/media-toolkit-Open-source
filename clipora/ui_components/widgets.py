@@ -136,7 +136,7 @@ class SegmentedControl(tk.Canvas):
     *frame_style*/*button_style* are accepted for compatibility and ignored.
 
     *gap* separates the options into individual pills while the selection
-    still slides across all of them. Options in *locked* show a 🔒 prefix,
+    still slides across all of them. Options in *locked* show a [ล็อก] prefix,
     cannot be picked, and fire *on_locked* instead.
     """
 
@@ -177,12 +177,17 @@ class SegmentedControl(tk.Canvas):
         )
         self._slide = Tween(self.after, self.after_cancel, duration_ms=140)
         self._flash_anim = Tween(self.after, self.after_cancel, duration_ms=180)
+        self.bind('<Destroy>', self._cancel_animations, add='+')
         variable.trace_add('write', lambda *_: self._on_trace())
         self.bind('<Button-1>', self._on_click)
         self.bind('<Configure>', lambda _e: self._snap())
         self.bind('<Left>', lambda _e: self._step(-1))
         self.bind('<Right>', lambda _e: self._step(1))
         self._draw()
+
+    def _cancel_animations(self, event: tk.Event) -> None:
+        self._slide.cancel()
+        self._flash_anim.cancel()
 
     def _index_of(self, value: str) -> int:
         try:
@@ -228,7 +233,7 @@ class SegmentedControl(tk.Canvas):
                 fill = DISABLED_FG
             else:
                 fill = MUTED
-            text = f'🔒 {label}' if self._values[index] in self._locked else label
+            text = f'[ล็อก] {label}' if self._values[index] in self._locked else label
             self.create_text(
                 segment_origin(index, width, count, self._gap) + seg_width / 2,
                 height / 2,
@@ -274,7 +279,7 @@ class SegmentedControl(tk.Canvas):
             self._command(value)
 
     def set_locked(self, values: Sequence[str]) -> None:
-        """Update which options show 🔒 (redraws only on change)."""
+        """Update which options show [ล็อก] (redraws only on change)."""
         locked = set(values)
         if locked != self._locked:
             self._locked = locked
@@ -948,6 +953,12 @@ class RoundedButton(tk.Canvas):
         self._draw()
 
 
+def rainbow_color(hue: float) -> str:
+    """Hex color cycling the rainbow; powers ``Switch(rainbow=True)``."""
+    red, green, blue = colorsys.hsv_to_rgb(hue % 1.0, 0.85, 1.0)
+    return f'#{int(red * 255):02x}{int(green * 255):02x}{int(blue * 255):02x}'
+
+
 class Switch(tk.Canvas):
     """iOS-style toggle switch with sliding knob; checkbox replacement."""
 
@@ -963,12 +974,17 @@ class Switch(tk.Canvas):
         font_family: str | None = None,
         font_size: int = 10,
         bg: str | None = None,
+        rainbow: bool = False,
         **kwargs,
     ) -> None:
         self._variable = variable
         self._text = text
         self._command = command
         self._enabled = True
+        self._rainbow = rainbow
+        self._hue = 0.0
+        self._rainbow_ticking = False
+        self._rainbow_after: str | None = None
         family = font_family or getattr(parent, 'ui_font', FONT_FAMILY)
         self._font = (family, font_size)
         self._pos = 1.0 if variable.get() else 0.0
@@ -984,6 +1000,49 @@ class Switch(tk.Canvas):
         self.bind('<Configure>', lambda _e: self._draw())
         self.configure(width=self._TRACK_W + 10 + self._text_width() + 4)
         self._draw()
+        self.bind('<Destroy>', self._cancel_animations, add='+')
+        if self._rainbow:
+            self._ensure_rainbow_tick()
+
+    def _cancel_rainbow_tick(self) -> None:
+        self._rainbow_ticking = False
+        pending, self._rainbow_after = self._rainbow_after, None
+        if pending is not None:
+            try:
+                self.after_cancel(pending)
+            except tk.TclError:
+                pass
+
+    def _cancel_animations(self, event: tk.Event) -> None:
+        self._slide.cancel()
+        self._cancel_rainbow_tick()
+
+    def _ensure_rainbow_tick(self) -> None:
+        if self._rainbow_ticking or not self._rainbow:
+            return
+        self._rainbow_ticking = True
+        try:
+            self._rainbow_after = self.after(90, self._rainbow_tick)
+        except tk.TclError:
+            self._rainbow_ticking = False
+            self._rainbow_after = None
+
+    def _rainbow_tick(self) -> None:
+        self._rainbow_after = None
+        try:
+            self._hue += 0.02
+            self._draw()
+        except tk.TclError:
+            self._rainbow_ticking = False
+            return
+        if not self._rainbow:
+            self._rainbow_ticking = False
+            return
+        try:
+            self._rainbow_after = self.after(90, self._rainbow_tick)
+        except tk.TclError:
+            self._rainbow_ticking = False
+            self._rainbow_after = None
 
     def _text_width(self) -> int:
         if not self._text:
@@ -1038,9 +1097,13 @@ class Switch(tk.Canvas):
             fill=knob, outline='',
         )
         if self._text:
+            if self._enabled and self._rainbow:
+                text_fill = rainbow_color(self._hue)
+            else:
+                text_fill = TEXT if self._enabled else DISABLED_FG
             self.create_text(
                 self._TRACK_W + 10, self._HEIGHT / 2,
-                text=self._text, fill=TEXT if self._enabled else DISABLED_FG,
+                text=self._text, fill=text_fill,
                 font=self._font, anchor='w',
             )
 

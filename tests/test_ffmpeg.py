@@ -9,17 +9,23 @@ from clipora.ffmpeg import (
     ConversionCancelled,
     MediaInfo,
     UnsupportedMediaError,
+    build_av_select_filter,
     build_command,
+    build_enhance_filter,
     cleanup_temporary_output,
+    collision_free_output_path,
     convert,
     finalize_output,
+    keep_intervals,
     normalize_trim,
     output_path,
     parse_progress_line,
+    parse_silence_report,
     parse_trim_seconds,
     probe,
     temporary_output_path,
     validate_operation,
+    validate_output,
 )
 
 
@@ -211,6 +217,79 @@ class TrimCommandTests(unittest.TestCase):
         self.assertNotIn('-t', command)
 
 
+class EnhanceFilterTests(unittest.TestCase):
+    def test_filter_covers_all_requested_effects(self):
+        filtr = build_enhance_filter()
+        for token in ('silenceremove', 'highpass', 'afftdn', 'acompressor', 'loudnorm=I=-16'):
+            self.assertIn(token, filtr)
+
+    def test_enhance_off_by_default_keeps_old_command(self):
+        command = build_command(Path('in.mp4'), Path('out.mp3'), 'audio', 'Balanced', 'mp3')
+        self.assertNotIn('-af', command)
+
+    def test_enhance_on_injects_single_af(self):
+        for mode in ('audio', 'video'):
+            with self.subTest(mode=mode):
+                command = build_command(
+                    Path('in.mp4'), Path('out.mp3'), mode, 'Balanced', 'mp3', enhance=True,
+                )
+                self.assertIn('-af', command)
+                self.assertEqual(command.count('-af'), 1)
+                self.assertIn('loudnorm', command[command.index('-af') + 1])
+                self.assertLess(command.index('-af'), command.index('-progress'))
+
+
+class SilenceCutTests(unittest.TestCase):
+    def test_parses_start_end_pairs(self):
+        report = (
+            '[silencedetect @ 0] silence_start: 1.000\n'
+            '[silencedetect @ 0] silence_end: 2.500 | silence_duration: 1.500\n'
+        )
+        self.assertEqual(parse_silence_report(report, 10.0), [(1.0, 2.5)])
+
+    def test_trailing_silence_closes_at_duration(self):
+        self.assertEqual(
+            parse_silence_report('[silencedetect @ 0] silence_start: 8.000\n', 10.0),
+            [(8.0, 10.0)],
+        )
+
+    def test_end_without_start_counts_from_zero(self):
+        self.assertEqual(
+            parse_silence_report('[silencedetect @ 0] silence_end: 0.500 | silence_duration: 0.5\n', 10.0),
+            [(0.0, 0.5)],
+        )
+
+    def test_negative_start_is_clamped_downstream(self):
+        report = '[silencedetect @ 0] silence_start: -0.034\nsilence_end: 1.0 | x\n'
+        self.assertEqual(parse_silence_report(report, 10.0), [(-0.034, 1.0)])
+        self.assertEqual(
+            keep_intervals([(-0.034, 1.0)], 10.0, pad=0.25),
+            [(0.0, 0.216), (0.75, 10.0)],
+        )
+
+    def test_keep_is_complement_with_padded_edges(self):
+        # 1s silence at 1.0-2.0, pad 0.25 -> cut (1.25, 1.75).
+        self.assertEqual(
+            keep_intervals([(1.0, 2.0)], 3.0),
+            [(0.0, 1.25), (1.75, 3.0)],
+        )
+
+    def test_short_silence_survives_as_keep(self):
+        # 0.3s pause narrows to nothing -> breaths are kept.
+        self.assertEqual(keep_intervals([(1.0, 1.3)], 3.0, pad=0.25), [(0.0, 3.0)])
+
+    def test_overlapping_silences_merge(self):
+        keeps = keep_intervals([(1.0, 2.0), (1.8, 2.5)], 4.0, pad=0.0)
+        self.assertEqual(keeps, [(0.0, 1.0), (2.5, 4.0)])
+
+    def test_select_filter_covers_both_streams(self):
+        video_filter, audio_filter = build_av_select_filter([(0.0, 1.25), (1.75, 3.0)])
+        self.assertIn("between(t,0.000,1.250)", video_filter)
+        self.assertIn('setpts=N/FRAME_RATE/TB', video_filter)
+        self.assertIn("between(t,0.000,1.250)", audio_filter)
+        self.assertIn('asetpts=N/SR/TB', audio_filter)
+
+
 class MediaValidationTests(unittest.TestCase):
     def test_audio_mode_requires_audio_stream(self):
         info = MediaInfo(1.0, has_video=True, has_audio=False)
@@ -226,6 +305,18 @@ class MediaValidationTests(unittest.TestCase):
         info = MediaInfo(1.0, has_video=True, has_audio=True)
         validate_operation(info, 'audio')
         validate_operation(info, 'video')
+
+    @patch('clipora.ffmpeg.probe', return_value=MediaInfo(1.0, True, True))
+    def test_output_validation_probes_and_accepts_required_stream(self, probe_mock):
+        info = validate_output(Path('result.mp4'), 'video')
+
+        self.assertTrue(info.has_video)
+        probe_mock.assert_called_once_with(Path('result.mp4'))
+
+    @patch('clipora.ffmpeg.probe', return_value=MediaInfo(1.0, True, False))
+    def test_output_validation_rejects_missing_audio(self, _probe_mock):
+        with self.assertRaisesRegex(UnsupportedMediaError, 'ไม่มีเสียง'):
+            validate_output(Path('result.mp3'), 'audio')
 
 
 class FFmpegProbeTests(unittest.TestCase):
@@ -269,6 +360,25 @@ class ProgressParserTests(unittest.TestCase):
 
 
 class OutputLifecycleTests(unittest.TestCase):
+    def test_collision_free_output_path_avoids_existing_siblings(self):
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / 'clip_video.mp4'
+            target.write_bytes(b'old')
+            (Path(directory) / 'clip_video (1).mp4').write_bytes(b'old')
+
+            self.assertEqual(
+                collision_free_output_path(target),
+                Path(directory) / 'clip_video (2).mp4',
+            )
+
+    def test_collision_free_output_path_avoids_reserved_batch_names(self):
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / 'clip_audio.mp3'
+            self.assertEqual(
+                collision_free_output_path(target, {'CLIP_AUDIO.MP3'}),
+                Path(directory) / 'clip_audio (1).mp3',
+            )
+
     def test_temporary_output_keeps_directory_and_extension(self):
         target = Path('out/clip_audio.mp3')
         temporary = temporary_output_path(target)
@@ -277,14 +387,27 @@ class OutputLifecycleTests(unittest.TestCase):
         self.assertNotEqual(temporary, target)
         self.assertTrue(temporary.name.startswith('.clip_audio.clipora-'))
 
-    def test_finalize_replaces_existing_target_only_after_success(self):
+    def test_finalize_preserves_target_that_appeared_during_job(self):
         with TemporaryDirectory() as directory:
             target = Path(directory) / 'result.mp3'
             temporary = temporary_output_path(target)
             target.write_bytes(b'original')
             temporary.write_bytes(b'completed output')
 
-            finalize_output(temporary, target)
+            with self.assertRaises(FileExistsError):
+                finalize_output(temporary, target, overwrite=False)
+
+            self.assertEqual(target.read_bytes(), b'original')
+            self.assertEqual(temporary.read_bytes(), b'completed output')
+
+    def test_finalize_replaces_target_after_explicit_overwrite(self):
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / 'result.mp3'
+            temporary = temporary_output_path(target)
+            target.write_bytes(b'original')
+            temporary.write_bytes(b'completed output')
+
+            finalize_output(temporary, target, overwrite=True)
 
             self.assertEqual(target.read_bytes(), b'completed output')
             self.assertFalse(temporary.exists())

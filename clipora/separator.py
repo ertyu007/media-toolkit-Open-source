@@ -380,6 +380,7 @@ def _finalize_stems(
     on_phase: Callable[[str], None],
     on_progress: Callable[[float], None],
     cancellation: CancellationToken,
+    enhance_vocals: bool = False,
 ) -> list[Path]:
     jobs: list[tuple[Path, str]] = []
     if 'instrumental' in selected:
@@ -414,7 +415,10 @@ def _finalize_stems(
             on_progress(_PROGRESS_PHASE_SEPARATE + (_index + value) * span)
 
         convert(
-            build_command(wav, temporary, 'audio', 'Balanced', audio_format),
+            build_command(
+                wav, temporary, 'audio', 'Balanced', audio_format,
+                enhance=(enhance_vocals and stem == 'vocals'),
+            ),
             temporary,
             probe(wav).duration,
             report,
@@ -435,6 +439,7 @@ def separate_audio(
     cancellation: CancellationToken | None = None,
     overwrite: bool = False,
     collision_free: bool = False,
+    enhance_vocals: bool = False,
 ) -> list[Path]:
     if on_phase is None:
         on_phase = lambda _message: None
@@ -491,6 +496,7 @@ def separate_audio(
             on_phase,
             on_progress,
             token,
+            enhance_vocals,
         )
         if final_target is not None:
             return outputs

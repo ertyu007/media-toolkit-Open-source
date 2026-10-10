@@ -3,6 +3,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from clipora.separator import (
@@ -11,6 +12,7 @@ from clipora.separator import (
     SELECTABLE_STEMS,
     CancellationToken,
     SeparatorNotInstalled,
+    _finalize_stems,
     build_instrumental_command,
     build_separate_command,
     cleanup_workspace,
@@ -205,6 +207,57 @@ class InstrumentalCommandSmokeTests(unittest.TestCase):
         filter_complex = command[command.index('-filter_complex') + 1]
         self.assertIn('amix', filter_complex)
         self.assertIn('[aout]', filter_complex)
+
+
+class EnhanceVocalsTests(unittest.TestCase):
+    def _run_finalize(self, enhance_vocals: bool) -> list[list[str]]:
+        seen: list[list[str]] = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stem_dir = root / 'stems'
+            stem_dir.mkdir()
+            for stem in ('vocals', 'drums'):
+                (stem_dir / f'{stem}.wav').write_bytes(b'fake-wav')
+            targets = {
+                stem: root / f'song_{stem}.mp3' for stem in ('vocals', 'drums')
+            }
+
+            def fake_convert(command, _target, _duration, _on_progress, _cancellation):
+                seen.append(list(command))
+                Path(command[-1]).write_bytes(b'encoded')
+
+            with patch('clipora.separator.convert', side_effect=fake_convert), \
+                    patch(
+                        'clipora.separator.probe',
+                        return_value=SimpleNamespace(duration=10.0),
+                    ):
+                outputs = _finalize_stems(
+                    Path('song.mp4'),
+                    root,
+                    'mp3',
+                    ('vocals', 'drums'),
+                    stem_dir,
+                    root,
+                    targets,
+                    lambda _msg: None,
+                    lambda _value: None,
+                    CancellationToken(),
+                    enhance_vocals,
+                )
+            self.assertEqual(len(outputs), 2)
+            for target in targets.values():
+                self.assertTrue(target.is_file())
+        return seen
+
+    def test_enhance_applies_to_vocals_only(self):
+        vocals, drums = self._run_finalize(True)
+        self.assertIn('-af', vocals)
+        self.assertIn('loudnorm', vocals[vocals.index('-af') + 1])
+        self.assertNotIn('-af', drums)
+
+    def test_enhance_off_leaves_stems_untouched(self):
+        for command in self._run_finalize(False):
+            self.assertNotIn('-af', command)
 
 
 if __name__ == '__main__':

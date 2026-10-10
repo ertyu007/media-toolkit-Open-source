@@ -123,6 +123,10 @@ class ImportSpec:
     audio_format: str
     video_format: str = 'mp4'
     fps: str = 'สูงสุด'
+    # Podcast enhance post-pass is PC-only for now (no toggle in the Android
+    # UI); the field exists so specs stay constructible on both sides while
+    # the download command intentionally ignores it.
+    enhance: bool = False
 
 
 _NUMERIC_PART_RE = re.compile(r'^(?:0[xX][0-9a-fA-F]+|0[0-7]*|[0-9]+)$')

@@ -16,7 +16,13 @@ from pathlib import Path
 from typing import Callable, Sequence
 
 from .ffmpeg import CancellationToken, ConversionCancelled
-from .importer import find_ytdlp_command, validate_url
+from .importer import (
+    find_javascript_runtime,
+    find_ytdlp_command,
+    site_workaround_extractor_args,
+    site_workaround_headers,
+    validate_url,
+)
 from .tools import find_executable
 
 PREVIEW_FIELDS = (
@@ -59,6 +65,13 @@ def build_preview_command(tool_command: Sequence[str], url: str) -> list[str]:
         '--socket-timeout',
         '15',
     ]
+    # ponytail: reuse download-path workarounds so TikTok/YouTube preview
+    # does not redo a slow clean attempt the downloader already knows fails.
+    command += site_workaround_headers(clean)
+    command += site_workaround_extractor_args(clean)
+    javascript_runtime = find_javascript_runtime()
+    if javascript_runtime:
+        command += ['--js-runtimes', javascript_runtime]
     for field in PREVIEW_FIELDS:
         command += ['--print', field]
     return [*command, '--', clean]

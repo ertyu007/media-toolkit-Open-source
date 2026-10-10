@@ -7,6 +7,7 @@ import tempfile
 import threading
 import tkinter as tk
 import webbrowser
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, font as tkfont, messagebox, ttk
@@ -19,19 +20,13 @@ from .ffmpeg import (
     FFmpegError,
     JobSpec,
     VIDEO_QUALITY_PRESETS,
-    build_command,
     check_disk_space,
-    cleanup_temporary_output,
-    convert,
-    finalize_output,
-    normalize_trim,
+    collision_free_output_path,
     output_path,
     parse_trim_seconds,
-    probe,
-    temporary_output_path,
     tools_available,
-    validate_operation,
 )
+from .conversion import run_local_conversion
 from .importer import (
     ImportSpec,
     URLImportError,
@@ -297,6 +292,27 @@ def route_dropped_paths(paths: list[str]) -> tuple[str, str] | None:
     return None
 
 
+def classify_source_text(raw: str) -> str | None:
+    """'url' | 'file' | None for pasted source text; None when unsure.
+
+    Only confident cases switch modes (paste-time only, never per-keystroke):
+    a valid public URL, or a path to an existing file. Anything else
+    (private/localhost URLs, missing files, plain text) keeps the current mode.
+    """
+    text = (raw or '').strip().strip('"')
+    if not text:
+        return None
+    try:
+        validate_url(text)
+    except ValueError:
+        pass
+    else:
+        return 'url'
+    if os.path.isfile(text):
+        return 'file'
+    return None
+
+
 def fit_photo_image(image: tk.PhotoImage, max_width: int, max_height: int) -> tk.PhotoImage:
     """Scale a PhotoImage to fit inside a bounding box (stdlib only)."""
     width, height = image.width(), image.height()
@@ -359,10 +375,13 @@ class CliporaApp(tk.Tk):
             stem: tk.BooleanVar(value=stem in ('vocals', 'instrumental'))
             for stem in SELECTABLE_STEMS
         }
+        for stem_var in self.stem_vars.values():
+            stem_var.trace_add('write', lambda *_: self._sync_options())
         self._stems_options: ttk.Frame | None = None
         self._trim_options: ttk.Frame | None = None
         self.audio_format = tk.StringVar(value=defaults['audio_format'])
         self.video_format = tk.StringVar(value=defaults['video_format'])
+        self.enhance_audio = tk.BooleanVar(value=False)
         self.fps = tk.StringVar(value=defaults['fps'])
         self.quality = tk.StringVar(value=defaults['quality'])
         self.mode_desc = tk.StringVar(value='')
@@ -380,8 +399,10 @@ class CliporaApp(tk.Tk):
         self.progress_text = tk.StringVar(value='0%')
         self._cancellation: CancellationToken | None = None
         self._closing = False
+        self._startup_after_ids: list[str] = []
         self._active_source_kind = 'file'
         self._source_values = {'file': '', 'url': ''}
+        self._selected_local_sources: tuple[Path, ...] = ()
         self._progress_action = 'กำลังประมวลผล'
         self._debug_text: tk.Text | None = None
         self._last_debug_phase = ''
@@ -405,9 +426,11 @@ class CliporaApp(tk.Tk):
         self.bind_all('<Control-KeyPress>', self._on_control_keypress, add='+')
         self.bind_all('<Shift-Insert>', self._on_paste_shortcut, add='+')
         self.after_idle(self.source_entry.focus_set)
-        self.after(120, self._maybe_offer_tool_setup)
-        self.after(3000, self._maybe_check_ytdlp_update)
-        self.after(5000, self._maybe_check_app_update)
+        self._startup_after_ids = [
+            self.after(120, self._maybe_offer_tool_setup),
+            self.after(3000, self._maybe_check_ytdlp_update),
+            self.after(5000, self._maybe_check_app_update),
+        ]
         self.protocol('WM_DELETE_WINDOW', self._on_close)
 
     def _create_icon(self) -> tk.PhotoImage:
@@ -917,6 +940,7 @@ class CliporaApp(tk.Tk):
         self.source_entry = RoundedEntry(source_row, textvariable=self.source)
         self.source_entry.grid(row=0, column=0, sticky='ew', padx=(0, 8))
         self.source_entry.bind('<FocusOut>', lambda _e: self._validate_source_or_hide())
+        self.source_entry.bind('<<Paste>>', self._on_source_entry_paste)
         self.source_button = RoundedButton(
             source_row, textvariable=self.source_button_text,
             command=self._source_action, width=16,
@@ -1033,9 +1057,20 @@ class CliporaApp(tk.Tk):
         )
         self.video_format_box.grid(row=0, column=1, sticky='w')
 
+        # Auphonic-style enhance toggle (audio/video/stems, file + URL jobs)
+        self._enhance_row = ttk.Frame(fmt_body, style='TFrame')
+        self._enhance_row.grid(row=1, column=0, sticky='ew', pady=(10, 0))
+        self.enhance_check = Switch(
+            self._enhance_row,
+            text='ปรับเสียงพอดแคสต์ (ลดนอยส์ + เกลี่ยเสียง + -16 LUFS)',
+            variable=self.enhance_audio,
+            rainbow=True,
+        )
+        self.enhance_check.pack(side='left')
+
         # Stem picker (stems mode only)
         self._stems_options = ttk.Frame(fmt_body, style='TFrame')
-        self._stems_options.grid(row=1, column=0, sticky='ew', pady=(12, 0))
+        self._stems_options.grid(row=2, column=0, sticky='ew', pady=(12, 0))
         self._stems_options.columnconfigure(0, weight=1)
         ttk.Label(self._stems_options, text='Stem ที่ต้องการ', style='ModeDesc.TLabel').grid(
             row=0, column=0, sticky='w',
@@ -1061,10 +1096,10 @@ class CliporaApp(tk.Tk):
             fmt_body, text='▸ ตัวเลือกเพิ่มเติม', style='Ghost.TButton',
             command=self._toggle_details,
         )
-        self.details_toggle.grid(row=2, column=0, sticky='w', pady=(12, 0))
+        self.details_toggle.grid(row=3, column=0, sticky='w', pady=(12, 0))
 
         self._details_box = ttk.Frame(fmt_body, style='TFrame')
-        self._details_box.grid(row=3, column=0, sticky='ew', pady=(4, 0))
+        self._details_box.grid(row=4, column=0, sticky='ew', pady=(4, 0))
         self.quality_label = ttk.Label(self._details_box, text='คุณภาพ', style='ModeDesc.TLabel')
         self.quality_label.grid(row=0, column=0, padx=(0, 8), sticky='e')
         self.quality_box = RoundedCombobox(
@@ -1199,6 +1234,7 @@ class CliporaApp(tk.Tk):
             self.fps_box,
             self.start_time_entry,
             self.duration_entry,
+            self.enhance_check,
             *self._stem_check_widgets,
         ]
         self._sync_source_kind()
@@ -1612,14 +1648,19 @@ class CliporaApp(tk.Tk):
             except tk.TclError:
                 pass
 
-    def _record_history(self, targets: list[Path]) -> None:
+    def _record_history(
+        self, targets: list[Path], source_by_target: dict[Path, str] | None = None,
+    ) -> None:
         """Remember where finished outputs were saved; never breaks the job."""
         try:
             kind = self.mode.get()
             source_kind = self.input_kind.get()
             source = self.source.get().strip()
             for target in targets:
-                add_entry(kind, source_kind, target.name, target, source=source)
+                add_entry(
+                    kind, source_kind, target.name, target,
+                    source=(source_by_target or {}).get(target, source),
+                )
         except Exception:
             pass
 
@@ -1764,6 +1805,17 @@ class CliporaApp(tk.Tk):
                 self._source_kind_frame.grid()
             else:
                 self._source_kind_frame.grid_remove()
+        if getattr(self, '_enhance_row', None) is not None:
+            show_enhance = self.mode.get() in ('audio', 'video', 'stems')
+            if show_enhance:
+                self._enhance_row.grid()
+            else:
+                self._enhance_row.grid_remove()
+            if self._cancellation is None:
+                if self.mode.get() == 'stems' and 'vocals' not in self._selected_stems():
+                    self.enhance_check.state(['disabled'])
+                else:
+                    self.enhance_check.state(['!disabled'])
         self._sync_details()
         if self._cancellation is None:
             self.start_button.configure(text=action_text, command=self._start)
@@ -1817,6 +1869,8 @@ class CliporaApp(tk.Tk):
 
     def _on_source_changed(self, *_args: object) -> None:
         value = self.source.get()
+        if self._selected_local_sources and value != str(self._selected_local_sources[0]):
+            self._selected_local_sources = ()
         self._source_values[self._active_source_kind] = value
         if self.input_kind.get() == 'url':
             self.source_detail.set(url_summary(value))
@@ -1976,10 +2030,21 @@ class CliporaApp(tk.Tk):
                 png_path = download_thumbnail(
                     preview.thumbnail_url, Path(self._preview_tmp.name) / 'thumb.png'
                 )
-            self.after(0, self._apply_preview, generation, url, preview,
-                       str(png_path) if png_path else None)
+            self._post_to_ui(
+                self._apply_preview,
+                generation,
+                url,
+                preview,
+                str(png_path) if png_path else None,
+            )
         except Exception:
-            self.after(0, self._hide_preview_gen, generation)
+            self._post_to_ui(self._hide_preview_gen, generation)
+
+    def _post_to_ui(self, callback: Callable, *args: object) -> None:
+        try:
+            self.after(0, callback, *args)
+        except tk.TclError:
+            pass
 
     def _hide_preview_gen(self, generation: int) -> None:
         if generation == self._preview_gen:
@@ -2034,15 +2099,18 @@ class CliporaApp(tk.Tk):
             widget.state([state])
 
     def _choose_source(self) -> None:
-        path = filedialog.askopenfilename(
-            title='เลือกวิดีโอ',
+        paths = filedialog.askopenfilenames(
+            title='เลือกไฟล์สื่อ (เลือกได้หลายไฟล์)',
             filetypes=[
-                ('Video files', '*.mp4 *.mov *.mkv *.avi *.webm *.m4v'),
+                ('Media files', '*.mp4 *.mov *.mkv *.avi *.webm *.m4v *.mp3 *.m4a *.wav *.flac *.opus'),
                 ('All files', '*.*'),
             ],
         )
-        if path:
-            self.source.set(path)
+        if paths:
+            self.source.set(paths[0])
+            self._selected_local_sources = tuple(Path(path) for path in paths)
+            if len(paths) > 1:
+                self.status.set(f'เลือกไว้ {len(paths)} ไฟล์ — คิวจะทำทีละไฟล์')
 
     def _source_action(self) -> None:
         if self.input_kind.get() == 'file':
@@ -2059,10 +2127,23 @@ class CliporaApp(tk.Tk):
             if show_warning:
                 messagebox.showwarning('ไม่มีลิงก์', 'คัดลอกลิงก์ก่อน แล้วลองวางอีกครั้ง')
             return False
+        # ponytail: adopt the matching mode before inserting, while the box
+        # still holds the old content so per-kind values are stashed correctly.
+        kind = classify_source_text(value)
+        if kind is not None and kind != self.input_kind.get():
+            self.input_kind.set(kind)
+            self._sync_source_kind()
         self.source.set(value)
         self.source_entry.focus_set()
         self.source_entry.icursor('end')
         return True
+
+    def _on_source_entry_paste(self, _event: tk.Event) -> str:
+        """Native paste inside the source box also adopts the matching mode."""
+        if self._cancellation is not None:
+            return 'break'
+        self._paste_source_from_clipboard(show_warning=False)
+        return 'break'
 
     def _on_control_keypress(self, event: tk.Event) -> str | None:
         keysym = str(getattr(event, 'keysym', '')).lower()
@@ -2131,6 +2212,8 @@ class CliporaApp(tk.Tk):
         if self.mode.get() == 'stems':
             stems = self._selected_stems()
             if not stems:
+                if hasattr(self, '_toast'):
+                    self._toast.show('เลือก Stem อย่างน้อย 1 รายการ', 'warning')
                 return False
         return True
 
@@ -2316,20 +2399,32 @@ class CliporaApp(tk.Tk):
             fps=self._fps_value(),
             trim_start=trim_start,
             trim_duration=trim_duration,
+            enhance=bool(self.enhance_audio.get()),
         )
         if not tools_available():
             self.status.set('ต้องติดตั้งเครื่องมือก่อนเริ่มงาน')
             self._open_tool_setup()
             return
 
-        target = output_path(
-            job.source,
-            job.destination,
-            job.mode,
-            job.audio_format,
-            job.video_format,
-        )
-        if target.exists():
+        sources = self._selected_local_sources or (job.source,)
+        batch_items: list[tuple[JobSpec, Path]] = []
+        reserved_names: set[str] = set()
+        for source in sources:
+            item = replace(job, source=source)
+            target = output_path(
+                item.source,
+                item.destination,
+                item.mode,
+                item.audio_format,
+                item.video_format,
+            )
+            if len(sources) > 1:
+                target = collision_free_output_path(target, reserved_names)
+                reserved_names.add(target.name)
+            batch_items.append((item, target))
+        target = batch_items[0][1]
+        overwrite = False
+        if len(sources) == 1 and target.exists():
             existing_size = target.stat().st_size if target.is_file() else 0
             decision = OverwriteDialog(
                 self,
@@ -2338,13 +2433,23 @@ class CliporaApp(tk.Tk):
             ).result
             if decision in (CANCEL, KEEP):
                 return
+            overwrite = True
         self._add_to_destination_history(str(destination))
         cancellation = CancellationToken()
         self._begin_job(cancellation, 'กำลังตรวจสอบไฟล์…', 'validating')
         self._set_progress_phase('validating', 0)
+        if len(batch_items) > 1:
+            self._set_inputs_enabled(False)
+            self.status.set(f'เข้าคิว {len(batch_items)} ไฟล์ — ทำทีละไฟล์')
+            threading.Thread(
+                target=self._run_local_batch,
+                args=(tuple(batch_items), cancellation),
+                daemon=True,
+            ).start()
+            return
         threading.Thread(
             target=self._run_local,
-            args=(job, target, cancellation),
+            args=(job, target, cancellation, overwrite),
             daemon=True,
         ).start()
 
@@ -2395,7 +2500,8 @@ class CliporaApp(tk.Tk):
         self._set_progress_phase('validating', 0)
         threading.Thread(
             target=self._run_stems_local,
-            args=(source, destination, audio_format, stems, overwrite, cancellation),
+            args=(source, destination, audio_format, stems, overwrite,
+                  bool(self.enhance_audio.get()), cancellation),
             daemon=True,
         ).start()
 
@@ -2406,6 +2512,7 @@ class CliporaApp(tk.Tk):
         audio_format: str,
         stems: tuple[str, ...],
         overwrite: bool,
+        enhance_vocals: bool,
         cancellation: CancellationToken,
     ) -> None:
         try:
@@ -2418,6 +2525,7 @@ class CliporaApp(tk.Tk):
                 lambda value: self.after(0, self._set_progress_phase, 'separating', value * 100),
                 cancellation,
                 overwrite=overwrite,
+                enhance_vocals=enhance_vocals,
             )
         except ConversionCancelled:
             self.after(0, self._cancelled, cancellation)
@@ -2466,7 +2574,7 @@ class CliporaApp(tk.Tk):
         self._set_progress_phase('validating', 0)
         threading.Thread(
             target=self._run_stems_url,
-            args=(spec, stems, cancellation),
+            args=(spec, stems, bool(self.enhance_audio.get()), cancellation),
             daemon=True,
         ).start()
 
@@ -2474,6 +2582,7 @@ class CliporaApp(tk.Tk):
         self,
         spec: ImportSpec,
         stems: tuple[str, ...],
+        enhance_vocals: bool,
         cancellation: CancellationToken,
     ) -> None:
         try:
@@ -2496,6 +2605,7 @@ class CliporaApp(tk.Tk):
                     lambda value: self.after(0, self._set_progress_phase, 'separating', 50 + value * 50),
                     cancellation,
                     collision_free=True,
+                    enhance_vocals=enhance_vocals,
                 )
             finally:
                 cleanup_import_workspace(workspace, spec.destination)
@@ -2536,6 +2646,7 @@ class CliporaApp(tk.Tk):
             audio_format=self._audio_format_value(),
             video_format=self._video_format_value(),
             fps=self._fps_value(),
+            enhance=bool(self.enhance_audio.get()),
         )
         self._add_to_destination_history(str(destination))
         cancellation = CancellationToken()
@@ -2568,59 +2679,101 @@ class CliporaApp(tk.Tk):
             self.result_panel.grid_remove()
             self._result_targets = []
 
-    def _run_local(self, job: JobSpec, target: Path, cancellation: CancellationToken) -> None:
-        temporary = temporary_output_path(target)
-        outcome = 'done'
-        detail = ''
+    def _run_local(
+        self, job: JobSpec, target: Path, cancellation: CancellationToken,
+        overwrite: bool = False,
+    ) -> None:
         try:
-            if cancellation.cancelled:
-                raise ConversionCancelled('ยกเลิกงานแล้ว')
-            info = probe(job.source)
-            validate_operation(info, job.mode)
-            if cancellation.cancelled:
-                raise ConversionCancelled('ยกเลิกงานแล้ว')
-            trim_start, trim_duration, effective_duration = normalize_trim(
-                job.trim_start, job.trim_duration, info.duration,
-            )
-            command = build_command(
-                job.source,
-                temporary,
-                job.mode,
-                job.quality,
-                job.audio_format,
-                job.video_format,
-                job.fps,
-                trim_start,
-                trim_duration,
-            )
-            self.after(0, self._set_progress_phase, 'converting', 0)
-            convert(
-                command,
-                temporary,
-                effective_duration,
-                lambda value: self.after(0, self._set_progress_phase, 'converting', value * 100),
+            run_local_conversion(
+                job,
+                target,
                 cancellation,
+                overwrite=overwrite,
+                on_progress=lambda phase, value: self._post_to_ui(
+                    self._set_progress_phase, phase, value),
             )
-            self.after(0, self._set_progress_phase, 'finalizing', 90)
-            finalize_output(temporary, target)
         except ConversionCancelled:
-            outcome = 'cancelled'
+            self._post_to_ui(self._cancelled, cancellation)
         except (FFmpegError, OSError, ValueError) as exc:
-            outcome = 'failed'
-            detail = str(exc)
-        finally:
-            try:
-                cleanup_temporary_output(temporary, target)
-            except (OSError, ValueError) as exc:
-                outcome = 'failed'
-                detail = f'ไม่สามารถลบไฟล์ชั่วคราวได้: {exc}\n{temporary}'
-
-        if outcome == 'done':
-            self.after(0, self._done, target, cancellation)
-        elif outcome == 'cancelled':
-            self.after(0, self._cancelled, cancellation)
+            self._post_to_ui(self._failed, str(exc), cancellation)
         else:
-            self.after(0, self._failed, detail, cancellation)
+            self._post_to_ui(self._done, target, cancellation)
+
+    def _run_local_batch(
+        self,
+        items: tuple[tuple[JobSpec, Path], ...],
+        cancellation: CancellationToken,
+    ) -> None:
+        completed: list[Path] = []
+        sources_by_target: dict[Path, str] = {}
+        failed: tuple[Path, str] | None = None
+        cancelled = False
+        for index, (job, target) in enumerate(items, start=1):
+            if cancellation.cancelled:
+                cancelled = True
+                break
+            self._post_to_ui(self._set_batch_item_status, index, len(items), job.source)
+            try:
+                run_local_conversion(
+                    job,
+                    target,
+                    cancellation,
+                    on_progress=lambda phase, value: self._post_to_ui(
+                        self._set_batch_progress, index, len(items), job.source.name,
+                        phase, value),
+                )
+            except ConversionCancelled:
+                cancelled = True
+                break
+            except (FFmpegError, OSError, ValueError) as exc:
+                failed = (job.source, str(exc))
+                break
+            completed.append(target)
+            sources_by_target[target] = str(job.source)
+        self._post_to_ui(
+            self._finish_local_batch, completed, sources_by_target, failed,
+            cancelled, cancellation,
+        )
+
+    def _set_batch_progress(
+        self, index: int, total: int, name: str, phase: str, percent: float,
+    ) -> None:
+        phase_text = PROGRESS_PHASES.get(phase, phase)
+        self.status.set(f'คิว {index}/{total}: {name} — {phase_text}')
+        self.progress['value'] = percent
+        self.progress_text.set(f'{index}/{total} • {percent:.0f}%')
+
+    def _set_batch_item_status(self, index: int, total: int, source: Path) -> None:
+        self.status.set(f'คิว {index}/{total}: {source.name}')
+        self.progress['value'] = 0
+        self.progress_text.set(f'{index}/{total} • 0%')
+
+    def _finish_local_batch(
+        self,
+        completed: list[Path],
+        sources_by_target: dict[Path, str],
+        failed: tuple[Path, str] | None,
+        cancelled: bool,
+        cancellation: CancellationToken,
+    ) -> None:
+        if not self._finish_job(cancellation):
+            return
+        if completed:
+            self._show_result(completed, sources_by_target)
+        if failed is not None:
+            source, detail = failed
+            self._set_progress_phase('error', 0)
+            message = (
+                f'คิวหยุดที่ {source.name} — สำเร็จแล้ว {len(completed)} ไฟล์\n\n'
+                f'{sanitize_error_message(detail)}'
+            )
+            ErrorDialog(self, 'คิวแปลงไฟล์หยุดแล้ว', message)
+        elif cancelled:
+            self._set_progress_phase('error', 0)
+            self.status.set(f'ยกเลิกคิวแล้ว — สำเร็จ {len(completed)} ไฟล์')
+        else:
+            self._set_progress_phase('done', 100)
+            self.status.set(f'แปลงเสร็จครบ {len(completed)} ไฟล์')
 
     def _ask_overwrite(self, target: Path) -> bool:
         """Ask on the main thread whether to replace an existing output file.
@@ -2650,11 +2803,18 @@ class CliporaApp(tk.Tk):
         return result['decision'] == OVERWRITE
 
     def _run_import(self, job: ImportSpec, cancellation: CancellationToken) -> None:
-        self.after(0, self._set_progress_phase, 'downloading', 0)
+        # ponytail: stay on validating during silent extractor phase so 0%
+        # does not read as a stuck download; flip on first real progress.
+        enhance = bool(getattr(job, 'enhance', False))
+
+        def _on_import_progress(value: float) -> None:
+            phase = 'converting' if (enhance and value >= 0.85) else 'downloading'
+            self.after(0, self._set_progress_phase, phase, value * 100)
+
         try:
             target = import_url(
                 job,
-                lambda value: self.after(0, self._set_progress_phase, 'downloading', value * 100),
+                _on_import_progress,
                 cancellation,
                 on_conflict=self._ask_overwrite,
                 on_detail=lambda speed, eta: self.after(
@@ -2708,12 +2868,26 @@ class CliporaApp(tk.Tk):
             return False
         return True
 
+    def _revert_to_url_after_local_job(self) -> None:
+        """Return to link mode after a local file job succeeds (URL-first tool).
+
+        Per-kind source values are preserved by ``_sync_source_kind`` so the
+        prior link is restored. Also clears the rights checkbox so the next
+        URL job always needs fresh consent.
+        """
+        if self.input_kind.get() != 'file':
+            return
+        self.input_kind.set('url')
+        self._sync_source_kind()
+        self.authorized.set(False)
+
     def _done(self, target: Path, cancellation: CancellationToken) -> None:
         if not self._finish_job(cancellation):
             return
         self._set_progress_phase('done', 100)
         self._show_result([target])
         self._flash_start_success()
+        self._revert_to_url_after_local_job()
         if self.input_kind.get() == 'url':
             self.authorized.set(False)
 
@@ -2723,14 +2897,17 @@ class CliporaApp(tk.Tk):
         self._set_progress_phase('done', 100)
         self._show_result(outputs)
         self._flash_start_success()
+        self._revert_to_url_after_local_job()
         if self.input_kind.get() == 'url':
             self.authorized.set(False)
 
-    def _show_result(self, targets: list[Path]) -> None:
+    def _show_result(
+        self, targets: list[Path], source_by_target: dict[Path, str] | None = None,
+    ) -> None:
         self._result_targets = list(targets)
         if self._chime_var.get():
             play_completion_chime()
-        self._record_history(targets)
+        self._record_history(targets, source_by_target)
         if hasattr(self, '_toast'):
             names = ' • '.join(target.name for target in targets[:2])
             if len(targets) > 2:
@@ -2805,6 +2982,12 @@ class CliporaApp(tk.Tk):
             pass
         cancellation = self._cancellation
         if cancellation is None:
+            self._closing = True
+            self._cancel_startup_callbacks()
+            self._button_tween.cancel()
+            self._flash_tween.cancel()
+            self._cancel_widget_animations()
+            self._cancel_preview()
             self.destroy()
             return
         if not messagebox.askyesno(
@@ -2813,7 +2996,33 @@ class CliporaApp(tk.Tk):
         ):
             return
         self._closing = True
+        self._cancel_startup_callbacks()
+        self._button_tween.cancel()
+        self._flash_tween.cancel()
+        self._cancel_widget_animations()
+        self._cancel_preview()
         self._cancel()
+
+    def _cancel_widget_animations(self) -> None:
+        def stop_children(widget: tk.Misc) -> None:
+            for child in widget.winfo_children():
+                cancel = getattr(child, '_cancel_animations', None)
+                if cancel is not None:
+                    cancel(None)
+                stop_children(child)
+
+        try:
+            stop_children(self)
+        except tk.TclError:
+            pass
+
+    def _cancel_startup_callbacks(self) -> None:
+        for callback_id in self._startup_after_ids:
+            try:
+                self.after_cancel(callback_id)
+            except tk.TclError:
+                pass
+        self._startup_after_ids.clear()
 
 class DisclaimerDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc) -> None:

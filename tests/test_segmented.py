@@ -1,6 +1,8 @@
+import re
 import unittest
 
 from clipora.ui_components.widgets import (
+    rainbow_color,
     segment_index_at,
     segment_layout,
     segment_origin,
@@ -33,6 +35,36 @@ class SegmentLayoutTests(unittest.TestCase):
         self.assertEqual(segment_layout(300.0, 0), (0.0, 0.0))
         self.assertEqual(segment_index_at(10.0, 300.0, 0), 0)
         self.assertEqual(segment_index_at(10.0, 0.0, 3), 0)
+
+
+class RainbowColorTests(unittest.TestCase):
+    def test_hex_format_and_hue_wrap(self):
+        color = rainbow_color(0.0)
+        self.assertTrue(re.fullmatch(r'#[0-9a-f]{6}', color), color)
+        self.assertEqual(rainbow_color(0.0), rainbow_color(1.0))
+        self.assertNotEqual(rainbow_color(0.0), rainbow_color(0.5))
+
+    def test_switch_tick_repaints_text(self):
+        try:
+            import tkinter as tk
+
+            from clipora.ui_components.widgets import Switch
+
+            root = tk.Tk()
+            root.withdraw()
+        except Exception as exc:
+            self.skipTest(f'no display: {exc}')
+        try:
+            variable = tk.BooleanVar(value=False)
+            switch = Switch(root, variable=variable, text='demo', rainbow=True)
+            switch.update()
+            before = switch.itemcget(switch.find_all()[-1], 'fill')
+            switch._rainbow_tick()
+            switch.update()
+            after = switch.itemcget(switch.find_all()[-1], 'fill')
+            self.assertNotEqual(before, after)
+        finally:
+            root.destroy()
 
 
 if __name__ == '__main__':

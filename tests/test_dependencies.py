@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+import os
 import threading
 import unittest
 import zipfile
@@ -13,6 +14,7 @@ from clipora.dependencies import (
     DependencyInstallCancelled,
     DependencyInstallError,
     DependencySpec,
+    _replace_directory,
     install_separator_toolchain,
     install_toolchains,
     install_windows_toolchain,
@@ -334,6 +336,30 @@ class SeparatorToolchainInstallTests(unittest.TestCase):
                 install_separator_toolchain(destination=root, specs=specs)
             self.assertFalse((root / 'separator' / '.python.clipora-old').exists())
             self.assertTrue((root / 'separator' / 'python' / 'python313._pth').is_file())
+
+    def test_interrupted_replacement_restores_recoverable_backup(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / 'python'
+            backup = root / '.python.clipora-old'
+            staged = root / 'staged-python'
+            backup.mkdir()
+            staged.mkdir()
+            (backup / 'old.txt').write_text('working version', encoding='utf-8')
+            (staged / 'new.txt').write_text('new version', encoding='utf-8')
+            original_replace = os.replace
+
+            def fail_staged_replace(source, destination):
+                if Path(source) == staged:
+                    raise OSError('simulated install interruption')
+                return original_replace(source, destination)
+
+            with patch('clipora.dependencies.os.replace', side_effect=fail_staged_replace):
+                with self.assertRaisesRegex(OSError, 'simulated install interruption'):
+                    _replace_directory(staged, target)
+
+            self.assertEqual((target / 'old.txt').read_text(encoding='utf-8'), 'working version')
+            self.assertFalse(backup.exists())
 
     def test_missing_model_after_install_fails(self):
         with TemporaryDirectory() as directory:

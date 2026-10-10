@@ -10,6 +10,7 @@ from clipora.ffmpeg import (
     build_command,
     cleanup_temporary_output,
     convert,
+    enhance_video,
     normalize_trim,
     probe,
     temporary_output_path,
@@ -214,6 +215,100 @@ class FFmpegIntegrationTests(unittest.TestCase):
             self.assertTrue(result.has_audio)
             self.assertIsNotNone(result.duration)
             self.assertAlmostEqual(result.duration, 2.0, delta=0.4)
+            self.assertTrue(progress)
+            self.assertEqual(progress[-1], 1.0)
+
+
+    def test_enhanced_audio_produces_probable_output(self):
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            source = root / 'podcast input.mp4'
+            target = root / 'podcast enhanced.mp3'
+            creation = subprocess.run(
+                [
+                    'ffmpeg',
+                    '-y',
+                    '-loglevel',
+                    'error',
+                    '-f',
+                    'lavfi',
+                    '-i',
+                    'color=c=black:s=160x90:d=2',
+                    '-f',
+                    'lavfi',
+                    '-i',
+                    'sine=frequency=440:duration=2',
+                    '-shortest',
+                    '-c:v',
+                    'libx264',
+                    '-pix_fmt',
+                    'yuv420p',
+                    '-c:a',
+                    'aac',
+                    str(source),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(creation.returncode, 0, creation.stderr)
+            source_size = source.stat().st_size
+
+            info = probe(source)
+            self.assertTrue(info.has_audio)
+
+            progress = []
+            command = build_command(source, target, 'audio', 'Balanced', 'mp3', enhance=True)
+            self.assertIn('-af', command)
+            convert(command, target, info.duration, progress.append)
+
+            result = probe(target)
+            self.assertTrue(result.has_audio)
+            self.assertFalse(result.has_video)
+            self.assertGreater(target.stat().st_size, 0)
+            self.assertEqual(source.stat().st_size, source_size)
+            self.assertTrue(progress)
+            self.assertEqual(progress[-1], 1.0)
+
+
+    def test_enhanced_video_cuts_silence_from_picture_and_sound(self):
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            source = root / 'gappy input.mp4'
+            target = root / 'gappy output.mp4'
+            creation = subprocess.run(
+                [
+                    'ffmpeg',
+                    '-y',
+                    '-loglevel',
+                    'error',
+                    '-f', 'lavfi', '-i', 'color=c=black:s=160x90:d=3:r=30',
+                    '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1',
+                    '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono:d=1',
+                    '-f', 'lavfi', '-i', 'sine=frequency=880:duration=1',
+                    '-filter_complex',
+                    '[1:a][2:a][3:a]concat=n=3:v=0:a=1[a]',
+                    '-map', '0:v', '-map', '[a]',
+                    '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+                    '-c:a', 'aac',
+                    '-shortest',
+                    str(source),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(creation.returncode, 0, creation.stderr)
+
+            progress = []
+            enhance_video(source, target, video_format='mp4', on_progress=progress.append)
+
+            result = probe(target)
+            self.assertTrue(result.has_video)
+            self.assertTrue(result.has_audio)
+            self.assertIsNotNone(result.duration)
+            # 1s middle silence cut (minus pad) -> ~2.5s remain.
+            self.assertAlmostEqual(result.duration, 2.5, delta=0.4)
             self.assertTrue(progress)
             self.assertEqual(progress[-1], 1.0)
 

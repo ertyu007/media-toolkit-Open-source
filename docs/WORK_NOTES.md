@@ -1,6 +1,67 @@
 # บันทึกงาน (Work Notes) — ฟีเจอร์แยก Stem เสียง (Stem Separation) + อัปเดต yt-dlp
 
-อัปเดตล่าสุด: 2026-09-30
+อัปเดตล่าสุด: 2026-10-02
+
+## ทำวันนี้ (2026-10-02) — เก็บจุดขัดใจผู้ใช้ (ยังไม่ bump version)
+
+- **บั๊ก**: เอา Stem ออกหมดแล้วกดเริ่ม — งานเงียบไม่ทำอะไรเลย → toast เตือน `เลือก Stem อย่างน้อย 1 รายการ`
+- **สวิตช์หลอก**: ติ๊กปรับเสียงทั้งที่ไม่ได้เลือกเสียงร้อง (Stem) ไม่มีผลแต่ดูเหมือนมี → disable สวิตช์เมื่อไม่มีเสียงร้อง (trace จาก stem_vars)
+- **emoji**: `🔒` หน้าตัวเลือก Stem ที่ล็อก → `[ล็อก]` (กฎไม่ใช้ emoji); สแกนทั้ง `clipora/` ด้วยเทสต์กันกลับ
+- **เก็บตก**: after ค้างของ Switch พ่น error ตอนปิด — cancel ผ่าน `<Destroy>`; after ของแอปตอนปิดเทสต์เหลือ spam cosmetic (ไม่ล้ม)
+
+## ทำวันนี้ (2026-10-02) — ไล่บั๊กทั้งโปรแกรม (ยังไม่ bump version)
+
+- **บั๊กจริง (ซ่อมแล้ว)**: post-pass งานลิงก์ส่ง quality `สูงสุด/1080p` เข้า re-encode ตรงๆ → `ValueError` กลางงานหลังโหลดเสร็จ; map เป็น `Balanced` เมื่อไม่ใช่ convert preset + เทสต์วิดีโอมีเงียบผ่าน mocked downloader
+- **edge (ซ่อมแล้ว)**: `silence_start` ติดลบพ่นจาก ffmpeg — regex รับลบ + clamp downstream + เทสต์
+- **ตรวจแล้วปกติ**: ไม่มี shell/eval/except เปลือย; วิดีโอไร้เสียง/ไม่ตัด/เงียบทั้งไฟล์/mov-ProRes/copy ผ่านหมด; worker audio+video enhance ไฟล์ออกครบ; UI 3 โหมด headless; parity Android ตรง; diff เก่า (`preview.py`/smart paste) สะอาด
+- **รู้ไว้**: ติ๊กรุ้ง redraw ทุก 90ms (จิ๊บจ๊อย), วิดีโอยาวมาก+เงียบเยอะ expression ยาว (edge), ไฟล์เงียบทั้งก้อนเหลือขอบ 0.5s (ตั้งใจ ไม่แครช)
+
+## ทำวันนี้ (2026-10-02) — ซ่อมสีรุ้งสวิตช์ไม่วิ่ง (ยังไม่ bump version)
+
+- **สาเหตุ**: tick วิ่งแต่ `_draw` ยัง fill สีเดิม (`TEXT`) ตลอด — ลืมเปลี่ยนบรรทัด fill; แก้ให้ใช้ `rainbow_color(self._hue)` + เทสต์ Tk จริง (skip ถ้าไม่มีจอ)
+
+## ทำวันนี้ (2026-10-02) — ตัดเงียบวิดีโอ ภาพหายพร้อมเสียง (ยังไม่ bump version)
+
+- **สอง pass**: `detect_silences()` (silencedetect -35dB/0.8s บน timeline เดียวกับ trim) → `keep_intervals()` (complement + ขอบ 0.25s หายใจรอด) → `enhance_video()` ตัดภาพ (`select+setpts`) กับเสียง (`aselect+asetpts+enhance`) รอบเดียว A/V ไม่หลุดซิงก์; ไม่เจอเงียบ = ไม่ตัด (งานลิงก์ก็อปภาพเดิม)
+- **แชร์โค้ด**: ดึง `_video_codec_args()` ออกจาก `build_command` (output เดิมเป๊ะ เทสต์ยืนยัน) ใช้ร่วมกับ enhance; mirror Android ทั้งก้อน + parity pure helpers
+- **Wire**: งานไฟล์วิดีโอ+ติ๊ก (`_run_local`) กับ post-pass งานลิงก์ (แทนบล็อก copy+af เดิม); เจอจริงตอน smoke: filter+copy อยู่ด้วยกันไม่ได้ → ตัดแล้วบังคับ re-encode
+- **Tests**: pure 7 เคส + integration วิดีโอ 3s→2.5s ภาพ+เสียงครบ + parity
+- **UI**: สวิตช์ไม่มี emoji แล้ว ข้อความสีรุ้งวิ่ง (`Switch(rainbow=True)` reuse สูตรสี RainbowBar)
+
+## ทำวันนี้ (2026-10-02) — จูนสูตร enhance ใหม่ เสียงโอ่ง+ซ่า (ยังไม่ bump version)
+
+- **สาเหตุ**: `dynaudnorm` ปั๊มเสียงก้องหางเสียงขึ้นมา + `afftdn nf=-25` แรงไปจนเป็นเสียงน้ำซ่า + `silenceremove stop_periods=-1` ตัดเงียบกลางท่อนจนสะดุด/คลิก
+- **สูตรใหม่**: ตัดเงียบเฉพาะหัวไฟล์ + `afftdn nr=10:nf=-40` (อ่อนลง) + `acompressor` แทน dynaudnorm (เกลี่ยแบบไม่ปั๊ม) + `loudnorm -16 LUFS` คงเดิม; mirror Android + เทสต์ token + USER_GUIDE ตามแล้ว
+
+## ทำวันนี้ (2026-10-02) — ✨ enhance ลง Stem เสียงร้อง (ยังไม่ bump version)
+
+- **ไม่แปลงซ้ำ**: `separate_audio(enhance_vocals=...)` → `_finalize_stems` ใส่ `enhance=` ใน `build_command` ตอนแปลง wav→ไฟล์เลย (มีผลเฉพาะ `stem == 'vocals'` ดนตรีไม่โดน); UI โชว์สวิตช์ครบ 3 โหมด snapshot เข้า thread ทั้งไฟล์+ลิงก์ (งานลิงก์โหลดแบบดิบให้ Demucs ก่อนเสมอ)
+- **Tests**: `_finalize_stems` ด้วย convert ปลอม — เปิดแล้ว vocals มี `-af`/drums ไม่มี, ปิดแล้วไม่มีใครมี — full suite รอรอบนี้
+
+## ทำวันนี้ (2026-10-02) — ✨ enhance ใช้กับงานลิงก์ได้แล้ว (ยังไม่ bump version)
+
+- **post-pass หลังโหลด**: `_run_enhance_post_pass()` ใน `clipora/importer.py` — เสียบหลังดาวน์โหลดเสร็จ (pattern เดียวกับ mov→ProRes): โหมดเสียง reuse `build_command(enhance=True)`, โหมดวิดีโอ `-c:v copy` + ปรับเฉพาะเสียง (mp4→aac / mov→pcm); ไฟล์เดิมอยู่จนงานใหม่สำเร็จ, วิดีโอไม่มีเสียงข้ามไปเลย
+- **`ImportSpec.enhance`** (default `False`) ทั้ง PC + Android (`ytdlp.py` รับ field แต่ยังไม่ทำ post-pass — ไม่มี toggle ฝั่งนั้น); คำสั่งดาวน์โหลดไม่เปลี่ยน (`build_import_command` เมิน flag นี้, parity test ยืนยัน)
+- **UI**: สวิตช์โชว์ทั้งงานไฟล์+ลิงก์ (ซ่อนเฉพาะ Stem), snapshot เข้า `ImportSpec`, progress ≥85% พลิก phase เป็น `converting`
+- **Tests**: post-pass เสียงจริงผ่าน mock downloader (`test_importer`) + parity download command (`test_android_core`) — full suite รอรอบนี้
+
+## ทำวันนี้ (2026-10-02) — ✨ ปรับเสียงพอดแคสต์ สไตล์ Auphonic (local, ยังไม่ bump version)
+
+- **preset เดียวจบ**: `build_enhance_filter()` ใน `clipora/ffmpeg.py` (+ mirror `android/core/ffmpeg.py`) — `silenceremove,highpass=65,afftdn,dynaudnorm,loudnorm(-16 LUFS)` ครอบ loudness/denoise/leveler/auto-cut ด้วยของฟรี built-in ทั้งหมด; `JobSpec.enhance` + `build_command(enhance=...)` ใส่ `-af` เดียว ไม่รื้อท่อเดิม (default `False` = คำสั่งเดิมเป๊ะ)
+- **UI**: `Switch` เดียวใต้รูปแบบผลลัพธ์ (โชว์เฉพาะงานไฟล์ในเครื่อง โหมด audio/video) snapshot เข้า `JobSpec` ก่อน thread worker ตามกฎ Tk
+- **ข้อจำกัดบอกตรงๆ**: FFmpeg ทำ filler-word removal แบบ AI ไม่ได้ ได้แค่ตัดเงียบ; งาน URL ยังไม่รองรับ (importer ใช้ yt-dlp pipeline แยก)
+- **Tests**: unit 3 เคส (`test_ffmpeg`) + integration เสียงจริง (`test_ffmpeg_integration`) + parity PC/Android (`test_android_core`) — full suite 296 ผ่าน (skip 2 = เน็ต)
+
+## ทำวันนี้ (2026-10-01) — วางแล้วเลือกโหมดให้เอง (ยังไม่ bump version)
+
+- **smart paste**: `classify_source_text()` (pure, เทสต์ 6 เคสใน `test_ui_helpers`) — URL สาธารณะ→โหมดลิงก์ / ไฟล์ที่มีจริง→โหมดไฟล์ / นอกนั้นไม่สลับ; hook แค่จังหวะวาง (ปุ่มวางลิงก์ + `<<Paste>>` ในช่อง) ไม่จับทุก keystroke จึงไม่วนลูปกับ `_sync_source_kind` และไม่ยัดค่าผิดช่อง; สคริปต์จำลองสลับไปมา+ค่าค้างคนละช่องผ่าน
+
+## ทำวันนี้ (2026-10-01) — พรีวิว TikTok + สถานะ extractor + งานไฟล์กลับโหมดลิงก์ (ยังไม่ bump version)
+
+- **พรีวิวลิงก์ช้า (TikTok)**: `build_preview_command` ยิง yt-dlp แบบเปลือยๆ ไม่มี Referer/extractor-args/JS runtime ทั้งที่ตัวดาวน์โหลดมี → ดึง workaround ชุดเดียวกับ `importer` มาใช้ (`clipora/preview.py` +9 บรรทัด, reuse ล้วน)
+- **ดาวน์โหลดค้าง 0%**: ช่วง extractor เงียบ (TikTok แก้ challenge) สถานะเคยขึ้น "กำลังดาวน์โหลด…" ทันทีทั้งที่ยังไม่เริ่มโหลด → ค้าง "กำลังตรวจสอบ…" จน progress แรกมาแล้วค่อยพลิก (`_run_import`, ไม่เปลี่ยน contract `import_url`)
+- **ลากไฟล์แล้วค้างโหมดไฟล์**: งานไฟล์ (แปลง/แยก Stem) สำเร็จแล้วกลับไปโหมด URL เองพร้อมลิงก์เดิม (`_revert_to_url_after_local_job` ใน `_done`/`_done_stems`, ล้างติ๊กยินยอมสิทธิ์ด้วย); ล้มเหลว/ยกเลิกอยู่โหมดไฟล์ต่อเพื่อ retry — `USER_GUIDE` §3 sync แล้ว
+- **ตรวจก่อนส่ง**: `compileall` + full suite 288 tests ผ่าน (skipped 2 = network) + สคริปต์จำลอง drop→file→revert→link ผ่าน (headless, ลบทิ้งแล้ว ไม่ commit)
 
 ## ทำวันนี้ (2026-09-30) — วางโครงสาขา Android (offline, ยังไม่ bump version ฝั่ง PC)
 

@@ -147,6 +147,7 @@ def _run_convert(job: ConvertJob, token, emit) -> None:
     target = ffmpeg.output_path(
         job.source, job.destination, job.mode, job.audio_format, job.video_format,
     )
+    target = ffmpeg.collision_free_output_path(target)
     temporary = ffmpeg.temporary_output_path(target)
     command = ffmpeg.build_command(
         job.source,
@@ -162,7 +163,8 @@ def _run_convert(job: ConvertJob, token, emit) -> None:
     emit('status', f'กำลังแปลง {target.name}')
     try:
         ffmpeg.convert(command, temporary, effective, lambda p: emit('progress', p), token)
-        ffmpeg.finalize_output(temporary, target)
+        ffmpeg.validate_output(temporary, job.mode)
+        ffmpeg.finalize_output(temporary, target, overwrite=False)
     except BaseException:
         ffmpeg.cleanup_temporary_output(temporary, target)
         raise

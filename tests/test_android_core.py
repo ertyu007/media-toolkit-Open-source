@@ -125,6 +125,16 @@ class BuildCommandParity(_PinnedTools, unittest.TestCase):
                 with self.assertRaises(ValueError):
                     _android_build(**overrides)
 
+    def test_enhance_flag_matches(self):
+        self.assertEqual(
+            _pc_build(enhance=True),
+            _android_build(enhance=True),
+        )
+        self.assertEqual(
+            pc_ffmpeg.build_enhance_filter(),
+            android_ffmpeg.build_enhance_filter(),
+        )
+
     def test_profiles_match(self):
         self.assertEqual(
             pc_ffmpeg.PRORES_PROFILES,
@@ -188,6 +198,22 @@ class PureHelperParity(unittest.TestCase):
                         pc_ffmpeg.parse_progress_line(line, duration),
                         android_ffmpeg.parse_progress_line(line, duration),
                     )
+
+    def test_silence_cut_helpers_match(self):
+        silences = [(1.0, 2.0), (1.8, 2.5)]
+        self.assertEqual(
+            pc_ffmpeg.keep_intervals(silences, 4.0, pad=0.0),
+            android_ffmpeg.keep_intervals(silences, 4.0, pad=0.0),
+        )
+        self.assertEqual(
+            pc_ffmpeg.build_av_select_filter([(0.0, 1.25)]),
+            android_ffmpeg.build_av_select_filter([(0.0, 1.25)]),
+        )
+        report = '[silencedetect @ 0] silence_start: 1.000\nsilence_end: 2.0 | x\n'
+        self.assertEqual(
+            pc_ffmpeg.parse_silence_report(report, 3.0),
+            android_ffmpeg.parse_silence_report(report, 3.0),
+        )
 
     def test_temporary_output_naming_matches(self):
         for target in (TARGET, Path('C:/out/no-extension'), Path('C:/out/a.b.c.mp4')):
@@ -311,6 +337,26 @@ class ImportCommandParity(unittest.TestCase):
                         self._drop_platform_flags(pc),
                         self._drop_platform_flags(android),
                     )
+
+    def test_enhance_flag_leaves_download_command_untouched(self):
+        for audio_format in ('mp3', 'm4a'):
+            with self.subTest(audio_format=audio_format):
+                pc = pc_importer.build_import_command(
+                    ['yt-dlp'],
+                    self._spec(pc_importer, audio_format=audio_format, enhance=True),
+                    WORKSPACE,
+                )
+                android = android_ytdlp.build_import_command(
+                    ['yt-dlp'],
+                    self._spec(android_ytdlp, audio_format=audio_format, enhance=True),
+                    WORKSPACE,
+                )
+                self.assertEqual(
+                    self._drop_platform_flags(pc),
+                    self._drop_platform_flags(android),
+                )
+        self.assertFalse(self._spec(pc_importer).enhance)
+        self.assertFalse(self._spec(android_ytdlp).enhance)
 
     def test_progress_parsing_matches(self):
         lines = [

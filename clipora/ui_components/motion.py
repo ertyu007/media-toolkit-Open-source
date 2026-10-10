@@ -176,6 +176,10 @@ def fade_in_window(window, after: AfterFn, duration_ms: int = 140) -> Tween:
     """Fade a Toplevel from transparent to opaque; tolerates early destroy."""
     tween = Tween(after, lambda _handle: None, duration_ms=duration_ms)
 
+    def cancel_on_destroy(event) -> None:
+        if event.widget is window:
+            tween.cancel()
+
     def apply(progress: float) -> None:
         try:
             window.attributes('-alpha', progress)
@@ -186,5 +190,9 @@ def fade_in_window(window, after: AfterFn, duration_ms: int = 140) -> Tween:
         window.attributes('-alpha', 0.0)
     except Exception:
         return tween
+    try:
+        window.bind('<Destroy>', cancel_on_destroy, add='+')
+    except Exception:
+        pass
     tween.start(apply)
     return tween

@@ -19,8 +19,15 @@ from urllib.parse import urlsplit
 from .ffmpeg import (
     CancellationToken,
     ConversionCancelled,
+    FFmpegError,
+    build_command,
+    cleanup_temporary_output,
+    convert,
     convert_for_after_effects,
+    enhance_video,
+    finalize_output,
     probe,
+    temporary_output_path,
     validate_operation,
 )
 from .tools import find_executable
@@ -135,6 +142,7 @@ class ImportSpec:
     audio_format: str
     video_format: str = 'mp4'
     fps: str = 'สูงสุด'
+    enhance: bool = False
 
 
 _NUMERIC_PART_RE = re.compile(r'^(?:0[xX][0-9a-fA-F]+|0[0-7]*|[0-9]+)$')
@@ -814,6 +822,61 @@ def _run_import_with_fallback(
     raise last_blocked
 
 
+def _run_enhance_post_pass(
+    completed: Path,
+    spec: ImportSpec,
+    on_progress: Callable[[float], None],
+    cancellation: CancellationToken | None = None,
+) -> None:
+    """Enhance a finished download in place (video silences cut A/V in sync).
+
+    The original file survives until the new one fully succeeds (same guarantee
+    as local jobs). Raises ``URLImportError`` when enhancing fails so URL
+    workers (which do not handle ``FFmpegError``) report it instead of hanging.
+    """
+    info = probe(completed)
+    if spec.mode == 'video' and not info.has_audio:
+        return  # nothing to enhance
+    temporary = temporary_output_path(completed)
+    try:
+        try:
+            if spec.mode == 'audio':
+                validate_operation(info, 'audio')
+                command = build_command(
+                    completed,
+                    temporary,
+                    'audio',
+                    spec.quality,
+                    spec.audio_format,
+                    enhance=True,
+                )
+                convert(command, temporary, info.duration, on_progress, cancellation)
+            else:
+                # URL quality is a resolution preset (1080p/...), not a convert
+                # preset: re-encode (only when cutting) at Balanced.
+                quality = spec.quality if spec.quality in ('High', 'Balanced', 'Small') else 'Balanced'
+                enhance_video(
+                    completed,
+                    temporary,
+                    video_format=spec.video_format,
+                    quality=quality,
+                    fps=spec.fps,
+                    reencode_video=False,
+                    on_progress=on_progress,
+                    cancellation=cancellation,
+                )
+        except ConversionCancelled:
+            raise
+        except FFmpegError as exc:
+            raise URLImportError(f'ปรับเสียงพอดแคสต์ไม่สำเร็จ: {exc}') from exc
+        finalize_output(temporary, completed)
+    finally:
+        try:
+            cleanup_temporary_output(temporary, completed)
+        except (OSError, ValueError):
+            pass
+
+
 def import_url(
     spec: ImportSpec,
     on_progress: Callable[[float], None],
@@ -828,10 +891,11 @@ def import_url(
         raise URLImportError('ไม่พบ yt-dlp กรุณาติดตั้งแล้วเปิด Clipora ใหม่')
     token = cancellation or CancellationToken()
     workspace = create_import_workspace(spec.destination)
+    enhance_wanted = bool(spec.enhance) and spec.mode in {'audio', 'video'}
     try:
         if spec.video_format == 'mov':
             def download_progress(value: float) -> None:
-                on_progress(value * 0.85)
+                on_progress(value * (0.70 if enhance_wanted else 0.85))
 
             completed = _run_import_with_fallback(
                 command_prefix, spec, workspace, download_progress, token, on_detail
@@ -841,7 +905,8 @@ def import_url(
             mov_output = completed.with_suffix('.mov')
 
             def convert_progress(value: float) -> None:
-                on_progress(0.85 + value * 0.15)
+                base = 0.70 if enhance_wanted else 0.85
+                on_progress(base + value * 0.15)
 
             convert_for_after_effects(
                 completed,
@@ -852,10 +917,27 @@ def import_url(
                 fps=spec.fps,
             )
             completed.unlink()
-            return finalize_import_output(mov_output, spec.destination, on_conflict=on_conflict)
-        completed = _run_import_with_fallback(
-            command_prefix, spec, workspace, on_progress, token, on_detail
-        )
+            completed = mov_output
+        elif enhance_wanted:
+            def download_progress(value: float) -> None:
+                on_progress(value * 0.85)
+
+            completed = _run_import_with_fallback(
+                command_prefix, spec, workspace, download_progress, token, on_detail
+            )
+        else:
+            completed = _run_import_with_fallback(
+                command_prefix, spec, workspace, on_progress, token, on_detail
+            )
+        if enhance_wanted:
+            if token.cancelled:
+                raise ConversionCancelled('ยกเลิกงานแล้ว')
+            _run_enhance_post_pass(
+                completed,
+                spec,
+                lambda value: on_progress(0.85 + value * 0.15),
+                token,
+            )
         return finalize_import_output(completed, spec.destination, on_conflict=on_conflict)
     finally:
         cleanup_import_workspace(workspace, spec.destination)

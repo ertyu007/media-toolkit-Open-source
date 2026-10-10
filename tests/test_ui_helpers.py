@@ -1,3 +1,5 @@
+import re
+import tkinter as tk
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -5,6 +7,8 @@ from tempfile import TemporaryDirectory
 
 from clipora.history import HistoryEntry
 from clipora.ui import (
+    CliporaApp,
+    classify_source_text,
     destination_path,
     find_clipora_uninstaller,
     find_history_index,
@@ -99,6 +103,28 @@ class DropRoutingTests(unittest.TestCase):
         self.assertIsNone(route_dropped_paths([]))
 
 
+class SourceClassifyTests(unittest.TestCase):
+    def test_public_url_is_url(self):
+        self.assertEqual(
+            classify_source_text('https://www.youtube.com/watch?v=abc12345678'), 'url')
+
+    def test_existing_file_is_file(self):
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / 'คลิป.mp4'
+            target.write_bytes(b'x')
+            self.assertEqual(classify_source_text(str(target)), 'file')
+            self.assertEqual(classify_source_text(f'"{target}"'), 'file')
+
+    def test_unsure_keeps_mode(self):
+        self.assertIsNone(classify_source_text(''))
+        self.assertIsNone(classify_source_text('   '))
+        self.assertIsNone(classify_source_text('just some text'))
+        self.assertIsNone(classify_source_text('C:\\no\\such\\file.mp4'))
+        self.assertIsNone(classify_source_text('http://127.0.0.1/video.mp4'))
+        with TemporaryDirectory() as directory:
+            self.assertIsNone(classify_source_text(directory))
+
+
 class DebugLineTests(unittest.TestCase):
     def test_formats_timestamp_and_message(self):
         line = format_debug_line(datetime(2026, 9, 28, 20, 5, 9), 'เฟส: กำลังดาวน์โหลด')
@@ -115,6 +141,60 @@ class UninstallerTests(unittest.TestCase):
     def test_missing_uninstaller_returns_none(self):
         with TemporaryDirectory() as directory:
             self.assertIsNone(find_clipora_uninstaller(Path(directory)))
+
+
+class NoEmojiCopyTests(unittest.TestCase):
+    def test_no_color_emoji_in_product_code(self):
+        forbidden = re.compile('[\U0001F000-\U0001FAFF]')
+        offenders = []
+        root = Path(__file__).resolve().parents[1] / 'clipora'
+        for path in sorted(root.rglob('*.py')):
+            for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+                if forbidden.search(line):
+                    offenders.append(f'{path.name}:{number}')
+        self.assertEqual(offenders, [])
+
+
+class UiCallbackTests(unittest.TestCase):
+    def test_post_to_ui_ignores_destroyed_tk_interpreter(self):
+        class DestroyedWindow:
+            @staticmethod
+            def after(*_args):
+                raise tk.TclError('application has been destroyed')
+
+        CliporaApp._post_to_ui(DestroyedWindow(), lambda: None)
+
+
+class StemFriendlyTests(unittest.TestCase):
+    def _make_app(self):
+        try:
+            from clipora.ui import CliporaApp
+
+            app = CliporaApp()
+            app.withdraw()
+            app.update()
+        except Exception as exc:
+            self.skipTest(f'no display: {exc}')
+        self.addCleanup(app._on_close)
+        return app
+
+    def test_empty_stems_selection_fails_validation(self):
+        app = self._make_app()
+        app.mode.set('stems')
+        for var in app.stem_vars.values():
+            var.set(False)
+        app.update()
+        self.assertFalse(app._validate_stems())
+
+    def test_enhance_switch_tracks_vocals_selection(self):
+        app = self._make_app()
+        app.mode.set('stems')
+        app.stem_vars['vocals'].set(True)
+        app.update()
+        self.assertTrue(app.enhance_check._enabled)
+        app.stem_vars['vocals'].set(False)
+        app.update()
+        self.assertFalse(app.enhance_check._enabled)
 
 
 if __name__ == '__main__':

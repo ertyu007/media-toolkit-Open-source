@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -8,7 +9,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from clipora.ffmpeg import CancellationToken, ConversionCancelled
+from clipora.ffmpeg import CancellationToken, ConversionCancelled, probe
+from clipora.tools import find_executable
 from clipora.importer import (
     ImportSpec,
     URLExtractorBroken,
@@ -753,6 +755,130 @@ class ImportWorkspaceTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), b'downloaded')
             self.assertEqual(existing.read_bytes(), b'original')
             self.assertEqual(progress, [1.0])
+            self.assertFalse(any(destination.glob('.clipora-import-*')))
+
+    def test_enhance_leaves_download_command_untouched(self):
+        base = dict(
+            url='https://example.com/video',
+            destination=Path('/tmp'),
+            mode='audio',
+            quality='สูงสุด',
+            audio_format='mp3',
+        )
+        plain = ImportSpec(**base)
+        self.assertFalse(plain.enhance)
+        enhanced = ImportSpec(**{**base, 'enhance': True})
+        workspace = Path('/tmp/ws')
+        self.assertEqual(
+            build_import_command(['yt-dlp'], plain, workspace),
+            build_import_command(['yt-dlp'], enhanced, workspace),
+        )
+
+    @unittest.skipUnless(
+        find_executable('ffmpeg') is not None and find_executable('ffprobe') is not None,
+        'FFmpeg and ffprobe are required',
+    )
+    @patch('clipora.importer._run_import_process')
+    def test_enhanced_url_audio_produces_listenable_output(self, run_process):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+
+            def complete(_command, workspace, on_progress, _cancellation, *_args):
+                result = workspace / 'พอดแคสต์.mp3'
+                creation = subprocess.run(
+                    [
+                        'ffmpeg', '-y', '-loglevel', 'error',
+                        '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2',
+                        str(result),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(creation.returncode, 0, creation.stderr)
+                on_progress(1.0)
+                return result
+
+            run_process.side_effect = complete
+            progress = []
+            target = import_url(
+                ImportSpec(
+                    url='https://example.com/podcast',
+                    destination=destination,
+                    mode='audio',
+                    quality='สูงสุด',
+                    audio_format='mp3',
+                    enhance=True,
+                ),
+                progress.append,
+                CancellationToken(),
+                tool_command=['yt-dlp'],
+            )
+
+            result = probe(target)
+            self.assertTrue(result.has_audio)
+            self.assertFalse(result.has_video)
+            self.assertGreater(target.stat().st_size, 0)
+            self.assertTrue(progress)
+            self.assertEqual(progress[-1], 1.0)
+            self.assertTrue(any(value < 1.0 for value in progress))
+            self.assertFalse(any(destination.glob('.clipora-import-*')))
+
+    @unittest.skipUnless(
+        find_executable('ffmpeg') is not None and find_executable('ffprobe') is not None,
+        'FFmpeg and ffprobe are required',
+    )
+    @patch('clipora.importer._run_import_process')
+    def test_enhanced_url_video_with_gaps_cuts_and_keeps_av(self, run_process):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+
+            def complete(_command, workspace, on_progress, _cancellation, *_args):
+                result = workspace / 'คลิปมีเงียบ.mp4'
+                creation = subprocess.run(
+                    [
+                        'ffmpeg', '-y', '-loglevel', 'error',
+                        '-f', 'lavfi', '-i', 'color=c=black:s=160x90:d=3:r=30',
+                        '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1',
+                        '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono:d=1',
+                        '-f', 'lavfi', '-i', 'sine=frequency=880:duration=1',
+                        '-filter_complex',
+                        '[1:a][2:a][3:a]concat=n=3:v=0:a=1[a]',
+                        '-map', '0:v', '-map', '[a]',
+                        '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+                        '-c:a', 'aac', '-shortest',
+                        str(result),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(creation.returncode, 0, creation.stderr)
+                on_progress(1.0)
+                return result
+
+            run_process.side_effect = complete
+            progress = []
+            target = import_url(
+                ImportSpec(
+                    url='https://example.com/video',
+                    destination=destination,
+                    mode='video',
+                    quality='สูงสุด',
+                    audio_format='mp3',
+                    enhance=True,
+                ),
+                progress.append,
+                CancellationToken(),
+                tool_command=['yt-dlp'],
+            )
+
+            result = probe(target)
+            self.assertTrue(result.has_video)
+            self.assertTrue(result.has_audio)
+            self.assertIsNotNone(result.duration)
+            self.assertAlmostEqual(result.duration, 2.5, delta=0.4)
+            self.assertEqual(progress[-1], 1.0)
             self.assertFalse(any(destination.glob('.clipora-import-*')))
 
 
