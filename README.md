@@ -1,3 +1,5 @@
+<img src="assets/header.svg" alt="ertyu007" width="100%" />
+
 # Clipora
 
 [![Release](https://img.shields.io/github/v/release/ertyu007/media-toolkit-Open-source)](https://github.com/ertyu007/media-toolkit-Open-source/releases) [![Downloads](https://img.shields.io/github/downloads/ertyu007/media-toolkit-Open-source/total)](https://github.com/ertyu007/media-toolkit-Open-source/releases) [![License](https://img.shields.io/github/license/ertyu007/media-toolkit-Open-source)](LICENSE)
