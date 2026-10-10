@@ -2,6 +2,14 @@
 
 อัปเดตล่าสุด: 2026-10-02
 
+## งานวันนี้ (2026-10-10) — อัปเดต Clipora ในแอป
+
+- แทนปุ่มเปิดเว็บด้วยดาวน์โหลด installer จาก GitHub Release ในแอป แสดงขนาด/เปอร์เซ็นต์/ETA และตรวจพื้นที่ว่างก่อนเริ่ม
+- ดาวน์โหลดเฉพาะ installer ที่ตรง version/tag, ตรวจ HTTPS + SHA-256, ใช้ไฟล์ชั่วคราวและ atomic replace; ยกเลิกแล้วลบเฉพาะ partial ของ updater
+- เมื่อดาวน์โหลดสำเร็จ ผู้ใช้กดรีสตาร์ท จากนั้น helper แยก process รอแอปปิด ขอ UAC เพื่อรัน Inno Setup แบบ silent แล้วเปิด Clipora อีกครั้ง
+- เพิ่ม PyInstaller one-file helper ลง Windows package; ต้อง smoke test installer upgrade จริงบนเครื่อง Windows ก่อนปล่อยเวอร์ชันที่มีฟีเจอร์นี้
+- Bump PC version เป็น 0.7.0 และ sync version source, Windows metadata, README/tag example; เพิ่มเทสต์ตรวจ README tag ให้ตรงเวอร์ชัน
+
 ## ทำวันนี้ (2026-10-02) — เก็บจุดขัดใจผู้ใช้ (ยังไม่ bump version)
 
 - **บั๊ก**: เอา Stem ออกหมดแล้วกดเริ่ม — งานเงียบไม่ทำอะไรเลย → toast เตือน `เลือก Stem อย่างน้อย 1 รายการ`

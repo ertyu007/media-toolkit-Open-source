@@ -71,12 +71,16 @@ from .tools import missing_required_tools
 from .app_update import (
     AppReleaseInfo,
     AppUpdateError,
+    application_update_directory,
+    check_update_disk_space,
+    download_app_update,
     fetch_latest_app_release,
     get_skipped_version,
     is_app_update_available,
     load_settings,
     save_settings,
 )
+from .update_helper import launch_update_helper
 from .ytdlp_update import (
     YtDlpUpdateError,
     installed_ytdlp_version,
@@ -89,6 +93,9 @@ from .ui_components.dialogs import (
     KEEP,
     OVERWRITE,
     AppUpdateDialog,
+    ACTION_CANCEL_UPDATE,
+    ACTION_RESTART_UPDATE,
+    ACTION_UPDATE,
     ErrorDialog,
     OverwriteDialog,
     sanitize_error_message,
@@ -411,6 +418,10 @@ class CliporaApp(tk.Tk):
         self._setup_dialog: ToolSetupDialog | None = None
         self._ytdlp_checking = False
         self._app_update_checking = False
+        self._active_app_update_dialog: AppUpdateDialog | None = None
+        self._app_update_cancel: threading.Event | None = None
+        self._app_update_installer: Path | None = None
+        self._app_update_release: AppReleaseInfo | None = None
         self._recent_destinations: list[str] = []
         self._result_targets: list[Path] = []
         self._chime_var = tk.BooleanVar(value=defaults['chime_enabled'])
@@ -1425,7 +1436,7 @@ class CliporaApp(tk.Tk):
             self._check_app_update(auto=True)
 
     def _check_app_update(self, auto: bool = False) -> None:
-        if self._app_update_checking:
+        if self._app_update_checking or self._app_update_cancel is not None:
             return
         if self._cancellation is not None:
             if not auto:
@@ -1473,7 +1484,129 @@ class CliporaApp(tk.Tk):
             if skipped == release_info.version:
                 return
 
-        AppUpdateDialog(self, release_info)
+        self._app_update_release = release_info
+        self._active_app_update_dialog = AppUpdateDialog(
+            self,
+            release_info,
+            on_action=self._on_app_update_action,
+        )
+
+    def _on_app_update_action(self, action: str) -> bool | None:
+        dialog = self._active_app_update_dialog
+        if action == ACTION_UPDATE:
+            if dialog is None or self._app_update_release is None:
+                return False
+            if not getattr(sys, 'frozen', False):
+                dialog.download_failed('อัปเดตในแอปใช้ได้กับ Clipora ที่ติดตั้งแล้วเท่านั้น')
+                return False
+            try:
+                download_required, temp_required = check_update_disk_space(
+                    int(self._app_update_release.download_size or 0),
+                )
+            except (AppUpdateError, OSError) as exc:
+                dialog.download_failed(str(exc))
+                return False
+            dialog.start_download(
+                'กำลังเช็กพื้นที่ว่าง… '
+                f'ต้องมีพื้นที่ดาวน์โหลด {format_file_size(download_required)} '
+                f'และพื้นที่ติดตั้งชั่วคราว {format_file_size(temp_required)}'
+            )
+            cancellation = threading.Event()
+            self._app_update_cancel = cancellation
+            threading.Thread(
+                target=self._app_update_download_worker,
+                args=(dialog, self._app_update_release, cancellation),
+                daemon=True,
+            ).start()
+            return None
+        if action == ACTION_CANCEL_UPDATE:
+            if self._app_update_cancel is not None:
+                self._app_update_cancel.set()
+            return None
+        if action == ACTION_RESTART_UPDATE:
+            if self._app_update_installer is None:
+                if dialog is not None:
+                    dialog.download_failed('ไม่พบไฟล์อัปเดตที่ตรวจสอบแล้ว')
+                return False
+            try:
+                launch_update_helper(self._app_update_installer)
+            except (OSError, RuntimeError) as exc:
+                if dialog is not None:
+                    dialog.restart_failed(str(exc))
+                return False
+            self._closing = True
+            self._cancel_startup_callbacks()
+            self.after(50, self._on_close)
+            return True
+        if action == 'remind_later' or action == 'skip_version':
+            if self._app_update_cancel is not None:
+                self._app_update_cancel.set()
+            self._active_app_update_dialog = None
+            return None
+        return None
+
+    def _app_update_download_worker(
+        self,
+        dialog: AppUpdateDialog,
+        release: AppReleaseInfo,
+        cancellation: threading.Event,
+    ) -> None:
+        try:
+            installer = download_app_update(
+                release,
+                on_progress=lambda downloaded, total, elapsed: self._post_to_ui(
+                    self._app_update_download_progress,
+                    dialog,
+                    downloaded,
+                    total,
+                    elapsed,
+                ),
+                cancel_check=cancellation.is_set,
+                update_dir=application_update_directory(),
+            )
+        except (AppUpdateError, OSError) as exc:
+            detail = str(exc)
+            self._post_to_ui(
+                self._app_update_download_finished,
+                dialog,
+                None,
+                detail,
+                'ยกเลิกการอัปเดต' in detail,
+            )
+        else:
+            self._post_to_ui(self._app_update_download_finished, dialog, installer, '', False)
+
+    @staticmethod
+    def _app_update_download_progress(
+        dialog: AppUpdateDialog,
+        downloaded: int,
+        total: int,
+        elapsed: float,
+    ) -> None:
+        try:
+            if dialog.winfo_exists():
+                dialog.update_download_progress(downloaded, total, elapsed)
+        except tk.TclError:
+            pass
+
+    def _app_update_download_finished(
+        self,
+        dialog: AppUpdateDialog,
+        installer: Path | None,
+        error: str,
+        cancelled: bool,
+    ) -> None:
+        self._app_update_cancel = None
+        try:
+            if not dialog.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        if installer is not None:
+            self._app_update_installer = installer
+            dialog.download_ready()
+        elif error:
+            dialog.download_failed(error, cancelled=cancelled)
 
     def _open_disclaimer(self) -> None:
         DisclaimerDialog(self)
@@ -2976,6 +3109,8 @@ class CliporaApp(tk.Tk):
         threading.Thread(target=cancellation.cancel, daemon=True).start()
 
     def _on_close(self) -> None:
+        if self._app_update_cancel is not None:
+            self._app_update_cancel.set()
         try:
             RoundedCombobox.close_open()
         except (tk.TclError, AttributeError):

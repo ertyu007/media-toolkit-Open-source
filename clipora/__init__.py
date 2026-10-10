@@ -1,4 +1,4 @@
 '''Clipora desktop media toolkit.'''
 
-__version__ = '0.6.5'
+__version__ = '0.7.0'
 __creator__ = 'ertyu007'

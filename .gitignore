@@ -5,6 +5,7 @@ build/
 dist/
 *.spec
 !android/buildozer.spec
+!packaging/clipora_updater.spec
 .idea/
 .vscode/
 .pytest_cache/

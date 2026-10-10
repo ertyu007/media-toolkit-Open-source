@@ -21,11 +21,13 @@ class PackagingConfigurationTests(unittest.TestCase):
         version_info = (PROJECT_ROOT / 'packaging' / 'version_info.txt').read_text(
             encoding='utf-8'
         )
+        readme = (PROJECT_ROOT / 'README.md').read_text(encoding='utf-8')
         version_tuple = ', '.join(__version__.split('.')) + ', 0'
 
         self.assertIn(f'#define AppVersion "{__version__}"', inno)
         self.assertIn(f'filevers=({version_tuple})', version_info)
         self.assertIn(f"StringStruct(u'ProductVersion', u'{__version__}')", version_info)
+        self.assertIn(f'pc-v{__version__}', readme)
 
     def test_dependency_manifest_uses_pinned_https_assets(self):
         destinations = []
@@ -42,9 +44,11 @@ class PackagingConfigurationTests(unittest.TestCase):
         required = (
             '.github/workflows/release.yml',
             'packaging/clipora.spec',
+            'packaging/clipora_updater.spec',
             'packaging/clipora.iss',
             'packaging/clipora.manifest',
             'scripts/build_windows.ps1',
+            'scripts/clipora_updater.py',
             'scripts/sign_windows.ps1',
             'scripts/stage_bundled_tools.py',
             'docs/CODE_SIGNING.md',
@@ -53,6 +57,10 @@ class PackagingConfigurationTests(unittest.TestCase):
         for relative in required:
             with self.subTest(path=relative):
                 self.assertTrue((PROJECT_ROOT / relative).is_file())
+        workflow = (PROJECT_ROOT / '.github' / 'workflows' / 'release.yml').read_text(encoding='utf-8')
+        self.assertIn('packaging/clipora_updater.spec', workflow)
+        build_script = (PROJECT_ROOT / 'scripts' / 'build_windows.ps1').read_text(encoding='utf-8')
+        self.assertIn('packaging/clipora_updater.spec', build_script)
 
     def test_application_manifest_is_standard(self):
         manifest = (PROJECT_ROOT / 'packaging' / 'clipora.manifest').read_text(encoding='utf-8')

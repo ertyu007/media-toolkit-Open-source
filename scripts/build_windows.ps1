@@ -18,6 +18,11 @@ if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller failed with exit code $LASTEXITCODE"
 }
 
+python -m PyInstaller --noconfirm --clean --distpath dist\Clipora --workpath build\CliporaUpdater packaging/clipora_updater.spec
+if ($LASTEXITCODE -ne 0) {
+    throw "Clipora updater build failed with exit code $LASTEXITCODE"
+}
+
 if (-not $SkipTools) {
     Write-Host 'Staging bundled tools (FFmpeg, yt-dlp, Deno) into the installer...'
     python scripts/stage_bundled_tools.py --dest (Join-Path $projectRoot 'dist\Clipora\tools')
@@ -32,6 +37,14 @@ if (-not $SkipTools) {
     -Url 'https://github.com/ertyu007/media-toolkit-Open-source'
 if ($LASTEXITCODE -ne 0) {
     throw "Signing Clipora.exe failed with exit code $LASTEXITCODE"
+}
+
+& $PSScriptRoot\sign_windows.ps1 `
+    -Path (Join-Path $projectRoot 'dist\Clipora\CliporaUpdater.exe') `
+    -Description 'Clipora update helper' `
+    -Url 'https://github.com/ertyu007/media-toolkit-Open-source'
+if ($LASTEXITCODE -ne 0) {
+    throw "Signing CliporaUpdater.exe failed with exit code $LASTEXITCODE"
 }
 
 $isccCandidates = @(

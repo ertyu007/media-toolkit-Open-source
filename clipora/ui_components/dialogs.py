@@ -25,6 +25,8 @@ CANCEL = 'cancel'
 ACTION_UPDATE = 'update'
 ACTION_REMIND_LATER = 'remind_later'
 ACTION_SKIP_VERSION = 'skip_version'
+ACTION_CANCEL_UPDATE = 'cancel_update'
+ACTION_RESTART_UPDATE = 'restart_update'
 
 MAX_ERROR_CHARS = 1500
 _LOCAL_PATH_PLACEHOLDER = '<เส้นทางในเครื่อง>'
@@ -276,17 +278,19 @@ class AppUpdateDialog(tk.Toplevel):
         self,
         parent: tk.Misc,
         release_info: Any,
-        on_action: Callable[[str], None] | None = None,
+        on_action: Callable[[str], bool | None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.result: str | None = None
         self._release_info = release_info
         self._on_action = on_action
+        self._downloading = False
+        self._ready_to_restart = False
         self.title('พบการอัปเดตใหม่')
         self.configure(bg=CARD)
         self.transient(parent)
-        self.geometry('560x520')
-        self.minsize(480, 420)
+        self.geometry('560x560')
+        self.minsize(480, 460)
         self.protocol('WM_DELETE_WINDOW', lambda: self._close(ACTION_REMIND_LATER))
 
         ui_font = getattr(parent, 'ui_font', FONT_FAMILY)
@@ -351,51 +355,158 @@ class AppUpdateDialog(tk.Toplevel):
         notes_text.insert('1.0', notes_content)
         notes_text.configure(state='disabled')
 
+        from ..app_update import AppUpdateError, update_space_requirements
+
+        download_size = getattr(release_info, 'download_size', None)
+        status_text = 'ตรวจสอบพื้นที่ว่างก่อนดาวน์โหลด'
+        space_valid = False
+        if isinstance(download_size, int) and download_size > 0:
+            try:
+                _cache_required, temp_required = update_space_requirements(download_size)
+            except AppUpdateError:
+                status_text = 'ขนาดไฟล์อัปเดตเกินขีดจำกัดที่รองรับ'
+            else:
+                space_valid = True
+                status_text = (
+                    f'ขนาดดาวน์โหลด {format_file_size(download_size)} · '
+                    f'แนะนำพื้นที่ว่างชั่วคราวประมาณ {format_file_size(temp_required)}'
+                )
+        self.status_var = tk.StringVar(value=status_text)
+        ttk.Label(
+            shell,
+            textvariable=self.status_var,
+            style='CardMuted.TLabel',
+            font=(ui_font, 9),
+        ).grid(row=2, column=0, sticky='w', pady=(0, 6))
+        self.progress = ttk.Progressbar(
+            shell,
+            orient='horizontal',
+            mode='determinate',
+            maximum=100,
+        )
+        self.progress.grid(row=3, column=0, sticky='ew', pady=(0, 14))
+
         # Buttons row
         buttons = ttk.Frame(shell, style='Card.TFrame')
-        buttons.grid(row=2, column=0, sticky='ew')
+        buttons.grid(row=4, column=0, sticky='ew')
         buttons.columnconfigure(0, weight=1)
 
         btn_box = ttk.Frame(buttons, style='Card.TFrame')
         btn_box.pack(side='right')
 
-        update_btn = ttk.Button(
+        self.update_btn = ttk.Button(
             btn_box,
             text='อัปเดตทันที',
             style='DialogAccent.TButton',
             command=self._on_update,
         )
-        update_btn.pack(side='left', padx=(0, 8))
+        self.update_btn.pack(side='left', padx=(0, 8))
 
-        remind_btn = ttk.Button(
+        self.remind_btn = ttk.Button(
             btn_box,
             text='เตือนฉันภายหลัง',
             style='Secondary.TButton',
             command=lambda: self._close(ACTION_REMIND_LATER),
         )
-        remind_btn.pack(side='left', padx=(0, 8))
+        self.remind_btn.pack(side='left', padx=(0, 8))
 
-        skip_btn = ttk.Button(
+        self.skip_btn = ttk.Button(
             btn_box,
             text='ข้ามเวอร์ชันนี้',
             style='Secondary.TButton',
             command=self._on_skip,
         )
-        skip_btn.pack(side='left')
+        self.skip_btn.pack(side='left')
+        if (
+            not getattr(release_info, 'download_url', None)
+            or not getattr(release_info, 'checksum_url', None)
+            or not space_valid
+        ):
+            self.update_btn.state(['disabled'])
+            self.status_var.set('Release นี้ไม่มีข้อมูล installer/checksum สำหรับอัปเดตในแอป')
 
         self._center_on(parent)
         fade_in_window(self, self.after)
         self.grab_set()
         self.bind('<Escape>', lambda _e: self._close(ACTION_REMIND_LATER))
-        update_btn.focus_set()
-        self.wait_window(self)
+        self.update_btn.focus_set()
 
     def _on_update(self) -> None:
-        import webbrowser
-        target_url = getattr(self._release_info, 'download_url', None) or getattr(self._release_info, 'html_url', None)
-        if target_url:
-            webbrowser.open(str(target_url))
-        self._close(ACTION_UPDATE)
+        if self._on_action is None or self._downloading or self._ready_to_restart:
+            return
+        self._downloading = True
+        self.update_btn.state(['disabled'])
+        self.remind_btn.configure(text='ยกเลิกดาวน์โหลด', command=self._cancel_download)
+        self.skip_btn.state(['disabled'])
+        self.status_var.set('กำลังเตรียมดาวน์โหลด…')
+        self._on_action(ACTION_UPDATE)
+
+    def start_download(self, status: str | None = None) -> None:
+        if status:
+            self.status_var.set(status)
+
+    def update_download_progress(self, downloaded: int, total: int, elapsed_seconds: float) -> None:
+        if not self.winfo_exists():
+            return
+        percent = min(100.0, downloaded * 100 / total) if total > 0 else 0.0
+        self.progress['value'] = percent
+        speed = downloaded / elapsed_seconds if elapsed_seconds > 0 else 0.0
+        remaining = max(0.0, (total - downloaded) / speed) if speed > 0 else 0.0
+        self.status_var.set(
+            f'กำลังดาวน์โหลด {percent:.0f}% · {format_file_size(downloaded)} / '
+            f'{format_file_size(total)} · เหลือประมาณ {self._format_eta(remaining)}'
+        )
+
+    def download_ready(self) -> None:
+        if not self.winfo_exists():
+            return
+        self._downloading = False
+        self._ready_to_restart = True
+        self.progress['value'] = 100
+        self.status_var.set('ดาวน์โหลดและตรวจสอบ SHA-256 เรียบร้อย พร้อมติดตั้ง')
+        self.update_btn.configure(text='รีสตาร์ทเพื่ออัปเดต', command=self._on_restart)
+        self.update_btn.state(['!disabled'])
+        self.remind_btn.configure(text='ภายหลัง', command=lambda: self._close(ACTION_REMIND_LATER))
+        self.remind_btn.state(['!disabled'])
+
+    def download_failed(self, message: str, cancelled: bool = False) -> None:
+        if not self.winfo_exists():
+            return
+        self._downloading = False
+        self._ready_to_restart = False
+        self.progress['value'] = 0
+        self.status_var.set(message)
+        self.update_btn.configure(text='ลองดาวน์โหลดอีกครั้ง', command=self._on_update)
+        self.update_btn.state(['!disabled'])
+        remind_text = 'ปิด' if cancelled else 'เตือนฉันภายหลัง'
+        self.remind_btn.configure(text=remind_text, command=lambda: self._close(ACTION_REMIND_LATER))
+        self.remind_btn.state(['!disabled'])
+        self.skip_btn.state(['!disabled'])
+
+    def restart_failed(self, message: str) -> None:
+        if not self.winfo_exists():
+            return
+        self.status_var.set(message)
+        self.update_btn.configure(text='ลองรีสตาร์ทอีกครั้ง', command=self._on_restart)
+        self.update_btn.state(['!disabled'])
+
+    def _cancel_download(self) -> None:
+        if self._on_action is not None:
+            self.remind_btn.state(['disabled'])
+            self.status_var.set('กำลังยกเลิกการดาวน์โหลด…')
+            self._on_action(ACTION_CANCEL_UPDATE)
+
+    def _on_restart(self) -> None:
+        if self._on_action is not None:
+            accepted = self._on_action(ACTION_RESTART_UPDATE)
+            if accepted is not False:
+                self._close(ACTION_RESTART_UPDATE, notify=False)
+
+    @staticmethod
+    def _format_eta(seconds: float) -> str:
+        total_seconds = max(0, int(seconds))
+        minutes, remainder = divmod(total_seconds, 60)
+        return f'{minutes} นาที {remainder} วินาที' if minutes else f'{remainder} วินาที'
 
     def _on_skip(self) -> None:
         from ..app_update import set_skipped_version
@@ -404,9 +515,9 @@ class AppUpdateDialog(tk.Toplevel):
             set_skipped_version(str(version))
         self._close(ACTION_SKIP_VERSION)
 
-    def _close(self, result: str) -> None:
+    def _close(self, result: str, notify: bool = True) -> None:
         self.result = result
-        if self._on_action is not None:
+        if notify and self._on_action is not None:
             self._on_action(result)
         self.destroy()
 
