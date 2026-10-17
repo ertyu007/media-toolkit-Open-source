@@ -244,6 +244,45 @@ def _body() -> ScrollView:
     return scroll, inner
 
 
+def _fill_mode_options(
+    container: BoxLayout,
+    mode: Spinner,
+    audio_format: Spinner,
+    quality: Spinner,
+    fps: Spinner,
+) -> None:
+    container.clear_widgets()
+    if mode.text == 'วิดีโอ':
+        container.add_widget(_lbl('คุณภาพวิดีโอ'))
+        container.add_widget(quality)
+        container.add_widget(_lbl('เฟรมเรต'))
+        container.add_widget(fps)
+    else:
+        container.add_widget(_lbl('รูปแบบเสียง'))
+        container.add_widget(audio_format)
+
+
+def _mode_options(
+    mode: Spinner,
+    audio_format: Spinner,
+    quality: Spinner,
+    fps: Spinner,
+) -> BoxLayout:
+    container = BoxLayout(
+        orientation='vertical',
+        size_hint_y=None,
+        spacing=dp(8),
+    )
+    container.bind(minimum_height=container.setter('height'))
+    mode.bind(
+        text=lambda *_: _fill_mode_options(
+            container, mode, audio_format, quality, fps,
+        ),
+    )
+    _fill_mode_options(container, mode, audio_format, quality, fps)
+    return container
+
+
 def _tabbar(current: str) -> BoxLayout:
     bar = BoxLayout(size_hint_y=None, height=dp(52), padding=dp(8), spacing=dp(8))
     for name, label in (
@@ -320,12 +359,10 @@ class ConvertScreen(Screen):
         body.add_widget(_section('ตั้งค่า'))
         body.add_widget(_lbl('โหมด'))
         body.add_widget(self.mode)
-        body.add_widget(_lbl('รูปแบบเสียง'))
-        body.add_widget(self.audio_format)
-        body.add_widget(_lbl('คุณภาพวิดีโอ'))
-        body.add_widget(self.quality)
-        body.add_widget(_lbl('เฟรมเรต'))
-        body.add_widget(self.fps)
+        self.mode_options = _mode_options(
+            self.mode, self.audio_format, self.quality, self.fps,
+        )
+        body.add_widget(self.mode_options)
         body.add_widget(_section('ตัดช่วง (เว้นว่าง = ไม่ตัด)'))
         body.add_widget(self.start)
         body.add_widget(self.length)
@@ -480,12 +517,17 @@ class DownloadScreen(Screen):
         body.add_widget(_section('ตั้งค่า'))
         body.add_widget(_lbl('โหมด'))
         body.add_widget(self.mode)
-        body.add_widget(_lbl('รูปแบบเสียง'))
-        body.add_widget(self.audio_format)
-        body.add_widget(_lbl('คุณภาพวิดีโอ'))
-        body.add_widget(self.quality)
-        body.add_widget(_lbl('เฟรมเรต'))
-        body.add_widget(self.fps)
+        self.mode_options = _mode_options(
+            self.mode, self.audio_format, self.quality, self.fps,
+        )
+        body.add_widget(self.mode_options)
+        body.add_widget(_section('ตัดช่วง (เว้นว่าง = ไม่ตัด)'))
+        self.trim_start = _field('')
+        self.trim_duration = _field('')
+        self.trim_start.hint_text = 'เริ่ม (วินาที หรือ MM:SS)'
+        self.trim_duration.hint_text = 'ระยะเวลา (วินาที หรือ MM:SS)'
+        body.add_widget(self.trim_start)
+        body.add_widget(self.trim_duration)
         body.add_widget(self.bar)
         body.add_widget(self.status)
         body.add_widget(self.start_button)
@@ -499,6 +541,8 @@ class DownloadScreen(Screen):
             return
         try:
             url = ytdlp.validate_url(self.url.text)
+            trim_start = ffmpeg.parse_trim_seconds(self.trim_start.text)
+            trim_duration = ffmpeg.parse_trim_seconds(self.trim_duration.text)
         except ValueError as exc:
             self.status.text = str(exc)
             self.status.color = theme.color('ERROR')
@@ -513,6 +557,8 @@ class DownloadScreen(Screen):
                 quality=self.quality.text,
                 audio_format=self.audio_format.text,
                 fps=self.fps.text,
+                trim_start=trim_start,
+                trim_duration=trim_duration,
             ),
         )
         self._last_url = url
@@ -553,6 +599,7 @@ class DownloadScreen(Screen):
 class HistoryScreen(Screen):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
+        self._show_trash = False
         root = BoxLayout(orientation='vertical')
         scroll, self.body = _body()
         root.add_widget(scroll)
@@ -567,18 +614,49 @@ class HistoryScreen(Screen):
 
     def _refresh(self) -> None:
         self.body.clear_widgets()
-        entries = history.load_history()
+        views = BoxLayout(
+            size_hint_y=None,
+            height=dp(40),
+            spacing=dp(8),
+        )
+        for show_trash, title in ((False, 'ประวัติ'), (True, 'ถังขยะ')):
+            button = _button(title, accent=self._show_trash == show_trash)
+            button.height = dp(40)
+            button.bind(
+                on_release=lambda *_args, value=show_trash: self._change_view(value),
+            )
+            views.add_widget(button)
+        self.body.add_widget(views)
+
+        entries = history.load_trash() if self._show_trash else history.load_history()
         if not entries:
-            self.body.add_widget(_lbl('ยังไม่มีงานที่เสร็จ — ผลงานจะมาอยู่ตรงนี้'))
+            message = 'ถังขยะว่าง' if self._show_trash else 'ยังไม่มีงานที่เสร็จ'
+            self.body.add_widget(_lbl(message))
             return
         for entry in entries[:100]:
-            self.body.add_widget(self._row(entry))
-        clear = _button('ล้างประวัติ')
-        clear.bind(on_release=lambda *_: (history.clear_history(), self._refresh()))
-        self.body.add_widget(clear)
+            self.body.add_widget(self._row(entry, self._show_trash))
+        if not self._show_trash:
+            clear = _button('ย้ายประวัติทั้งหมดไปถังขยะ')
+            clear.bind(on_release=lambda *_: (history.trash_all(), self._refresh()))
+            self.body.add_widget(clear)
 
-    @staticmethod
-    def _row(entry: history.HistoryEntry) -> Label:
+    def _change_view(self, show_trash: bool) -> None:
+        self._show_trash = show_trash
+        self._refresh()
+
+    def _trash_entry(self, entry_id: str) -> None:
+        history.trash_entry(entry_id)
+        self._refresh()
+
+    def _restore_entry(self, entry_id: str) -> None:
+        history.restore_entry(entry_id)
+        self._refresh()
+
+    def _remove_entry(self, entry_id: str) -> None:
+        history.remove_entry(entry_id)
+        self._refresh()
+
+    def _row(self, entry: history.HistoryEntry, trashed: bool) -> BoxLayout:
         kind = history.KIND_LABELS.get(entry.kind, entry.kind)
         when = time.strftime('%d/%m %H:%M', time.localtime(entry.finished_at))
         label = Label(
@@ -588,10 +666,41 @@ class HistoryScreen(Screen):
             halign='left',
             valign='middle',
             color=theme.color('TEXT'),
-            font_size=dp(12),
+            font_size=dp(11),
+            shorten=True,
+            shorten_from='left',
         )
         label.bind(size=lambda widget, value: setattr(widget, 'text_size', value))
-        return label
+        row = BoxLayout(size_hint_y=None, height=dp(64), spacing=dp(6))
+        row.add_widget(label)
+
+        if trashed:
+            restore = _button('กู้คืน')
+            restore.size_hint_x = None
+            restore.width = dp(72)
+            restore.height = dp(40)
+            restore.bind(
+                on_release=lambda *_: self._restore_entry(entry.id),
+            )
+            remove = _button('ลบรายการ')
+            remove.size_hint_x = None
+            remove.width = dp(80)
+            remove.height = dp(40)
+            remove.bind(
+                on_release=lambda *_: self._remove_entry(entry.id),
+            )
+            row.add_widget(restore)
+            row.add_widget(remove)
+        else:
+            trash = _button('ถังขยะ')
+            trash.size_hint_x = None
+            trash.width = dp(72)
+            trash.height = dp(40)
+            trash.bind(
+                on_release=lambda *_: self._trash_entry(entry.id),
+            )
+            row.add_widget(trash)
+        return row
 
 
 def _lbl(text: str) -> Label:

@@ -17,7 +17,9 @@ rewrite — see [Code layout](#code-layout).
 | Trim by start + length (`90`, `MM:SS`, `HH:MM:SS`) | yes |
 | Batch convert (multi-select) | yes |
 | Cancel a running job | yes |
+| Finished-job history with recoverable trash | yes |
 | Public single-item URL download via yt-dlp (audio / video) | yes |
+| Trim URL downloads by start + length | yes |
 | Stem separation (Demucs) | **no** — no PyTorch wheel for Android |
 | ProRes / After Effects export | **no** — dropped from the port |
 | Batch URL download, playlists | **no** — PC-only for now |
@@ -74,12 +76,13 @@ instead.
 
 ```
 android/
-├── main.py             # Kivy UI: convert screen + download screen
+├── main.py             # Kivy UI: convert, download, history screens
 ├── theme.py            # colours, ported from clipora/ui_components/theme.py
 ├── buildozer.spec      # APK config
 ├── core/               # ported, no Kivy imports — unit tested on desktop
 │   ├── tools.py        # finds ffmpeg / yt-dlp inside the APK
 │   ├── ffmpeg.py       # port of clipora/ffmpeg.py
+│   ├── history.py      # persistent finished-job history
 │   └── ytdlp.py        # port of the URL half of clipora/importer.py
 └── icon.png
 ```
