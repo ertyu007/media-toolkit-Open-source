@@ -1870,7 +1870,7 @@ class CliporaApp(tk.Tk):
         """Show/hide the details box, toggle and trim row for the current mode."""
         is_url = self.input_kind.get() == 'url'
         mode = self.mode.get()
-        show_trim = not is_url and mode in ('audio', 'video')
+        show_trim = mode in ('audio', 'video') or (is_url and mode == 'stems')
         if show_trim and self._trim_options is not None:
             self._trim_options.grid()
         elif self._trim_options is not None:
@@ -2675,6 +2675,12 @@ class CliporaApp(tk.Tk):
         except ValueError as exc:
             self._source_error.show(str(exc))
             return
+        try:
+            trim_start = parse_trim_seconds(self.start_time_entry.get())
+            trim_duration = parse_trim_seconds(self.duration_entry.get())
+        except ValueError as exc:
+            messagebox.showwarning('ตัดช่วงเวลาไม่ถูกต้อง', str(exc), parent=self)
+            return
         if not self.authorized.get():
             messagebox.showwarning(
                 'กรุณายืนยันสิทธิ์',
@@ -2700,6 +2706,8 @@ class CliporaApp(tk.Tk):
             mode='audio',
             quality=self.quality.get(),
             audio_format=self._audio_format_value(),
+            trim_start=trim_start,
+            trim_duration=trim_duration,
         )
         self._add_to_destination_history(str(destination))
         cancellation = CancellationToken()
@@ -2757,6 +2765,12 @@ class CliporaApp(tk.Tk):
         except ValueError as exc:
             self._source_error.show(str(exc))
             return
+        try:
+            trim_start = parse_trim_seconds(self.start_time_entry.get())
+            trim_duration = parse_trim_seconds(self.duration_entry.get())
+        except ValueError as exc:
+            messagebox.showwarning('ตัดช่วงเวลาไม่ถูกต้อง', str(exc), parent=self)
+            return
         if not self.authorized.get():
             messagebox.showwarning(
                 'กรุณายืนยันสิทธิ์',
@@ -2780,6 +2794,8 @@ class CliporaApp(tk.Tk):
             video_format=self._video_format_value(),
             fps=self._fps_value(),
             enhance=bool(self.enhance_audio.get()),
+            trim_start=trim_start,
+            trim_duration=trim_duration,
         )
         self._add_to_destination_history(str(destination))
         cancellation = CancellationToken()

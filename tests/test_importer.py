@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -112,6 +113,32 @@ class ImportCommandTests(unittest.TestCase):
         self.assertEqual(command[-1], 'https://example.com/watch/123')
         for forbidden in ('--cookies', '--cookies-from-browser', '--username', '--password', '--netrc'):
             self.assertNotIn(forbidden, command)
+
+    def test_trim_downloads_only_requested_section(self):
+        spec = replace(self.make_spec(), trim_start=12.5, trim_duration=8)
+        command = build_import_command(['yt-dlp'], spec, Path('temporary'))
+        self.assertEqual(command[command.index('--download-sections') + 1], '*12.5-20.5')
+
+    def test_trim_defaults_start_to_zero_and_end_to_infinity(self):
+        cases = (
+            (replace(self.make_spec(), trim_duration=8), '*0-8'),
+            (replace(self.make_spec(), trim_start=12), '*12-inf'),
+        )
+        for spec, expected in cases:
+            with self.subTest(expected=expected):
+                command = build_import_command(['yt-dlp'], spec, Path('temporary'))
+                self.assertEqual(command[command.index('--download-sections') + 1], expected)
+
+    def test_invalid_trim_values_are_rejected(self):
+        cases = (
+            replace(self.make_spec(), trim_start=-1),
+            replace(self.make_spec(), trim_start=float('nan')),
+            replace(self.make_spec(), trim_duration=0),
+            replace(self.make_spec(), trim_duration=float('inf')),
+        )
+        for spec in cases:
+            with self.subTest(spec=spec), self.assertRaises(ValueError):
+                build_import_command(['yt-dlp'], spec, Path('temporary'))
 
     def test_video_quality_limits_are_explicit(self):
         expected = {

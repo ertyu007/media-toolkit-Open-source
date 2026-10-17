@@ -338,6 +338,24 @@ class ImportCommandParity(unittest.TestCase):
                         self._drop_platform_flags(android),
                     )
 
+    def test_trim_command_matches_apart_from_platform_flags(self):
+        for overrides in (
+            {'trim_start': 12.5, 'trim_duration': 8},
+            {'trim_duration': 8},
+            {'trim_start': 12},
+        ):
+            with self.subTest(overrides=overrides):
+                pc = pc_importer.build_import_command(
+                    ['yt-dlp'], self._spec(pc_importer, **overrides), WORKSPACE,
+                )
+                android = android_ytdlp.build_import_command(
+                    ['yt-dlp'], self._spec(android_ytdlp, **overrides), WORKSPACE,
+                )
+                self.assertEqual(
+                    self._drop_platform_flags(pc),
+                    self._drop_platform_flags(android),
+                )
+
     def test_enhance_flag_leaves_download_command_untouched(self):
         for audio_format in ('mp3', 'm4a'):
             with self.subTest(audio_format=audio_format):

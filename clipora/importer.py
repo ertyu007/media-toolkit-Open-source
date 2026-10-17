@@ -4,6 +4,7 @@ import getpass
 import importlib.util
 import ipaddress
 import json
+import math
 import os
 import re
 import shutil
@@ -143,6 +144,8 @@ class ImportSpec:
     video_format: str = 'mp4'
     fps: str = 'สูงสุด'
     enhance: bool = False
+    trim_start: float | None = None
+    trim_duration: float | None = None
 
 
 _NUMERIC_PART_RE = re.compile(r'^(?:0[xX][0-9a-fA-F]+|0[0-7]*|[0-9]+)$')
@@ -368,6 +371,23 @@ def find_javascript_runtime() -> str | None:
     return None
 
 
+def _download_section(spec: ImportSpec) -> str | None:
+    start = spec.trim_start
+    duration = spec.trim_duration
+    if start is None and duration is None:
+        return None
+    if start is not None and (not math.isfinite(start) or start < 0):
+        raise ValueError('จุดเริ่มตัดต้องไม่ติดลบ')
+    if duration is not None and (not math.isfinite(duration) or duration <= 0):
+        raise ValueError('ระยะเวลาที่ตัดต้องมากกว่า 0')
+    start_value = start or 0.0
+    end_value = start_value + duration if duration is not None else None
+    if end_value is not None and not math.isfinite(end_value):
+        raise ValueError('จุดสิ้นสุดตัดอยู่นอกช่วงที่รองรับ')
+    end = f'{end_value:g}' if end_value is not None else 'inf'
+    return f'*{start_value:g}-{end}'
+
+
 def build_import_command(
     tool_command: Sequence[str],
     spec: ImportSpec,
@@ -470,6 +490,9 @@ def build_import_command(
         ]
     if extra_args:
         command += list(extra_args)
+    section = _download_section(spec)
+    if section is not None:
+        command += ['--download-sections', section]
     return [*command, '--', url]
 
 
