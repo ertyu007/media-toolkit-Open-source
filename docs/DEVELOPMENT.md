@@ -152,11 +152,12 @@ Manual GUI checks ที่ unit test แทนไม่ได้:
 
 ตรวจ extension, container, codec, encoder availability, stream maps, quality semantics และ metadata เพิ่ม command/naming/invalid-value/integration tests
 
-### Trim (มีแล้วสำหรับงานไฟล์ในเครื่อง)
+### Trim (มีแล้วสำหรับงานไฟล์ในเครื่องและงาน URL)
 
-- ช่องกรอก `start_time_entry`/`duration_entry` ใน `ui.py` snapshot เป็น `JobSpec.trim_start/trim_duration` (วินาที) ก่อนเริ่ม worker
-- `parse_trim_seconds()` รับวินาที/`MM:SS`/`HH:MM:SS` ค่าว่างคือไม่ตัด, `normalize_trim()` เทียบกับ duration จาก probe (จุดเริ่มเกินไฟล์ = error, ระยะเวลาเกิน = clamp) และคืน effective duration ให้ progress
-- งาน URL/stems ยังไม่รองรับ trim (ต้องตัดหลังดาวน์โหลด/ก่อนแยก Stem) — ถ้าจะเพิ่มให้เริ่มจาก core + test ก่อนต่อ UI
+- ช่องกรอก `start_time_entry`/`duration_entry` ใน `ui.py` snapshot เป็น `JobSpec.trim_start/trim_duration` (งานไฟล์) หรือ `ImportSpec.trim_start/trim_duration` (งาน URL) เป็นวินาทีก่อนเริ่ม worker
+- `parse_trim_seconds()` รับวินาที/`MM:SS`/`HH:MM:SS` ค่าว่างคือไม่ตัด; งานไฟล์ผ่าน `normalize_trim()` เทียบกับ duration จาก probe (จุดเริ่มเกินไฟล์ = error, ระยะเวลาเกิน = clamp) และคืน effective duration ให้ progress
+- งาน URL ประกอบ `--download-sections` จาก `_download_section()` ให้ yt-dlp ตัดก่อนเขียนผลลัพธ์ ใช้ได้ทุกโหมด (เสียง/วิดีโอ/Stem) — จุดตัดวิดีโออิง keyframe จึงอาจคลาดเคลื่อน
+- งานไฟล์โหมดแยก Stem ยังไม่รองรับ trim (ต้องแยกจากทั้งไฟล์) — ถ้าจะเพิ่มให้เริ่มจาก core + test ก่อนต่อ UI
 
 ### Batch
 
