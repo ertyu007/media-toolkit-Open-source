@@ -214,8 +214,16 @@ def validate_job_settings(raw: dict) -> dict:
     fps = str(raw.get('fps') or FPS_LABELS[0])
     if fps not in FPS_LABELS:
         fps = FPS_LABELS[0]
+    try:
+        separator_max_threads = max(0, int(raw.get('separator_max_threads', 0)))
+    except (TypeError, ValueError):
+        separator_max_threads = 0
+    cpu_count = os.cpu_count()
+    if separator_max_threads and cpu_count:
+        separator_max_threads = min(separator_max_threads, cpu_count)
     return {
         'destination': destination,
+        'separator_max_threads': separator_max_threads,
         'mode': mode,
         'audio_format': audio_format,
         'video_format': video_format,
@@ -376,6 +384,7 @@ class CliporaApp(tk.Tk):
         self.source = tk.StringVar()
         self.input_kind = tk.StringVar(value='url')
         defaults = load_job_defaults()
+        self.separator_max_threads = defaults['separator_max_threads']
         self.destination = tk.StringVar(value=defaults['destination'])
         self.mode = tk.StringVar(value=defaults['mode'])
         self.stem_vars = {
@@ -1682,6 +1691,7 @@ class CliporaApp(tk.Tk):
                     'video_format': self.video_format.get(),
                     'quality': self.quality.get(),
                     'fps': self.fps.get(),
+                    'separator_max_threads': self.separator_max_threads,
                     'audio_formats': AUDIO_FORMAT_LABELS,
                     'video_formats': VIDEO_FORMAT_LABELS,
                     'qualities': VIDEO_QUALITY_PRESETS,
@@ -1715,12 +1725,14 @@ class CliporaApp(tk.Tk):
             'video_format': data.get('video_format', ''),
             'quality': data.get('quality', 'Balanced'),
             'fps': data.get('fps', ''),
+            'separator_max_threads': data.get('separator_max_threads', 0),
         })
         validated = validate_job_settings(current)
         try:
             save_settings({**current, **validated})
         except Exception:
             pass
+        self.separator_max_threads = validated['separator_max_threads']
         self._chime_var.set(validated['chime_enabled'])
         self._auto_update_var.set(validated['auto_update_check'])
         self.destination.set(validated['destination'])
@@ -2633,8 +2645,16 @@ class CliporaApp(tk.Tk):
         self._set_progress_phase('validating', 0)
         threading.Thread(
             target=self._run_stems_local,
-            args=(source, destination, audio_format, stems, overwrite,
-                  bool(self.enhance_audio.get()), cancellation),
+            args=(
+                source,
+                destination,
+                audio_format,
+                stems,
+                overwrite,
+                bool(self.enhance_audio.get()),
+                self.separator_max_threads,
+                cancellation,
+            ),
             daemon=True,
         ).start()
 
@@ -2646,6 +2666,7 @@ class CliporaApp(tk.Tk):
         stems: tuple[str, ...],
         overwrite: bool,
         enhance_vocals: bool,
+        max_threads: int,
         cancellation: CancellationToken,
     ) -> None:
         try:
@@ -2659,6 +2680,7 @@ class CliporaApp(tk.Tk):
                 cancellation,
                 overwrite=overwrite,
                 enhance_vocals=enhance_vocals,
+                max_threads=max_threads,
             )
         except ConversionCancelled:
             self.after(0, self._cancelled, cancellation)
@@ -2715,7 +2737,13 @@ class CliporaApp(tk.Tk):
         self._set_progress_phase('validating', 0)
         threading.Thread(
             target=self._run_stems_url,
-            args=(spec, stems, bool(self.enhance_audio.get()), cancellation),
+            args=(
+                spec,
+                stems,
+                bool(self.enhance_audio.get()),
+                self.separator_max_threads,
+                cancellation,
+            ),
             daemon=True,
         ).start()
 
@@ -2724,6 +2752,7 @@ class CliporaApp(tk.Tk):
         spec: ImportSpec,
         stems: tuple[str, ...],
         enhance_vocals: bool,
+        max_threads: int,
         cancellation: CancellationToken,
     ) -> None:
         try:
@@ -2747,6 +2776,7 @@ class CliporaApp(tk.Tk):
                     cancellation,
                     collision_free=True,
                     enhance_vocals=enhance_vocals,
+                    max_threads=max_threads,
                 )
             finally:
                 cleanup_import_workspace(workspace, spec.destination)

@@ -1,12 +1,13 @@
 """Settings popup: general prefs + default job values + about.
 
-All values are plain strings/bools; the caller loads them from settings and
-applies the saved dict (persisting is the caller's job). Theme changes need
+Values are plain strings, booleans, or integers. The caller loads them from
+settings and applies the saved dict (persisting is the caller's job). Theme changes need
 an app restart — the dialog says so next to the theme picker.
 """
 
 from __future__ import annotations
 
+import os
 import tkinter as tk
 from tkinter import filedialog, ttk
 from typing import Callable
@@ -21,6 +22,19 @@ MODE_LABELS = {
     'แปลงเป็นวิดีโอ': 'video',
     'แยก Stem เสียง': 'stems',
 }
+
+
+def _thread_limit_labels() -> tuple[str, ...]:
+    max_threads = max(1, os.cpu_count() or 1)
+    choices = [1]
+    while choices[-1] * 2 < max_threads:
+        choices.append(choices[-1] * 2)
+    if choices[-1] != max_threads:
+        choices.append(max_threads)
+    return ('ไม่จำกัด', *(str(value) for value in choices))
+
+
+THREAD_LIMIT_LABELS = _thread_limit_labels()
 
 
 def _label_for(mapping: dict[str, str], value: str, fallback: str) -> str:
@@ -62,6 +76,15 @@ class SettingsDialog(tk.Toplevel):
         self._video_format = tk.StringVar(value=str(initial.get('video_format', '')))
         self._quality = tk.StringVar(value=str(initial.get('quality', 'Balanced')))
         self._fps = tk.StringVar(value=str(initial.get('fps', '')))
+        max_threads = initial.get('separator_max_threads', 0)
+        try:
+            max_threads = max(0, int(max_threads))
+        except (TypeError, ValueError):
+            max_threads = 0
+        thread_label = 'ไม่จำกัด' if max_threads == 0 else str(max_threads)
+        if thread_label not in THREAD_LIMIT_LABELS:
+            thread_label = 'ไม่จำกัด'
+        self._separator_max_threads = tk.StringVar(value=thread_label)
         self._destination = tk.StringVar(value=str(initial.get('destination', '')))
         self._audio_formats = tuple(initial.get('audio_formats', ()))
         self._video_formats = tuple(initial.get('video_formats', ()))
@@ -122,10 +145,14 @@ class SettingsDialog(tk.Toplevel):
         self._combo_row(
             body, 9, 'FPS', self._fps,
             self._fps_options or ('สูงสุด',), width=18)
+        self._combo_row(
+            body, 10, 'จำนวนเธรด (เฉพาะแยก Stem)',
+            self._separator_max_threads, THREAD_LIMIT_LABELS, width=18,
+        )
         ttk.Label(body, text='โฟลเดอร์บันทึก', style='Muted.TLabel').grid(
-            row=10, column=0, columnspan=2, sticky='w', pady=(8, 2))
+            row=11, column=0, columnspan=2, sticky='w', pady=(8, 2))
         dest_row = ttk.Frame(body, style='TFrame')
-        dest_row.grid(row=11, column=0, columnspan=2, sticky='ew', pady=(0, 2))
+        dest_row.grid(row=12, column=0, columnspan=2, sticky='ew', pady=(0, 2))
         dest_row.columnconfigure(0, weight=1)
         RoundedEntry(
             dest_row, textvariable=self._destination,
@@ -135,30 +162,30 @@ class SettingsDialog(tk.Toplevel):
             command=self._browse,
         ).grid(row=0, column=1)
 
-        self._section(body, 'เกี่ยวกับ', 12)
+        self._section(body, 'เกี่ยวกับ', 13)
         ttk.Label(
             body, text=f'Clipora v{version}', style='Muted.TLabel',
-        ).grid(row=13, column=0, columnspan=2, sticky='w', pady=(2, 0))
+        ).grid(row=14, column=0, columnspan=2, sticky='w', pady=(2, 0))
         ttk.Label(
             body,
             text='แยกเสียง • แปลงวิดีโอ • แยก Stem เสียง ทำในเครื่อง ไม่ต้องสมัครสมาชิก',
             style='Muted.TLabel', wraplength=500, justify='left',
-        ).grid(row=14, column=0, columnspan=2, sticky='w')
+        ).grid(row=15, column=0, columnspan=2, sticky='w')
         ttk.Label(
             body,
             text='ข้อมูลในเครื่อง: %LOCALAPPDATA%\\Clipora (ถอนหมดจดเมื่อถอนติดตั้ง)',
             style='Muted.TLabel', wraplength=500, justify='left',
-        ).grid(row=15, column=0, columnspan=2, sticky='w')
+        ).grid(row=16, column=0, columnspan=2, sticky='w')
         self._danger_expanded = False
         self._danger_toggle = ttk.Button(
             body, text='▸ ถอนการติดตั้ง', style='Ghost.TButton',
             command=self._toggle_danger,
         )
         self._danger_toggle.grid(
-            row=16, column=0, columnspan=2, sticky='w', pady=(8, 0))
+            row=17, column=0, columnspan=2, sticky='w', pady=(8, 0))
         self._danger_box = ttk.Frame(body, style='TFrame')
         self._danger_box.grid(
-            row=17, column=0, columnspan=2, sticky='ew', pady=(4, 0))
+            row=18, column=0, columnspan=2, sticky='ew', pady=(4, 0))
         self._danger_box.columnconfigure(0, weight=1)
         ttk.Label(
             self._danger_box,
@@ -275,6 +302,10 @@ class SettingsDialog(tk.Toplevel):
             'video_format': self._video_format.get(),
             'quality': self._quality.get(),
             'fps': self._fps.get(),
+            'separator_max_threads': (
+                0 if self._separator_max_threads.get() == 'ไม่จำกัด'
+                else int(self._separator_max_threads.get())
+            ),
             'destination': self._destination.get().strip(),
         }
         try:

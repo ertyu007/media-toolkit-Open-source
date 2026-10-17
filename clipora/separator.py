@@ -440,6 +440,7 @@ def separate_audio(
     overwrite: bool = False,
     collision_free: bool = False,
     enhance_vocals: bool = False,
+    max_threads: int | None = None,
 ) -> list[Path]:
     if on_phase is None:
         on_phase = lambda _message: None
@@ -475,7 +476,13 @@ def separate_audio(
         demucs_dir.mkdir()
         on_phase('กำลังโหลดโมเดลแยก Stem…')
         on_progress(0.03)
-        _run_demucs(build_separate_command(source, demucs_dir), separator_environment(), token, on_phase, on_progress)
+        _run_demucs(
+            build_separate_command(source, demucs_dir),
+            separator_environment(max_threads),
+            token,
+            on_phase,
+            on_progress,
+        )
         stem_dir = demucs_dir / SEPARATOR_MODEL
         stage_dir = workspace / 'outputs'
         stage_dir.mkdir()
