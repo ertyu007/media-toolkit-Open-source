@@ -3269,7 +3269,6 @@ class DonateDialog(tk.Toplevel):
         self.configure(bg=BG)
         self.transient(parent)
         self.resizable(True, True)
-        self.protocol('WM_DELETE_WINDOW', self.destroy)
 
         self._dialog_canvas = tk.Canvas(self, bg=BG, highlightthickness=0, borderwidth=0)
         dialog_scrollbar = ttk.Scrollbar(self, orient='vertical', command=self._dialog_canvas.yview)
@@ -3300,8 +3299,14 @@ class DonateDialog(tk.Toplevel):
             if widget is not None and isinstance(widget, ttk.Combobox):
                 return
             delta = int(getattr(event, 'delta', 0))
-            if delta:
+            if delta and self._dialog_canvas.winfo_exists():
                 self._dialog_canvas.yview_scroll(int(-delta / 120), 'units')
+
+        def _close_dialog() -> None:
+            self.unbind_all('<MouseWheel>')
+            self.destroy()
+
+        self.protocol('WM_DELETE_WINDOW', _close_dialog)
 
         shell.bind('<Configure>', _on_dialog_card_configure)
         self._dialog_canvas.bind('<Configure>', _on_dialog_canvas_configure)
