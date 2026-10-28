@@ -19,6 +19,7 @@ from .ffmpeg import CancellationToken, ConversionCancelled
 from .importer import (
     find_javascript_runtime,
     find_ytdlp_command,
+    preflight_public_hosts,
     site_workaround_extractor_args,
     site_workaround_headers,
     validate_url,
@@ -125,6 +126,10 @@ def fetch_link_preview(
     """Run yt-dlp and return metadata; raises on failure/cancel."""
     command_prefix = list(tool_command) if tool_command is not None else find_ytdlp_command()
     command = build_preview_command(command_prefix, url)
+    try:
+        preflight_public_hosts(url)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
     token = cancellation or CancellationToken()
     if token.cancelled:
         raise ConversionCancelled('ยกเลิกงานแล้ว')
@@ -156,7 +161,11 @@ def fetch_link_preview(
 
 def download_thumbnail(thumbnail_url: str, png_path: Path, timeout: int = 15) -> Path | None:
     """Download + convert a thumbnail to PNG; None when anything fails."""
-    if not thumbnail_url.startswith(('http://', 'https://')):
+    try:
+        # Same public-URL rules as the download path: http/https public host only.
+        validate_url(thumbnail_url)
+        preflight_public_hosts(thumbnail_url)
+    except ValueError:
         return None
     try:
         request = urllib.request.Request(
@@ -172,8 +181,13 @@ def download_thumbnail(thumbnail_url: str, png_path: Path, timeout: int = 15) ->
     if ffmpeg is None:
         return None
     try:
+        url_suffix = Path(thumbnail_url.split('?')[0]).suffix or '.img'
+        if len(url_suffix) > 33 or not all(
+            character.isalnum() or character in '._' for character in url_suffix
+        ):
+            url_suffix = '.img'
         with tempfile.NamedTemporaryFile(
-            suffix=Path(thumbnail_url.split('?')[0]).suffix or '.img', delete=False
+            suffix=url_suffix, delete=False
         ) as source_file:
             source_file.write(raw)
         source_temp = Path(source_file.name)

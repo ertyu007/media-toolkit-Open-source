@@ -124,6 +124,8 @@ deno --version
 
 หาก WinGet ใช้งานไม่ได้ สามารถวาง official `yt-dlp.exe` ไว้ที่ `%LOCALAPPDATA%\\Clipora\\bin\\yt-dlp.exe` ได้ Clipora จะตรวจตำแหน่งนี้โดยไม่ต้องแก้ PATH ควรดาวน์โหลดจากหน้า release ทางการและตรวจ checksum ก่อนใช้งาน
 
+หากไฟล์ `yt-dlp.exe` ใน `%LOCALAPPDATA%\\Clipora\\tools` ถูกแก้ไขหรือเขียนทับจนตรวจไม่ตรงกับระเบียนติดตั้ง Clipora จะงดใช้ไฟล์นั้นเพื่อความปลอดภัย กด **อัปเดต yt-dlp (Ctrl+U)** หนึ่งครั้งเพื่อดาวน์โหลดใหม่และตรวจ SHA-256 ก็กลับมาใช้ได้
+
 หาก YouTube แจ้งว่าไม่พบ JavaScript runtime ให้ติดตั้ง Deno หรือ Node.js แล้วเปิดโปรแกรมใหม่ Clipora จะส่ง runtime ที่พบให้ yt-dlp โดยอัตโนมัติ
 
 ### ดาวน์โหลดลิงก์ไม่สำเร็จ

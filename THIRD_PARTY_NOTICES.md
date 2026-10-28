@@ -73,12 +73,12 @@ Clipora เป็น GPL-3.0-only แต่ใช้หรือช่วยต�
 | sphn | 0.2.1 | `ce0caa7858a5e41cd66fcfae7a034877512f12fbb838d3b54662020b97895569` | https://pypi.org/project/sphn/ |
 | fsspec | 2026.7.0 | `b57ddbafedfaef7018c1ecab32aa200a9d7ca26b77965f64e48b70061249d279` | https://pypi.org/project/fsspec/ |
 | networkx | 3.6.1 | `d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762` | https://pypi.org/project/networkx/ |
-| setuptools | 84.0.0 | `51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670` | https://pypi.org/project/setuptools/ |
+| setuptools | 84.1.0 | `5231689c6ac8156cd155cfb98c3fd6fb252c3e7e9bd3d78b64d3c55f132624c9` | https://pypi.org/project/setuptools/ |
 | sympy | 1.14.0 | `e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5` | https://pypi.org/project/sympy/ |
 | mpmath | 1.3.0 | `a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c` | https://pypi.org/project/mpmath/ |
 | typing_extensions | 4.16.0 | `481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8` | https://pypi.org/project/typing_extensions/ |
 | einops | 0.8.2 | `54058201ac7087911181bfec4af6091bb59380360f069276601256a76af08193` | https://pypi.org/project/einops/ |
-| filelock | 3.32.3 | `7f0ca4bcc0e181c60dbbd8aa9ab5b120ebb99e4e064e83636340056f833a1f09` | https://pypi.org/project/filelock/ |
+| filelock | 4.2.1 | `7be2662e9e826b9bba28afc0f843a123280d799a2ea44bb5d35ccec67905ae44` | https://pypi.org/project/filelock/ |
 | huggingface_hub | 1.27.0 | `7df6827c2f956c60fbaa64646e979e566db76f619dd0a9729dfb8c5a3eb4f68d` | https://pypi.org/project/huggingface_hub/ |
 | click | 8.4.2 | `e6f9f66136c816745b9d65817da91d61d957fb16e02e4dcd0552553c5a197b76` | https://pypi.org/project/click/ |
 | hf-xet | 1.6.0 | `fb4fadde1b2b70bf4c0c14a6dccbe7194b1c28947fefd5bbe3fed9d940676c3b` | https://pypi.org/project/hf-xet/ |
@@ -90,7 +90,7 @@ Clipora เป็น GPL-3.0-only แต่ใช้หรือช่วยต�
 | tqdm | 4.70.0 | `7f585706bfddbdebf89daac705b2dfcc16890130727d3197ca62c732b4310953` | https://pypi.org/project/tqdm/ |
 | anyio | 4.14.2 | `9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494` | https://pypi.org/project/anyio/ |
 | idna | 3.18 | `7f952cbe720b688055e3f87de14f5c3e5fdaa8bc3928985c4077ca689de849a2` | https://pypi.org/project/idna/ |
-| certifi | 2026.7.22 | `62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775` | https://pypi.org/project/certifi/ |
+| certifi | 2026.10.23 | `e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1` | https://pypi.org/project/certifi/ |
 | colorama | 0.4.6 | `4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6` | https://pypi.org/project/colorama/ |
 | Jinja2 | 3.1.6 | `85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67` | https://pypi.org/project/Jinja2/ |
 | MarkupSafe | 3.0.3 | `9a1abfdc021a164803f4d485104931fb8f8c1efd55bc6b748d2f5774e78b62c5` | https://pypi.org/project/MarkupSafe/ |

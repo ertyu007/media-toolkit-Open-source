@@ -14,12 +14,13 @@ from pathlib import Path, PurePosixPath
 from typing import Callable, Iterable
 from urllib.parse import urlsplit
 
+from . import __version__
 from .tools import executable_filename, find_executable, managed_tools_dir
 
 
 ProgressCallback = Callable[[float, str], None]
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
-USER_AGENT = 'Clipora/0.5.6 dependency-setup'
+USER_AGENT = f'Clipora/{__version__} dependency-setup'
 
 
 class DependencyInstallError(RuntimeError):
@@ -190,10 +191,10 @@ SEPARATOR_DEPENDENCIES = (
     DependencySpec(
         key='setuptools',
         display_name='setuptools',
-        version='84.0.0',
-        url='https://files.pythonhosted.org/packages/95/9c/c510029fc6ef33a6275cd2c5d3cecd6613dfd6aa401d57c54f1c18852ccf/setuptools-84.0.0-py3-none-any.whl',
-        sha256='51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670',
-        expected_bytes=818216,
+        version='84.1.0',
+        url='https://files.pythonhosted.org/packages/18/02/b4bbb90f8f29e334898ff45c6d9b1fffaa6f378017052b3023a06262b5f7/setuptools-84.1.0-py3-none-any.whl',
+        sha256='5231689c6ac8156cd155cfb98c3fd6fb252c3e7e9bd3d78b64d3c55f132624c9',
+        expected_bytes=819380,
         archive_type='python-wheel',
         members=(('', 'python/site-packages'),),
         source_url=f'https://pypi.org/project/setuptools/',
@@ -250,10 +251,10 @@ SEPARATOR_DEPENDENCIES = (
     DependencySpec(
         key='filelock',
         display_name='filelock',
-        version='3.32.3',
-        url='https://files.pythonhosted.org/packages/a7/8e/50f46a9c0ce8d2861a394c1347caae037ea0431d2f67d7feb151cbc4649a/filelock-3.32.3-py3-none-any.whl',
-        sha256='7f0ca4bcc0e181c60dbbd8aa9ab5b120ebb99e4e064e83636340056f833a1f09',
-        expected_bytes=98901,
+        version='4.2.1',
+        url='https://files.pythonhosted.org/packages/28/00/db89d339bc4ecdc8087fa7b8607ba22ffc27bf96286f340c9620bea428b3/filelock-4.2.1-py3-none-any.whl',
+        sha256='7be2662e9e826b9bba28afc0f843a123280d799a2ea44bb5d35ccec67905ae44',
+        expected_bytes=162455,
         archive_type='python-wheel',
         members=(('', 'python/site-packages'),),
         source_url=f'https://pypi.org/project/filelock/',
@@ -394,10 +395,10 @@ SEPARATOR_DEPENDENCIES = (
     DependencySpec(
         key='certifi',
         display_name='certifi',
-        version='2026.7.22',
-        url='https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl',
-        sha256='62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775',
-        expected_bytes=136983,
+        version='2026.10.23',
+        url='https://files.pythonhosted.org/packages/32/d1/a3652fe2c19134d0d15922177821d863cbd7e842d53a21bbe7e8e3a1b5ac/certifi-2026.10.23-py3-none-any.whl',
+        sha256='e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1',
+        expected_bytes=135082,
         archive_type='python-wheel',
         members=(('', 'python/site-packages'),),
         source_url=f'https://pypi.org/project/certifi/',

@@ -2,6 +2,19 @@
 
 อัปเดตล่าสุด: 2026-10-28
 
+## ทำวันนี้ (2026-10-28) — จากผล Security Audit (แก้โค้ด PC เท่านั้น)
+
+- **รอบสอง (pip-audit กับชุด dependency ที่ pin ส่งให้ผู้ใช้):** bump `setuptools` 84.0.0 → **84.1.0** (GHSA-xmj3-9gf7-h52w) และ `filelock` 3.32.3 → **4.2.1** (3 CVEs, fix รุ่น 4.2.1; `huggingface_hub==1.27.0` ต้องการเพียง `filelock>=3.10.0` จึงปลอดภัยกับ major bump) พร้อม SHA-256/ขนาดที่ดาวน์โหลดจริงมาคำนวณ และอัปเดต `THIRD_PARTY_NOTICES.md` — ตรวจซ้ำแล้วชุด pin 35 รายการ **ไม่พบช่องโหว่ค้าง**
+
+- Bump certifi pin ใน `clipora/dependencies.py` จาก 2026.7.22 → **2026.10.23** ปิด PYSEC-2026-4320 (แก้ที่ fix ตั้งแต่ 2026.10.18) พร้อม SHA-256 ใหม่ (`e9b54de7…2f61d1`, 135082 bytes) และแถวเดียวกันใน `THIRD_PARTY_NOTICES.md` — certifi ถูกแพ็กเข้า embedded Python ของ separator ส่งถึงผู้ใช้จริง
+- เพิ่ม `preflight_public_hosts()` ใน `clipora/importer.py`: pre-flight DNS ปิดช่อง DNS-rebinding บนเส้นทางดาวน์โหลด URL และเรียกใน `import_url` / `import_audio_for_processing` / `fetch_link_preview` / `download_thumbnail` — host ที่ resolve ไม่ได้จะปล่อยผ่าน (yt-dlp จะรายงาน error จริงเอง) และหน้าต่าง rebinding ยังคงอยู่บางส่วนเพราะ yt-dlp resolve ซ้ำเอง (best-effort)
+- `download_thumbnail` ใช้ `validate_url` + pre-flight ตรวจลิงก์รูป และ sanitize นามสกุลไฟล์ชั่วคราวจาก URL (กันชื่อผิดปกติ/NTFS ADS)
+- แก้ User-Agent version drift: `dependencies.py` และ `ytdlp_update.py` ดึง `__version__` จริงแทน hardcode `Clipora/0.5.6`
+- หมายเหตุรอบแรก: `preflight_public_hosts` ยังฝั่ง PC เท่านั้น (L-1/L-4 ยังไม่แก้) — ดูรอบสามด้านล่างที่ mirror แล้ว
+- เทสต์ใหม่ `PreflightHostTests`; full suite 342 tests ผ่าน (ข้าม 2 network tests); สภาพแวดล้อม dev อัปเกรด Pillow → 13.0.0 ปิด CVE ฝั่ง TiffDecode ตาม pip-audit (Pillow ไม่ได้แพ็กในแอป ใช้เฉพาะสคริปต์สร้าง asset ใน `scripts/`)
+- **รอบสาม:** `clipora/tools.py` — env override (`CLIPORA_*`) ต้องเป็น absolute path + มีไฟล์จริงเท่านั้น; ยืนยัน SHA-256 ของ `yt-dlp.exe` ใน tools dir กับ `installed.json` ก่อนใช้ครั้งแรกต่อ session (ถ้าไม่ตรงจะข้ามไปใช้ legacy/bundled/PATH และแก้ด้วยการสั่ง Update yt-dlp ซ้ำ) — กัน binary swap ในโฟลเดอร์เขียนได้ของผู้ใช้
+- Port `preflight_public_hosts()` ไป `android/core/ytdlp.py` แบบ mirror + เพิ่ม parity test; tools tests ใหม่ 4 อัน — full suite 347 tests ผ่าน
+
 ## Release 0.1.1 (Android) — SAF Picker, ฟอนต์ไทย Sarabun, Codec เสียง
 
 - สร้างระบบเลือกไฟล์ SAF เฉพาะของ Android (`android/core/saf.py`) สตรีมไฟล์ที่เลือกเข้า private files dir ของแอป ป้องกันปัญหา Scoped Storage บน Android 10+ โดยไม่ต้องขอ runtime permission

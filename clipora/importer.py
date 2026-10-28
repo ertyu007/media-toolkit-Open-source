@@ -8,6 +8,7 @@ import math
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -238,6 +239,32 @@ def validate_url(raw_url: str) -> str:
         obscured = _decode_obscured_ipv4(hostname)
         if obscured is not None and not obscured.is_global:
             raise ValueError('ไม่รองรับลิงก์เครือข่ายภายในหรือ IP ส่วนตัว')
+    return url
+
+
+def preflight_public_hosts(raw_url: str) -> str:
+    """Best-effort DNS pre-flight against the download path.
+
+    Validates, then resolves the hostname and rejects it when the current
+    answer is a private/loopback address (narrow DNS-rebinding window
+    remains because yt-dlp re-resolves on its own). Unresolvable hosts pass;
+    yt-dlp surfaces the real network error later.
+    """
+    url = validate_url(raw_url)
+    hostname = urlsplit(url).hostname or ''
+    if not hostname:
+        return url
+    try:
+        infos = socket.getaddrinfo(hostname, 443, proto=socket.IPPROTO_TCP)
+    except (OSError, UnicodeError):
+        return url
+    for info in infos:
+        try:
+            address = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            continue
+        if not address.is_global:
+            raise ValueError('ไม่รองรับลิงก์ที่ชี้ไปยังเครือข่ายภายในหรือ IP ส่วนตัว')
     return url
 
 
@@ -908,7 +935,7 @@ def import_url(
     on_conflict: Callable[[Path], bool] | None = None,
     on_detail: Callable[[str, str], None] | None = None,
 ) -> Path:
-    validate_url(spec.url)
+    preflight_public_hosts(spec.url)
     command_prefix = list(tool_command) if tool_command is not None else find_ytdlp_command()
     if not command_prefix:
         raise URLImportError('ไม่พบ yt-dlp กรุณาติดตั้งแล้วเปิด Clipora ใหม่')
@@ -978,7 +1005,7 @@ def import_audio_for_processing(
     Returns ``(completed, workspace)``. The caller owns the workspace and must
     call ``cleanup_import_workspace(workspace, spec.destination)`` when done.
     """
-    validate_url(spec.url)
+    preflight_public_hosts(spec.url)
     command_prefix = list(tool_command) if tool_command is not None else find_ytdlp_command()
     if not command_prefix:
         raise URLImportError('ไม่พบ yt-dlp กรุณาติดตั้งแล้วเปิด Clipora ใหม่')

@@ -1,5 +1,6 @@
 import json
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -37,6 +38,7 @@ from clipora.importer import (
     parse_import_progress,
     parse_import_progress_detail,
     parse_reported_output,
+    preflight_public_hosts,
     site_workaround_extractor_args,
     site_workaround_headers,
     url_summary,
@@ -68,6 +70,32 @@ class URLValidationTests(unittest.TestCase):
     def test_url_summary_reports_host_or_error(self):
         self.assertIn('youtube.com', url_summary('https://youtube.com/watch?v=abc'))
         self.assertIn('http', url_summary('not a link'))
+
+
+class PreflightHostTests(unittest.TestCase):
+    def test_rejects_private_literal_before_dns(self):
+        with self.assertRaises(ValueError):
+            preflight_public_hosts('http://10.0.0.5/video.mp4')
+        with self.assertRaises(ValueError):
+            preflight_public_hosts('http://localhost/video.mp4')
+
+    def test_unresolvable_host_passes(self):
+        # Resolution failure is not an error here; yt-dlp reports it later.
+        self.assertEqual(
+            preflight_public_hosts('http://video.invalid-host.clipora-test/x.mp4'),
+            'http://video.invalid-host.clipora-test/x.mp4',
+        )
+
+    def test_resolving_public_host_passes(self):
+        # Network-dependent leg: skip silently when offline.
+        try:
+            socket.gethostbyname('example.com')
+        except OSError:
+            self.skipTest('no DNS available')
+        self.assertEqual(
+            preflight_public_hosts('http://example.com/video.mp4'),
+            'http://example.com/video.mp4',
+        )
 
 
 class YtDlpDiscoveryTests(unittest.TestCase):

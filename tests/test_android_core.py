@@ -308,6 +308,14 @@ class UrlImportParity(unittest.TestCase):
                     android_ytdlp.url_summary(url),
                 )
 
+    def test_preflight_public_hosts_matches(self):
+        for url in self.URLS:
+            with self.subTest(url=url):
+                self.assertEqual(
+                    self._capture(pc_importer.preflight_public_hosts, url),
+                    self._capture(android_ytdlp.preflight_public_hosts, url),
+                )
+
     @staticmethod
     def _capture(func, *args):
         try:
