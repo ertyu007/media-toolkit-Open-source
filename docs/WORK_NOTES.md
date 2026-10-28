@@ -2,6 +2,12 @@
 
 อัปเดตล่าสุด: 2026-10-28
 
+## Release 0.7.1 (PC) — Security hardening
+
+- Bump PC 0.7.0 → **0.7.1** (patch: security) sync `version_info.txt`, `clipora.iss`, README; tag `pc-v0.7.1` → `build-windows` ปล่อย Setup + portable ZIP + `.sha256`
+- สาระ: dependency pin bumps (certifi/setuptools/filelock), URL DNS pre-flight (PC+Android), self-verify managed yt-dlp, env override เข้มขึ้น — รายละเอียดในรายการด้านล่าง
+- `TROUBLESHOOTING.md` เพิ่มกรณี yt-dlp ไม่ผ่าน SHA-256 ตรวจ → กดอัปเดตซ้ำ
+
 ## ทำวันนี้ (2026-10-28) — จากผล Security Audit (แก้โค้ด PC เท่านั้น)
 
 - **รอบสอง (pip-audit กับชุด dependency ที่ pin ส่งให้ผู้ใช้):** bump `setuptools` 84.0.0 → **84.1.0** (GHSA-xmj3-9gf7-h52w) และ `filelock` 3.32.3 → **4.2.1** (3 CVEs, fix รุ่น 4.2.1; `huggingface_hub==1.27.0` ต้องการเพียง `filelock>=3.10.0` จึงปลอดภัยกับ major bump) พร้อม SHA-256/ขนาดที่ดาวน์โหลดจริงมาคำนวณ และอัปเดต `THIRD_PARTY_NOTICES.md` — ตรวจซ้ำแล้วชุด pin 35 รายการ **ไม่พบช่องโหว่ค้าง**
