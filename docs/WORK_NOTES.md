@@ -574,9 +574,11 @@ python -m unittest discover -s tests -v
 
 ## งานต่อ (ยังไม่ทำ)
 
-- [ ] **Manual GUI smoke test** — สลับโหมด audio/video/stems, ติ๊ก Stem, overwrite prompt,
+- [x] อัตโนมัติแล้ว (`tests/test_ui_helpers.py::UiSmokeTests`) — สลับโหมด audio/video/stems,
+      แถว trim ตามโหมด/ชนิดแหล่ง, สร้าง UI ที่ scale 100/125/150%
+- [ ] **Manual GUI smoke test** — ติ๊ก Stem, overwrite prompt,
       ปุ่มติดตั้งเมื่อยังไม่ติดตั้ง separator, ปุ่ม "อัปเดต yt-dlp" (ตอนยังไม่ติดตั้ง/ติดตั้งแล้ว/อัปเดตล่าสุด),
-      ข้อความไทย, scale 100/125/150%
+      ข้อความไทย
 - [ ] ทดสอบ URL flow จริง (YouTube) ด้วย `CLIPORA_RUN_NETWORK_TESTS=1`
 - [ ] ทดสอบ cancellation ระหว่างแยก Stem (สร้าง test ไว้ยัง? — ยังไม่มี integration สำหรับ cancel)
 - [ ] เช็ค `test_version_is_synchronized_with_packaging_metadata` ถ้าจะ bump version + เขียน release notes
