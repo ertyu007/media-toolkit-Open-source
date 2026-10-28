@@ -120,6 +120,7 @@ class SettingsDialog(tk.Toplevel):
         self._body_canvas.bind('<Enter>', lambda _e: self.bind_all(
             '<MouseWheel>', self._on_body_wheel, add='+'))
         self._body_canvas.bind('<Leave>', lambda _e: self.unbind_all('<MouseWheel>'))
+        self._body_canvas.bind('<Destroy>', lambda _e: self.unbind_all('<MouseWheel>'))
 
         self._section(body, 'ทั่วไป', 0)
         self._combo_row(

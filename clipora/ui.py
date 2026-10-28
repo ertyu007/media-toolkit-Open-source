@@ -880,6 +880,7 @@ class CliporaApp(tk.Tk):
         self.card_canvas.configure(yscrollcommand=_on_scroll_command)
         self.card_canvas.bind('<Enter>', lambda _e: self.bind_all('<MouseWheel>', _on_mousewheel))
         self.card_canvas.bind('<Leave>', lambda _e: self.unbind_all('<MouseWheel>'))
+        self.card_canvas.bind('<Destroy>', lambda _e: self.unbind_all('<MouseWheel>'))
 
         # ── Helper: flat section with a small title ───────────────────────────
         # (Tk has no native border-radius; a canvas-drawn rounded card
@@ -3456,6 +3457,7 @@ class HistoryPanel(ttk.Frame):
         self._canvas.bind('<Enter>', lambda _e: self._canvas.bind_all(
             '<MouseWheel>', self._on_wheel))
         self._canvas.bind('<Leave>', lambda _e: self._canvas.unbind_all('<MouseWheel>'))
+        self._canvas.bind('<Destroy>', lambda _e: self._canvas.unbind_all('<MouseWheel>'))
         # Windows-style context menu on right-click; tk.Menu unposts itself
         # when the user clicks anywhere else, no manual hide needed.
         self._canvas.bind('<Button-3>', self._popup_menu)
