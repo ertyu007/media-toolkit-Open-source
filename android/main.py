@@ -19,6 +19,7 @@ os.environ.setdefault('KIVY_NO_ARGS', '1')
 
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.core.text import LabelBase
 from kivy.core.window import Window
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
@@ -33,6 +34,7 @@ from kivy.uix.textinput import TextInput
 import theme
 from core import ffmpeg
 from core import history
+from core import saf
 from core import ytdlp
 from core.tools import (
     acquire_wake_lock,
@@ -46,7 +48,11 @@ AUDIO_FORMATS = list(ffmpeg.AUDIO_FORMATS)
 QUALITIES = list(ffmpeg.VIDEO_QUALITY_PRESETS)
 FPS_CHOICES = list(ffmpeg.FPS_OPTIONS)
 LINK_QUALITIES = list(ytdlp.VIDEO_QUALITIES)
-MEDIA_FILTER = ('*.mp4', '*.mkv', '*.mov', '*.webm', '*.avi', '*.m4v', '*.mp3', '*.m4a', '*.wav', '*.flac', '*.opus', '*.aac')
+
+#: Sarabun (OFL) ships Thai + Latin; Kivy's Roboto has no Thai glyphs at all.
+_THAI_FONT = Path(__file__).with_name('fonts') / 'Sarabun-Regular.ttf'
+if _THAI_FONT.is_file():
+    LabelBase.register(name='Roboto', fn_regular=str(_THAI_FONT))
 
 
 @dataclass(frozen=True)
@@ -91,7 +97,7 @@ class JobRunner:
         self.token = ffmpeg.CancellationToken()
         self._thread = threading.Thread(
             target=self._guarded,
-            args=(target, *args, self.token, self.events.put),
+            args=(target, *args, self.token, self._emit),
             daemon=True,
         )
         self._thread.start()
@@ -105,9 +111,14 @@ class JobRunner:
         except ffmpeg.ConversionCancelled:
             emit('error', 'ยกเลิกงานแล้ว')
         except Exception as exc:  # surface crashes instead of hanging the UI
+            import traceback
+            traceback.print_exc()
             emit('error', str(exc) or type(exc).__name__)
         finally:
             release_wake_lock()
+
+    def _emit(self, kind: str, payload) -> None:
+        self.events.put((kind, payload))
 
     def cancel(self) -> None:
         if self.token is not None:
@@ -120,19 +131,6 @@ class JobRunner:
             except queue.Empty:
                 return
             handler(kind, payload)
-
-
-def _select_files(multiple: bool) -> list[str]:
-    from plyer import filechooser
-
-    chooser = filechooser.FileChooser(
-        filters=MEDIA_FILTER,
-        multiple=multiple,
-        title='เลือกไฟล์',
-    )
-    chooser.run()
-    selection = chooser.selection or []
-    return selection if multiple else selection[:1]
 
 
 def _run_convert(job: ConvertJob, token, emit) -> None:
@@ -164,7 +162,9 @@ def _run_convert(job: ConvertJob, token, emit) -> None:
     try:
         ffmpeg.convert(command, temporary, effective, lambda p: emit('progress', p), token)
         ffmpeg.validate_output(temporary, job.mode)
-        ffmpeg.finalize_output(temporary, target, overwrite=False)
+        # Android's FUSE storage has no hard links (os.link -> EPERM), so the
+        # collision-free name is claimed with a plain rename instead.
+        ffmpeg.finalize_output(temporary, target, overwrite=True)
     except BaseException:
         ffmpeg.cleanup_temporary_output(temporary, target)
         raise
@@ -375,10 +375,16 @@ class ConvertScreen(Screen):
         return _tabbar('convert')
 
     def _choose(self) -> None:
-        selected = _select_files(multiple=True)
+        self.status.text = 'กำลังเปิดตัวเลือกไฟล์…'
+        self.status.color = theme.color('MUTED')
+        saf.pick_media(multiple=True, on_done=self._files_picked)
+
+    def _files_picked(self, selected: list[str]) -> None:
         self.files = [Path(item) for item in selected]
         if not self.files:
+            self.status.text = 'ไม่ได้เลือกไฟล์'
             return
+        self.status.text = ''
         names = '\n'.join(f'• {item.name}' for item in self.files[:6])
         if len(self.files) > 6:
             names += f'\n… และอีก {len(self.files) - 6} ไฟล์'

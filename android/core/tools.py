@@ -16,6 +16,7 @@ How the p4a build actually lays things out:
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import shutil
 import sys
@@ -23,9 +24,6 @@ from pathlib import Path
 
 #: recipe binary name -> filename inside nativeLibraryDir
 _NATIVE_BINARIES = {'ffmpeg': 'libffmpegbin.so'}
-
-#: tools the app cannot run without; ffprobe is optional (see probe fallback)
-REQUIRED = ('ffmpeg', 'yt-dlp')
 
 
 def _activity():
@@ -142,4 +140,14 @@ def find_executable(name: str) -> Path | None:
 
 
 def missing_tools() -> tuple[str, ...]:
-    return tuple(name for name in REQUIRED if find_executable(name) is None)
+    """Tools the app cannot run without.
+
+    ``ffmpeg`` is a native binary; ``yt-dlp`` is a pip module run through
+    ``sys.executable -m yt_dlp``, so it is checked as a module, not a file.
+    """
+    missing = []
+    if find_executable('ffmpeg') is None:
+        missing.append('ffmpeg')
+    if importlib.util.find_spec('yt_dlp') is None:
+        missing.append('yt-dlp')
+    return tuple(missing)

@@ -1,6 +1,17 @@
 # บันทึกงาน (Work Notes) — ฟีเจอร์แยก Stem เสียง (Stem Separation) + อัปเดต yt-dlp
 
-อัปเดตล่าสุด: 2026-10-10
+อัปเดตล่าสุด: 2026-10-28
+
+## Release 0.1.1 (Android) — SAF Picker, ฟอนต์ไทย Sarabun, Codec เสียง
+
+- สร้างระบบเลือกไฟล์ SAF เฉพาะของ Android (`android/core/saf.py`) สตรีมไฟล์ที่เลือกเข้า private files dir ของแอป ป้องกันปัญหา Scoped Storage บน Android 10+ โดยไม่ต้องขอ runtime permission
+- เพิ่มมาตรการความปลอดภัยใน `saf.py`: sanitize ชื่อไฟล์ป้องกัน path traversal (`_free_path`), ตรวจ file descriptor และล้างไฟล์ชั่วคราวเก่าเกิน 24 ชม. อัตโนมัติ (`_prune`)
+- ติดตั้งฟอนต์ภาษาไทย Sarabun (`android/fonts/Sarabun-Regular.ttf`, OFL) พร้อมลงทะเบียนเป็น default font ใน Kivy แก้ปัญหาสระ/วรรณยุกต์ไทยแสดงเป็นกล่องสี่เหลี่ยม
+- ปรับ Codec เสียงสำหรับ Android: MP3 ใช้ `libshine` (CBR 192k) และ Opus ใช้ native encoder (`opus -strict -2`) ให้ตรงกับ ffmpeg recipe ของ p4a ที่ไม่มี `libmp3lame`/`libopus`
+- ปรับการตรวจ `missing_tools` บน Android ให้ตรวจ `yt-dlp` ผ่าน `importlib.util.find_spec('yt_dlp')` แทนการหา executable binary
+- แก้ `finalize_output` บน Android ให้ใช้ rename แทน hard link (`os.link`) ที่ติด `EPERM` บน Android FUSE filesystem
+- เพิ่มเทสต์ `SafHelperTests` ใน `tests/test_android_core.py` (sanitize, collision, prune, suffix whitelist); suite ทั้งหมด 335 tests ผ่านฉลุย
+- Bump เวอร์ชัน Android เป็น 0.1.1 ใน `android/buildozer.spec` และอัปเดตเอกสาร `android/README.md`, `THIRD_PARTY_NOTICES.md`
 
 ## ทำวันนี้ (2026-10-10) — CPU/Thread Limiter สำหรับ Demucs
 

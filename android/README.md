@@ -32,7 +32,7 @@ downloads the SDK/NDK itself on first run if you point it at one.
 ```bash
 python -m pip install buildozer "cython==0.29.36"
 cd android
-buildozer -v android debug          # -> bin/clipora-0.1.0-arm64-v8a-debug.apk
+buildozer -v android debug          # -> bin/clipora-0.1.1-arm64-v8a-debug.apk
 ```
 
 Install with `adb install -r bin/*.apk`.
@@ -79,10 +79,12 @@ android/
 ├── main.py             # Kivy UI: convert, download, history screens
 ├── theme.py            # colours, ported from clipora/ui_components/theme.py
 ├── buildozer.spec      # APK config
+├── fonts/              # bundled Thai font (Sarabun OFL)
 ├── core/               # ported, no Kivy imports — unit tested on desktop
 │   ├── tools.py        # finds ffmpeg / yt-dlp inside the APK
 │   ├── ffmpeg.py       # port of clipora/ffmpeg.py
 │   ├── history.py      # persistent finished-job history
+│   ├── saf.py          # SAF file picker + scoped storage copier
 │   └── ytdlp.py        # port of the URL half of clipora/importer.py
 └── icon.png
 ```
@@ -107,14 +109,20 @@ into `android/core/` — the parity test will tell you when you forget.
 * **`ffpyplayer_codecs` + `libx264` are required entries.** Without them the
   recipe builds an mp4/aac-only ffmpeg with no H.264 encoder and video
   conversion cannot work.
+* **Audio codec switches.** p4a's ffmpeg recipe enables `libshine` (not `libmp3lame`)
+  for MP3 and only the native experimental `opus` encoder (no `libopus`), so
+  `android/core/ffmpeg.py` adjusts those two encoder arguments accordingly.
 * **`ffmpeg` is not a normal executable.** Android only allows `execve` from
   app-owned native paths, so the recipe ships it as `libffmpegbin.so` inside
   `nativeLibraryDir`. `core/tools.py` resolves it there and sets
   `LD_LIBRARY_PATH` so the loader finds `libav*.so`.
-* **No storage permission.** Inputs are picked through SAF (plyer); outputs go
-  to the app's own external files dir, which needs no runtime grant. That
-  folder is deleted when the app is uninstalled — see the `ponytail:` note in
-  `core/tools.py` if that becomes a problem.
+* **No storage permission.** Inputs are picked through custom SAF (`core/saf.py`)
+  and copied into the app's files directory to work under Android 10+ scoped
+  storage. Outputs go to the app's own external files dir, which needs no
+  runtime grant. That folder is deleted when the app is uninstalled — see the
+  `ponytail:` note in `core/tools.py` if that becomes a problem.
+* **Thai font support.** Kivy's bundled Roboto font lacks Thai glyphs, so
+  Sarabun (`fonts/Sarabun-Regular.ttf`, OFL) is bundled and registered for Roboto.
 * **Dark theme only.** The PC light palette is not ported yet.
 * **No yt-dlp JS runtime or browser impersonation.** `curl_cffi` and Deno/Node
   have no Android build, so some sites that work on PC may still be blocked.

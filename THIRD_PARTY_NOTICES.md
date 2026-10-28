@@ -96,6 +96,15 @@ Clipora เป็น GPL-3.0-only แต่ใช้หรือช่วยต�
 | MarkupSafe | 3.0.3 | `9a1abfdc021a164803f4d485104931fb8f8c1efd55bc6b748d2f5774e78b62c5` | https://pypi.org/project/MarkupSafe/ |
 | safetensors | 0.8.0 | `096ec1a98435df7beb08853bb5aa9081a84f23d0adc67ed1a0a10550f608373f` | https://pypi.org/project/safetensors/ |
 
+## ส่วนประกอบใน Android build
+
+### ฟอนต์ Sarabun (Regular)
+
+- Source: https://github.com/cadsondemak/Sarabun
+- Files: `android/fonts/Sarabun-Regular.ttf`, `android/fonts/OFL.txt`
+- License: SIL Open Font License, Version 1.1 (OFL)
+- Copyright 2018 The Sarabun Project Authors
+
 ## การอัปเดต manifest
 
 ผู้ดูแลต้องใช้ immutable release URL ตรวจ checksum จากผู้เผยแพร่ อัปเดตเวอร์ชัน/source/license พร้อมกัน เพิ่ม regression test และทดสอบ clean-machine ก่อน release ห้ามเปลี่ยนเป็น URL แบบ latest โดยไม่มี checksum ที่ตรงกับ asset นั้น

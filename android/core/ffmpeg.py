@@ -6,7 +6,9 @@ command line. Platform deltas:
 
 * no ``creationflags`` (``subprocess`` rejects the kwarg off Windows),
 * ``CancellationToken`` signals SIGTERM then SIGKILL instead of ``taskkill``,
-* ``probe`` falls back to ``ffmpeg -i`` when the p4a recipe ships no ffprobe.
+* ``probe`` falls back to ``ffmpeg -i`` when the p4a recipe ships no ffprobe,
+* mp3 uses ``libshine`` and opus uses the native (experimental) encoder: the
+  p4a recipe enables libshine but not libmp3lame/libopus.
 """
 
 from __future__ import annotations
@@ -570,11 +572,13 @@ def build_command(
 def _audio_codec_args(audio_format: str) -> list[str]:
     """Audio codec args (shared by convert + enhance)."""
     codecs = {
-        'mp3': ['-c:a', 'libmp3lame', '-q:a', '2'],
+        # p4a's ffmpeg recipe ships libshine, not libmp3lame (CBR only).
+        'mp3': ['-c:a', 'libshine', '-b:a', '192k'],
         'm4a': ['-c:a', 'aac', '-b:a', '192k'],
         'wav': ['-c:a', 'pcm_s16le'],
         'flac': ['-c:a', 'flac'],
-        'opus': ['-c:a', 'libopus', '-b:a', '160k'],
+        # No libopus in the recipe; the native encoder is experimental.
+        'opus': ['-c:a', 'opus', '-b:a', '160k', '-strict', '-2'],
     }
     try:
         return codecs[audio_format.lower()]

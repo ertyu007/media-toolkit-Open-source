@@ -30,11 +30,31 @@ from clipora import history as pc_history  # noqa: E402
 from clipora import importer as pc_importer  # noqa: E402
 from core import ffmpeg as android_ffmpeg  # noqa: E402
 from core import history as android_history  # noqa: E402
+from core import saf as android_saf  # noqa: E402
 from core import ytdlp as android_ytdlp  # noqa: E402
 
 SOURCE = Path('C:/media/sample.mkv')
 TARGET = Path('C:/out/sample_audio.mp3')
 WORKSPACE = Path('C:/out/.clipora-import-abc')
+
+#: p4a's ffmpeg recipe enables libshine (not libmp3lame) and only the
+#: experimental native Opus encoder (no libopus), so Android swaps just the
+#: codec block; the rest of the command must stay identical to the PC build.
+ANDROID_CODEC_SWAPS = {
+    'mp3': (['-c:a', 'libmp3lame', '-q:a', '2'], ['-c:a', 'libshine', '-b:a', '192k']),
+    'opus': (['-c:a', 'libopus', '-b:a', '160k'], ['-c:a', 'opus', '-b:a', '160k', '-strict', '-2']),
+}
+
+
+def _with_android_codec(command: list[str], audio_format: str) -> list[str]:
+    swap = ANDROID_CODEC_SWAPS.get(audio_format)
+    if swap is None:
+        return command
+    pc_args, android_args = swap
+    for index in range(len(command) - len(pc_args) + 1):
+        if command[index:index + len(pc_args)] == pc_args:
+            return command[:index] + android_args + command[index + len(pc_args):]
+    raise AssertionError(f'codec args not found for {audio_format}')
 
 
 def _pc_build(**overrides):
@@ -92,7 +112,10 @@ class BuildCommandParity(_PinnedTools, unittest.TestCase):
         for audio_format in pc_ffmpeg.AUDIO_FORMATS:
             with self.subTest(audio_format=audio_format):
                 self.assertEqual(
-                    _pc_build(mode='audio', audio_format=audio_format),
+                    _with_android_codec(
+                        _pc_build(mode='audio', audio_format=audio_format),
+                        audio_format,
+                    ),
                     _android_build(mode='audio', audio_format=audio_format),
                 )
 
@@ -107,7 +130,9 @@ class BuildCommandParity(_PinnedTools, unittest.TestCase):
 
     def test_trim_arguments_match(self):
         self.assertEqual(
-            _pc_build(start_time='12.500', duration_time='30.000'),
+            _with_android_codec(
+                _pc_build(start_time='12.500', duration_time='30.000'), 'mp3',
+            ),
             _android_build(start_time='12.500', duration_time='30.000'),
         )
 
@@ -127,7 +152,7 @@ class BuildCommandParity(_PinnedTools, unittest.TestCase):
 
     def test_enhance_flag_matches(self):
         self.assertEqual(
-            _pc_build(enhance=True),
+            _with_android_codec(_pc_build(enhance=True), 'mp3'),
             _android_build(enhance=True),
         )
         self.assertEqual(
@@ -546,6 +571,53 @@ class HistoryParity(unittest.TestCase):
                 self._snapshot(pc_history, pc_path),
                 self._snapshot(android_history, android_path),
             )
+
+
+class SafHelperTests(unittest.TestCase):
+    def test_free_path_sanitizes_path_traversal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            target = android_saf._free_path(tmp_path, '../../etc/passwd.mp4')
+            self.assertEqual(target.name, 'passwd.mp4')
+            self.assertEqual(target.parent, tmp_path)
+
+            target_win = android_saf._free_path(tmp_path, r'..\..\etc\shadow.mp3')
+            self.assertEqual(target_win.name, 'shadow.mp3')
+            self.assertEqual(target_win.parent, tmp_path)
+
+    def test_free_path_increments_counter_on_collision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            (tmp_path / 'song.mp3').write_text('content')
+            target = android_saf._free_path(tmp_path, 'song.mp3')
+            self.assertEqual(target.name, 'song-1.mp3')
+
+            (tmp_path / 'song-1.mp3').write_text('content')
+            target2 = android_saf._free_path(tmp_path, 'song.mp3')
+            self.assertEqual(target2.name, 'song-2.mp3')
+
+    def test_prune_removes_old_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            old_file = tmp_path / 'old.mp4'
+            old_file.write_text('old')
+            import os
+            import time
+            two_days_ago = time.time() - (48 * 3600)
+            os.utime(old_file, (two_days_ago, two_days_ago))
+
+            fresh_file = tmp_path / 'fresh.mp4'
+            fresh_file.write_text('fresh')
+
+            android_saf._prune(tmp_path)
+            self.assertFalse(old_file.exists())
+            self.assertTrue(fresh_file.exists())
+
+    def test_media_suffixes_whitelist(self):
+        self.assertIn('.mp4', android_saf._MEDIA_SUFFIXES)
+        self.assertIn('.mp3', android_saf._MEDIA_SUFFIXES)
+        self.assertNotIn('.exe', android_saf._MEDIA_SUFFIXES)
+        self.assertNotIn('.sh', android_saf._MEDIA_SUFFIXES)
 
 
 if __name__ == '__main__':
