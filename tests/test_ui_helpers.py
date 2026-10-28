@@ -165,7 +165,7 @@ class UiCallbackTests(unittest.TestCase):
         CliporaApp._post_to_ui(DestroyedWindow(), lambda: None)
 
 
-class StemFriendlyTests(unittest.TestCase):
+class _AppTestCase(unittest.TestCase):
     def _make_app(self):
         try:
             from clipora.ui import CliporaApp
@@ -178,6 +178,54 @@ class StemFriendlyTests(unittest.TestCase):
         self.addCleanup(app._on_close)
         return app
 
+
+class UiSmokeTests(_AppTestCase):
+    def test_mode_switch_toggles_option_rows(self):
+        app = self._make_app()
+        app.input_kind.set('file')
+
+        app._on_mode_change('audio')
+        app.update()
+        self.assertTrue(app.format_box.winfo_manager())
+        self.assertFalse(app.video_format_box.winfo_manager())
+        self.assertFalse(app._stems_options.winfo_manager())
+
+        app._on_mode_change('video')
+        app.update()
+        self.assertFalse(app.format_box.winfo_manager())
+        self.assertTrue(app.video_format_box.winfo_manager())
+        self.assertFalse(app._stems_options.winfo_manager())
+
+        app._on_mode_change('stems')
+        app.update()
+        self.assertTrue(app.format_box.winfo_manager())
+        self.assertFalse(app.video_format_box.winfo_manager())
+        self.assertTrue(app._stems_options.winfo_manager())
+
+    def test_trim_row_follows_mode_and_source_kind(self):
+        app = self._make_app()
+        app.input_kind.set('file')
+        app.mode.set('stems')
+        app._sync_options()
+        app.update()
+        self.assertFalse(app._trim_options.winfo_manager())
+
+        app.input_kind.set('url')
+        app._sync_options()
+        app.update()
+        self.assertTrue(app._trim_options.winfo_manager())
+
+    def test_builds_at_common_display_scalings(self):
+        app = self._make_app()
+        for factor in (1.0, 1.25, 1.5):
+            app.tk.call('tk', 'scaling', factor)
+            app.update()
+            self.assertAlmostEqual(
+                float(app.tk.call('tk', 'scaling')), factor, places=2)
+            self.assertTrue(app.start_button.winfo_exists())
+
+
+class StemFriendlyTests(_AppTestCase):
     def test_empty_stems_selection_fails_validation(self):
         app = self._make_app()
         app.mode.set('stems')
