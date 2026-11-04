@@ -1190,7 +1190,7 @@ class CliporaApp(tk.Tk):
         self._enhance_row.grid(row=1, column=0, sticky='ew', pady=(10, 0))
         self.enhance_check = Switch(
             self._enhance_row,
-            text='ปรับเสียงพอดแคสต์ (ลดนอยส์ + เกลี่ยเสียง + -16 LUFS)',
+            text='ลดนอยส์/เกลี่ยเสียง/ดัง -16 LUFS',
             variable=self.enhance_audio,
             rainbow=True,
         )
