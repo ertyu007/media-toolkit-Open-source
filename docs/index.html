@@ -102,7 +102,7 @@ footer{max-width:1040px;margin:0 auto;padding:24px 20px 40px;border-top:1px soli
 <h1>Clipora</h1>
 <p class="lead">โปรแกรม Windows สำหรับแปลงวิดีโอ แยกเสียง และดาวน์โหลดสื่อสาธารณะที่ได้รับอนุญาต ประมวลผลบนเครื่องทั้งหมด ฟรี ไม่มีโฆษณา ไม่ต้องสมัครบัญชี</p>
 <p class="links"><a class="btn" href="https://github.com/ertyu007/media-toolkit-Open-source/releases">ดาวน์โหลด</a><a href="https://github.com/ertyu007/media-toolkit-Open-source">ซอร์สโค้ด</a><a href="USER_GUIDE.md">คู่มือผู้ใช้</a></p>
-<p class="note">เวอร์ชัน 0.6.4 สร้างด้วย Python 3.10+, Tkinter, FFmpeg, yt-dlp และ Demucs</p>
+<p class="note">เวอร์ชัน 0.7.1 สร้างด้วย Python 3.10+, Tkinter, FFmpeg, yt-dlp และ Demucs</p>
 </div>
 </header>
 <main>
@@ -111,10 +111,11 @@ footer{max-width:1040px;margin:0 auto;padding:24px 20px 40px;border-top:1px soli
 <h2>ภาพรวมระบบ</h2>
 <p>Clipora เป็นแอป <b>local-first</b>: ไฟล์ต้นฉบับไม่ถูกแก้ไข ไม่ส่งไฟล์/ลิงก์ไปเซิร์ฟเวอร์ของ Clipora เก็บ output เดิมไว้จนกว่างานใหม่จะสำเร็จ ใช้งาน 3 ขั้นตอน: <b>วางลิงก์/เลือกไฟล์ → เลือกรูปแบบ → กดเริ่ม</b></p>
 <div class="grid g3">
-<div class="box"><b>ไฟล์ในเครื่อง</b><br><span class="mut">แยกเสียง MP3/M4A/WAV/FLAC/OPUS · แปลง MP4 (H.264/AAC) · MOV ProRes 422 · ตัดช่วงเวลา · เลือก FPS สูงสุด/60/30 · คุณภาพ High/Balanced/Small</span></div>
-<div class="box"><b>ลิงก์สาธารณะ</b><br><span class="mut">ทีละรายการผ่าน yt-dlp (สูงสุด/2160p/1080p/720p/480p/360p) · ไม่รับ playlist, live, private/paid, login, cookies, DRM</span></div>
+<div class="box"><b>ไฟล์ในเครื่อง</b><br><span class="mut">แยกเสียง MP3/M4A/WAV/FLAC/OPUS · แปลง MP4 (H.264/AAC) · MOV ProRes 422 · Hardware encode (NVENC/QSV/AMF) · ตัดช่วงเวลา · เลือก FPS สูงสุด/60/30 · คุณภาพ High/Balanced/Small</span></div>
+<div class="box"><b>ลิงก์สาธารณะ</b><br><span class="mut">คิวหลายลิงก์ (ทำทีละลิงก์) ผ่าน yt-dlp (สูงสุด/2160p/1080p/720p/480p/360p) · ไม่รับ playlist, live, private/paid, login, cookies, DRM</span></div>
 <div class="box"><b>แยก Stem</b><br><span class="mut">เสียงร้อง/ดนตรี ฯลฯ บนเครื่องด้วย Demucs (ออฟไลน์หลังติดตั้ง ~209 MB) พร้อมไฟล์ <code>_stems.zip</code></span></div>
 </div>
+<p class="note">งานอัตโนมัติ: มี CLI แบบไม่มีหน้าจอ (<code>python -m clipora.cli</code>) สำหรับแปลง/ดาวน์โหลดเป็นชุด พร้อม <code>--json</code> และ exit codes</p>
 <p class="note">Setup รวม Python/Tkinter + FFmpeg + yt-dlp + Deno (~250 MB) เปิดครั้งแรกใช้ได้ทันที ไม่ต้องต่อเน็ตตอนติดตั้ง</p>
 </section>
 
@@ -134,7 +135,7 @@ footer{max-width:1040px;margin:0 auto;padding:24px 20px 40px;border-top:1px soli
 <div class="box"><b>แยก Stem</b><br><code>separate_audio</code> (Demucs) → <code>separate_expected_outputs</code> → รวม <code>_stems.zip</code> · ต้องติดตั้งเครื่องมือก่อนครั้งแรกผ่านปุ่ม <b>เครื่องมือ</b></div>
 <div class="box"><b>กฎเหล็ก</b><br>ห้ามแตะ Tk จาก worker · subprocess แบบ argument list (<code>shell=False</code>) + ซ่อน console · ถือ process handle ตอนยกเลิก (URL ต้องหยุดทั้ง tree yt-dlp→FFmpeg) · source ห้ามเป็น cleanup target · ตรวจพื้นที่ดิสก์ก่อนเริ่ม</div>
 </div>
-<p><span class="tag">clipora/tools.py ค้นหา FFmpeg/yt-dlp/Deno</span><span class="tag">dependencies.py พิน URL+SHA-256</span><span class="tag">history.py ประวัติ/ถังขยะ</span><span class="tag">preview.py พรีวิวลิงก์</span><span class="tag">app_update.py / ytdlp_update.py อัปเดต</span></p>
+<p><span class="tag">clipora/tools.py ค้นหา FFmpeg/yt-dlp/Deno</span><span class="tag">dependencies.py พิน URL+SHA-256</span><span class="tag">history.py ประวัติ/ถังขยะ</span><span class="tag">preview.py พรีวิวลิงก์</span><span class="tag">url_queue.py คิวลิงก์</span><span class="tag">cli.py โหมดไม่มีหน้าจอ</span><span class="tag">app_update.py / ytdlp_update.py อัปเดต</span></p>
 </section>
 
 <section class="wide">
@@ -242,7 +243,7 @@ footer{max-width:1040px;margin:0 auto;padding:24px 20px 40px;border-top:1px soli
 </section>
 
 </main>
-<footer>Clipora 0.6.4 หน้านี้เป็นเว็บจำลอง ไม่มีการประมวลผลสื่อจริง</footer>
+<footer>Clipora 0.7.1 หน้านี้เป็นเว็บจำลอง ไม่มีการประมวลผลสื่อจริง</footer>
 <script>
 (function(){
   var reduceMotion=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;

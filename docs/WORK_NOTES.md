@@ -10,6 +10,13 @@
 - **เทสต์**: `tests/test_ui_helpers.py` เพิ่ม `QualityLabelUiTests` 2 เคส (ค่า→ป้าย, ป้าย→ค่า + ค่าตัวเลือก URL)
 - **เอกสาร**: `docs/USER_GUIDE.md` (ตารางคุณภาพ URL/local, ชื่อช่องตัดช่วง, ข้อความสวิตช์ฮาร์ดแวร์) และ `README.md` (รายการคุณภาพ) — ไม่ bump version
 
+## ทำวันนี้ (2026-11-04) — อัปเดตข้อมูลโครงการให้เป็นปัจจุบัน
+
+- **GitHub repo**: ปรับ About description ให้ครอบคลุม convert/trim/download, แยก Stem และ batch/CLI; เพิ่ม topics `python`, `windows`, `media-converter`, `audio-converter`, `video-converter`, `stem-separation`, `batch-processing`, `cli`, `local-first`, `nvidia-nvenc` (คง topic เดิม demucs/ffmpeg/tkinter/yt-dlp)
+- **README**: เพิ่มหัวข้อ "มีอะไรใหม่ใน 0.7.1" (security hardening: dependency pins, DNS pre-flight, ตรวจ SHA-256 ของ yt-dlp)
+- **docs/index.html** (GitHub Pages): แก้เวอร์ชัน 0.6.4 → 0.7.1 ทั้งหัวและ footer, เพิ่ม Hardware encode/คิวลิงก์/CLI ในภาพรวมและ tags
+- ไม่ bump version (คง 0.7.1); ไม่แตะโค้ดหรือ dependency
+
 ## ทำวันนี้ (2026-11-04) — สลับไฟล์/URL ได้ทุกโหมด + ตรวจจับแหล่งอัตโนมัติขณะพิมพ์
 
 - **ตัวสลับไฟล์/URL แสดงทุกโหมด**: `_sync_options` ไม่ซ่อน `_source_kind_frame` ในโหมดเสียง/วิดีโออีกต่อไป (เดิมโชว์เฉพาะโหมดแยก Stem)
