@@ -260,6 +260,23 @@ ffmpeg -hide_banner -encoders | Select-String libmp3lame
 
 ติดตั้ง build ที่รองรับ หรือใช้ M4A ชั่วคราวหาก AAC encoder พร้อม
 
+### Hardware encode ใช้ไม่ได้ (nvenc / qsv / amf)
+
+ถ้าเปิด **ใช้ Hardware encode** แล้วขึ้น error เช่น `Cannot load nvEncodeAPI64.dll`, `No capable devices found`, `Error while opening encoder` หรือ `Unknown encoder h264_qsv`:
+
+- Clipora จะพยายามถอยกลับไปใช้ `libx264` ให้อัตโนมัติหนึ่งครั้ง ถ้ายังล้มเหลวให้ปิดสวิตช์ **ใช้ Hardware encode (เร็วขึ้น ถ้ารองรับ)** ในตัวเลือกเพิ่มเติมแล้วเริ่มงานใหม่
+- ตรวจว่า FFmpeg ในเครื่องมี encoder นั้นจริง: `ffmpeg -hide_banner -encoders | Select-String h264`
+- NVENC/QSV/AMF ต้องมีไดรเวอร์การ์ดจอที่อัปเดตและ GPU ที่รองรับ; เครื่องเสมือน (VM) หรือ Remote Desktop มักใช้งานไม่ได้
+- ตัวเลือกนี้มีเฉพาะงานไฟล์ในเครื่อง (MP4) — งานดาวน์โหลดลิงก์ไม่ใช้ hardware encode
+
+### ปรับเสียงพอดแคสต์แล้วได้ไฟล์เสียงเงียบ/เคยขึ้น `Failed to find two consecutive MPEG audio frames`
+
+เกิดเมื่อช่วงที่เลือก**เงียบทั้งช่วง** (เช่น อัดหน้าจอแต่ไม่ได้เก็บเสียง) แล้ว `silenceremove` ตัดทุกเฟรมทิ้ง:
+
+- ทั้งงานไฟล์ในเครื่องและงานดาวน์โหลดลิงก์ (โหมดเสียง) จะแปลงช่วงนั้นซ้ำแบบไม่ปรับเสียงให้อัตโนมัติ จึงได้ไฟล์เสียงที่เปิดได้ (แต่จะเงียบตามต้นฉบับ)
+- ถ้าอยากได้เสียงจริง ให้ตรวจว่าตอนอัดเปิดไมโครโฟน/เสียงระบบไว้ แล้วอัดใหม่
+- ตรวจว่าไฟล์มีเสียงจริง: `ffmpeg -hide_banner -i "ไฟล์.mp4" -af volumedetect -f null NUL` — ถ้า `max_volume` ต่ำกว่า -45 dB ถือว่าเงียบทั้งช่วง
+
 ### Output คุณภาพต่ำกว่าต้นฉบับ
 
 MP3, M4A และ MP4 ปัจจุบันมีการ re-encode จึงมีการสูญเสีย เลือก High สำหรับ MP4 แต่ไม่สามารถคืนรายละเอียดที่ต้นฉบับไม่มีได้

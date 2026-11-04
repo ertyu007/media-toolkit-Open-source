@@ -108,7 +108,7 @@ Entry point เท่านั้น อย่าใส่ business logic
 รัน syntax/import:
 
 ```powershell
-python -m compileall -q app.py clipora tests scripts
+python -m compileall -q -x "[\\/](build|\.buildozer)[\\/]" app.py clipora tests scripts android
 ```
 
 รันทุก test โดยยกระดับ ResourceWarning เป็น failure:

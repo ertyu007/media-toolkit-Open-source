@@ -6,7 +6,7 @@
 
 ## แผนงานการพัฒนา (Roadmap)
 1. [x] สร้างระบบบันทึกกิจกรรม (`docs/ACTIVITY_LOG.md`)
-2. [ ] ระบบคิวงาน (Batch Processing) — ยังไม่มีโค้ด ต้องเริ่มใหม่
+2. [x] ระบบคิวงาน (Batch Processing) — คิวไฟล์ในเครื่อง, คิวลิงก์ใน UI (ทำทีละลิงก์) และ batch ใน CLI
 3. [x] ระบบตัดช่วงเวลา (Media Trimming) — ใช้ได้กับงานไฟล์ในเครื่อง (เสียง/วิดีโอ) และงาน URL ทุกโหมด
 4. [x] ระบบตรวจสอบพื้นที่ดิสก์ว่างล่วงหน้า (Disk Space Check) — ตรวจก่อนเริ่มงานทุกครั้ง
 5. [x] ระบบตรวจสอบความสมบูรณ์ของไฟล์ต้นทาง (Source File Integrity Check)
@@ -14,6 +14,8 @@
 7. [x] ปุ่มคัดลอก Error Log สะดวกๆ (`ErrorDialog` พร้อมปุ่ม Copy)
 8. [x] ระบบแจ้งเตือนการอัปเดตแอปพลิเคชันหลัก (App Update Notification)
 9. [x] ระบบจำกัดทรัพยากรการประมวลผล (CPU/Thread Limiter สำหรับ Demucs) — ตั้งค่าเธรดสูงสุดได้จาก Settings; ค่าเริ่มต้นไม่จำกัด
+10. [x] CLI แบบไม่มีหน้าจอ (`python -m clipora.cli`) — convert/download เป็นชุด, `--json`, exit codes (ดู `docs/CLI.md`)
+11. [x] Hardware H.264 encode (NVENC/QSV/AMF) — เปิดได้เฉพาะงานไฟล์วิดีโอในเครื่อง พร้อม fallback กลับ `libx264` อัตโนมัติ
 
 ---
 

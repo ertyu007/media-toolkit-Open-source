@@ -40,7 +40,7 @@ git switch -c fix/progress-parser
 ## Tests ที่ต้องรัน
 
 ```powershell
-python -m compileall -q app.py clipora tests scripts
+python -m compileall -q -x "[\\/](build|\.buildozer)[\\/]" app.py clipora tests scripts android
 python -W error::ResourceWarning -m unittest discover -s tests -v
 ```
 

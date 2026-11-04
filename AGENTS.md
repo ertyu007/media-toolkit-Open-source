@@ -48,9 +48,11 @@ From `CONTRIBUTING.md` and `docs/DEVELOPMENT.md`:
 Run from the repo root:
 
 ```powershell
-python -m compileall -q app.py clipora tests scripts android
+python -m compileall -q -x "[\\/](build|\.buildozer)[\\/]" app.py clipora tests scripts android
 python -W error::ResourceWarning -m unittest discover -s tests -v
 ```
+
+`-x` skips `android/build/` (python-for-android cache, gitignored, contains Python 2 / py3.14-only scripts) so compileall reports only our code.
 
 Integration tests create small media in a temporary directory and skip when FFmpeg is missing. `test_packaging.py` guards version sync and dependency pinning — it must pass after any PC version/dependency change. `test_android_core.py` guards the Android port against drift from `clipora/`.
 
