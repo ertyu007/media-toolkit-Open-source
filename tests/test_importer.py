@@ -884,6 +884,53 @@ class ImportWorkspaceTests(unittest.TestCase):
         'FFmpeg and ffprobe are required',
     )
     @patch('clipora.importer._run_import_process')
+    def test_enhanced_url_silent_audio_still_finalizes(self, run_process):
+        with TemporaryDirectory() as directory:
+            destination = Path(directory)
+
+            def complete(_command, workspace, on_progress, _cancellation, *_args):
+                result = workspace / 'เงียบ.mp3'
+                creation = subprocess.run(
+                    [
+                        'ffmpeg', '-y', '-loglevel', 'error',
+                        '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono:d=1',
+                        str(result),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(creation.returncode, 0, creation.stderr)
+                on_progress(1.0)
+                return result
+
+            run_process.side_effect = complete
+            target = import_url(
+                ImportSpec(
+                    url='https://example.com/silent',
+                    destination=destination,
+                    mode='audio',
+                    quality='สูงสุด',
+                    audio_format='mp3',
+                    enhance=True,
+                ),
+                lambda _value: None,
+                CancellationToken(),
+                tool_command=['yt-dlp'],
+            )
+
+            result = probe(target)
+            self.assertTrue(result.has_audio)
+            self.assertFalse(result.has_video)
+            self.assertAlmostEqual(result.duration or 0.0, 1.0, delta=0.3)
+            self.assertFalse(any(destination.glob('.clipora-import-*')))
+            self.assertFalse(list(destination.glob('.เงียบ.clipora-*')))
+
+    @unittest.skipUnless(
+        find_executable('ffmpeg') is not None and find_executable('ffprobe') is not None,
+        'FFmpeg and ffprobe are required',
+    )
+    @patch('clipora.importer._run_import_process')
     def test_enhanced_url_video_with_gaps_cuts_and_keeps_av(self, run_process):
         with TemporaryDirectory() as directory:
             destination = Path(directory)

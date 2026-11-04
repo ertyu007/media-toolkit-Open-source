@@ -22,6 +22,7 @@ from .ffmpeg import (
     VIDEO_QUALITY_PRESETS,
     check_disk_space,
     collision_free_output_path,
+    hardware_h264_encoder,
     output_path,
     parse_trim_seconds,
     tools_available,
@@ -88,6 +89,7 @@ from .ytdlp_update import (
     latest_ytdlp_version,
     update_ytdlp,
 )
+from .url_queue import add_url, aggregate_percent, queue_summary, remove_at
 from .ui_components.dialogs import (
     CANCEL,
     KEEP,
@@ -398,6 +400,7 @@ class CliporaApp(tk.Tk):
         self.audio_format = tk.StringVar(value=defaults['audio_format'])
         self.video_format = tk.StringVar(value=defaults['video_format'])
         self.enhance_audio = tk.BooleanVar(value=False)
+        self.hardware_encode = tk.BooleanVar(value=False)
         self.fps = tk.StringVar(value=defaults['fps'])
         self.quality = tk.StringVar(value=defaults['quality'])
         self.mode_desc = tk.StringVar(value='')
@@ -419,6 +422,8 @@ class CliporaApp(tk.Tk):
         self._active_source_kind = 'file'
         self._source_values = {'file': '', 'url': ''}
         self._selected_local_sources: tuple[Path, ...] = ()
+        self._url_queue: list[str] = []
+        self._queue_progress: tuple[int, int] | None = None
         self._progress_action = 'กำลังประมวลผล'
         self._debug_text: tk.Text | None = None
         self._last_debug_phase = ''
@@ -1030,6 +1035,63 @@ class CliporaApp(tk.Tk):
         self._skel_x = -70
         self._preview_tmp: tempfile.TemporaryDirectory | None = None
 
+        # Sequential URL queue (URL mode only): the links are downloaded one at
+        # a time with aggregate progress. The panel is a plain listbox because
+        # the queue is short; it lives below the link preview card.
+        self._url_queue_frame = ttk.Frame(source_body, style='TFrame')
+        self._url_queue_frame.grid(row=5, column=0, sticky='ew', pady=(10, 0))
+        self._url_queue_frame.columnconfigure(0, weight=1)
+        queue_header = ttk.Frame(self._url_queue_frame, style='TFrame')
+        queue_header.grid(row=0, column=0, sticky='ew')
+        queue_header.columnconfigure(0, weight=1)
+        self._url_queue_count = ttk.Label(
+            queue_header, text=queue_summary(self._url_queue),
+            style='ModeDesc.TLabel',
+        )
+        self._url_queue_count.grid(row=0, column=0, sticky='w')
+        self._url_queue_listbox = tk.Listbox(
+            self._url_queue_frame,
+            height=3,
+            selectmode='browse',
+            bg=FIELD,
+            fg=TEXT,
+            selectbackground=ACCENT,
+            selectforeground=MENU_ACTIVE_FG,
+            disabledforeground=MUTED,
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=1,
+            highlightbackground=BORDER,
+            highlightcolor=ACCENT,
+            font=(self.ui_font, FONT_SIZE_SMALL),
+            activestyle='none',
+        )
+        self._url_queue_listbox.grid(row=1, column=0, sticky='ew', pady=(6, 0))
+        self._url_queue_hint = ttk.Label(
+            self._url_queue_frame,
+            text='ยังไม่มีลิงก์ในคิว — วางลิงก์แล้วกด เพิ่มเข้าคิว',
+            style='ModeDesc.TLabel',
+        )
+        self._url_queue_hint.grid(row=2, column=0, sticky='w', pady=(4, 0))
+        queue_actions = ttk.Frame(self._url_queue_frame, style='TFrame')
+        queue_actions.grid(row=3, column=0, sticky='w', pady=(6, 0))
+        self._url_queue_add_button = RoundedButton(
+            queue_actions, text='เพิ่มเข้าคิว',
+            command=self._add_current_url_to_queue, width=14,
+        )
+        self._url_queue_add_button.pack(side='left', padx=(0, 8))
+        self._url_queue_remove_button = RoundedButton(
+            queue_actions, text='ลบที่เลือก',
+            command=self._remove_selected_url, width=12,
+        )
+        self._url_queue_remove_button.pack(side='left', padx=(0, 8))
+        self._url_queue_clear_button = RoundedButton(
+            queue_actions, text='ล้างคิว',
+            command=self._clear_url_queue, width=10,
+        )
+        self._url_queue_clear_button.pack(side='left')
+        self._refresh_url_queue()
+
         _divider(content, row=2)
 
         # ── Section 2: Destination ────────────────────────────────────────────
@@ -1149,6 +1211,18 @@ class CliporaApp(tk.Tk):
         )
         self.duration_entry = RoundedEntry(self._trim_options, width=12)
         self.duration_entry.grid(row=0, column=3, sticky='w')
+
+        # Hardware H.264 encode toggle (local video jobs only; URL downloads
+        # copy the source stream and have no encoder choice).
+        self._hardware_row = ttk.Frame(self._details_box, style='TFrame')
+        self._hardware_row.grid(row=2, column=0, columnspan=4, sticky='ew', pady=(12, 0))
+        self.hardware_check = Switch(
+            self._hardware_row,
+            text='ใช้ Hardware encode (เร็วขึ้น ถ้ารองรับ)',
+            variable=self.hardware_encode,
+        )
+        self.hardware_check.pack(side='left')
+        self._hardware_row.grid_remove()
         self._details_box.grid_remove()
 
         # ── Action dock (sticky bottom) ─────────────────────────────────────────
@@ -1256,7 +1330,12 @@ class CliporaApp(tk.Tk):
             self.start_time_entry,
             self.duration_entry,
             self.enhance_check,
+            self.hardware_check,
             *self._stem_check_widgets,
+            self._url_queue_listbox,
+            self._url_queue_add_button,
+            self._url_queue_remove_button,
+            self._url_queue_clear_button,
         ]
         self._sync_source_kind()
         self._sync_options()
@@ -1888,6 +1967,12 @@ class CliporaApp(tk.Tk):
             self._trim_options.grid()
         elif self._trim_options is not None:
             self._trim_options.grid_remove()
+        if getattr(self, '_hardware_row', None) is not None:
+            # Local video only: URL video jobs copy the source stream.
+            if not is_url and mode == 'video':
+                self._hardware_row.grid()
+            else:
+                self._hardware_row.grid_remove()
         has_details = mode == 'video' or show_trim
         if has_details and self._details_expanded:
             self.details_toggle.configure(text='▾ ตัวเลือกเพิ่มเติม')
@@ -1963,6 +2048,7 @@ class CliporaApp(tk.Tk):
                 else:
                     self.enhance_check.state(['!disabled'])
         self._sync_details()
+        self._sync_url_queue_panel()
         if self._cancellation is None:
             self.start_button.configure(text=action_text, command=self._start)
             self.start_button.set_mode(True)
@@ -2010,6 +2096,7 @@ class CliporaApp(tk.Tk):
             self.source_hint.set('เลือกไฟล์ หรือลากมาวางที่นี่')
             self.source_button_text.set('เลือกไฟล์')
             self.rights_row.grid_remove()
+        self._sync_url_queue_panel()
         self._on_source_changed()
         self._sync_options()
 
@@ -2242,7 +2329,11 @@ class CliporaApp(tk.Tk):
     def _set_inputs_enabled(self, enabled: bool) -> None:
         state = '!disabled' if enabled else 'disabled'
         for widget in self._input_widgets:
-            widget.state([state])
+            if isinstance(widget, tk.Listbox):
+                # tk.Listbox has a plain state option, not ttk-style state().
+                widget.configure(state='normal' if enabled else 'disabled')
+            else:
+                widget.state([state])
 
     def _choose_source(self) -> None:
         paths = filedialog.askopenfilenames(
@@ -2283,6 +2374,98 @@ class CliporaApp(tk.Tk):
         self.source_entry.focus_set()
         self.source_entry.icursor('end')
         return True
+
+    # URL queue (URL mode only; downloads run sequentially)
+    def _sync_url_queue_panel(self) -> None:
+        """Show the queue panel only where the queue is actually consumed.
+
+        The queue drives audio/video URL downloads. File input and stems mode
+        never read it, so the panel (and its add/remove/clear buttons) hides
+        there; the queue contents stay intact and reappear when the user
+        switches back to an audio/video URL job.
+        """
+        frame = getattr(self, '_url_queue_frame', None)
+        if frame is None:
+            return
+        visible = (
+            self.input_kind.get() == 'url' and self.mode.get() != 'stems'
+        )
+        try:
+            if visible:
+                frame.grid()
+                self._refresh_url_queue()
+            else:
+                frame.grid_remove()
+        except tk.TclError:
+            pass
+
+    def _refresh_url_queue(self) -> None:
+        """Sync rows/count/hint while preserving selection and scroll position."""
+        try:
+            listbox_state = self._url_queue_listbox.cget('state')
+            selection = self._url_queue_listbox.curselection()
+            view_first = self._url_queue_listbox.yview()[0]
+            self._url_queue_listbox.configure(state='normal')
+            self._url_queue_listbox.delete(0, 'end')
+            for url in self._url_queue:
+                self._url_queue_listbox.insert('end', url)
+            if self._url_queue and selection:
+                index = min(int(selection[0]), len(self._url_queue) - 1)
+                self._url_queue_listbox.selection_set(index)
+                self._url_queue_listbox.see(index)
+            elif self._url_queue:
+                self._url_queue_listbox.yview_moveto(view_first)
+            self._url_queue_listbox.configure(state=listbox_state)
+            self._url_queue_count.configure(text=queue_summary(self._url_queue))
+            if self._url_queue:
+                self._url_queue_hint.grid_remove()
+            else:
+                self._url_queue_hint.grid()
+        except tk.TclError:
+            pass
+
+    def _add_current_url_to_queue(self) -> None:
+        """Validate the source entry and append it to the URL queue."""
+        try:
+            updated = add_url(self._url_queue, self.source.get())
+        except ValueError as exc:
+            self._source_error.show(str(exc))
+            return
+        self._source_error.hide()
+        self._url_queue = list(updated)
+        self._refresh_url_queue()
+        try:
+            index = len(self._url_queue) - 1
+            self._url_queue_listbox.selection_clear(0, 'end')
+            self._url_queue_listbox.selection_set(index)
+            self._url_queue_listbox.see(index)
+        except tk.TclError:
+            pass
+        self.status.set(f'เพิ่มเข้าคิวแล้ว ({len(self._url_queue)} ลิงก์)')
+
+    def _remove_selected_url(self) -> None:
+        """Remove the selected queue row; nothing happens without a selection."""
+        try:
+            selection = self._url_queue_listbox.curselection()
+        except tk.TclError:
+            return
+        if not selection:
+            self.status.set('เลือกคิวที่ต้องการลบก่อน')
+            return
+        try:
+            self._url_queue = list(remove_at(self._url_queue, int(selection[0])))
+        except IndexError:
+            return
+        self._refresh_url_queue()
+        self.status.set(f'ลบออกจากคิวแล้ว ({len(self._url_queue)} ลิงก์)')
+
+    def _clear_url_queue(self) -> None:
+        """Remove every queued link."""
+        if not self._url_queue:
+            return
+        self._url_queue.clear()
+        self._refresh_url_queue()
+        self.status.set('ล้างคิวแล้ว')
 
     def _on_source_entry_paste(self, _event: tk.Event) -> str:
         """Native paste inside the source box also adopts the matching mode."""
@@ -2326,6 +2509,12 @@ class CliporaApp(tk.Tk):
             return
         self._validate_destination()
     def _validate_source(self) -> bool:
+        # A non-empty URL queue is a complete source; the text field is only
+        # the staging area for the next link.
+        if (self.input_kind.get() == 'url' and self._url_queue
+                and self.mode.get() != 'stems'):
+            self._source_error.hide()
+            return True
         value = self.source.get().strip()
         if not value:
             self._source_error.show('กรุณาเลือกไฟล์หรือวางลิงก์')
@@ -2546,7 +2735,21 @@ class CliporaApp(tk.Tk):
             trim_start=trim_start,
             trim_duration=trim_duration,
             enhance=bool(self.enhance_audio.get()),
+            hardware=bool(self.hardware_encode.get()),
         )
+        if job.hardware and job.mode == 'video':
+            if job.video_format != 'mp4':
+                self._debug('Hardware encode: ใช้กับ MP4 เท่านั้น — MOV ใช้ ProRes')
+            elif job.enhance:
+                self._debug(
+                    'Hardware encode: งานปรับเสียงวิดีโอใช้ libx264 (ยังไม่รองรับ hw)'
+                )
+            else:
+                encoder = hardware_h264_encoder()
+                self._debug(
+                    'Hardware encode: '
+                    + (encoder if encoder else 'ไม่พบ encoder ที่ใช้ได้ — ใช้ libx264')
+                )
         if not tools_available():
             self.status.set('ต้องติดตั้งเครื่องมือก่อนเริ่มงาน')
             self._open_tool_setup()
@@ -2789,13 +2992,38 @@ class CliporaApp(tk.Tk):
             self.after(0, self._set_progress_phase, 'finalizing', 95)
             self.after(0, self._done_stems, outputs, cancellation)
 
+    def _build_import_spec(
+        self,
+        url: str,
+        destination: Path,
+        trim_start: float | None,
+        trim_duration: float | None,
+    ) -> ImportSpec:
+        """Freeze the current options into an immutable download spec."""
+        return ImportSpec(
+            url=url,
+            destination=destination,
+            mode=self.mode.get(),
+            quality=self.quality.get(),
+            audio_format=self._audio_format_value(),
+            video_format=self._video_format_value(),
+            fps=self._fps_value(),
+            enhance=bool(self.enhance_audio.get()),
+            trim_start=trim_start,
+            trim_duration=trim_duration,
+        )
+
     def _start_url(self) -> None:
         destination = Path(self.destination.get())
-        try:
-            url = validate_url(self.source.get())
-        except ValueError as exc:
-            self._source_error.show(str(exc))
-            return
+        queued_urls = tuple(self._url_queue)
+        if queued_urls:
+            urls = queued_urls
+        else:
+            try:
+                urls = (validate_url(self.source.get()),)
+            except ValueError as exc:
+                self._source_error.show(str(exc))
+                return
         try:
             trim_start = parse_trim_seconds(self.start_time_entry.get())
             trim_duration = parse_trim_seconds(self.duration_entry.get())
@@ -2816,25 +3044,27 @@ class CliporaApp(tk.Tk):
             self.status.set('ต้องติดตั้งเครื่องมือก่อนเริ่มงาน')
             self._open_tool_setup()
             return
-        job = ImportSpec(
-            url=url,
-            destination=destination,
-            mode=self.mode.get(),
-            quality=self.quality.get(),
-            audio_format=self._audio_format_value(),
-            video_format=self._video_format_value(),
-            fps=self._fps_value(),
-            enhance=bool(self.enhance_audio.get()),
-            trim_start=trim_start,
-            trim_duration=trim_duration,
+        # One frozen spec per link; the queue is snapshotted on the main thread
+        # so the worker never reads Tk variables.
+        specs = tuple(
+            self._build_import_spec(url, destination, trim_start, trim_duration)
+            for url in urls
         )
         self._add_to_destination_history(str(destination))
         cancellation = CancellationToken()
         self._begin_job(cancellation, 'กำลังตรวจสอบลิงก์…', 'validating')
         self._set_progress_phase('validating', 0)
+        if queued_urls:
+            self.status.set(f'เข้าคิว {len(specs)} ลิงก์ — ทำทีละลิงก์')
+            threading.Thread(
+                target=self._run_url_queue,
+                args=(specs, cancellation),
+                daemon=True,
+            ).start()
+            return
         threading.Thread(
             target=self._run_import,
-            args=(job, cancellation),
+            args=(specs[0], cancellation),
             daemon=True,
         ).start()
 
@@ -2845,6 +3075,7 @@ class CliporaApp(tk.Tk):
         progress_action: str,
     ) -> None:
         self._cancellation = cancellation
+        self._queue_progress = None
         self._progress_action = progress_action
         self._cancel_preview(keep_card=True)
         self._set_inputs_enabled(False)
@@ -2955,6 +3186,103 @@ class CliporaApp(tk.Tk):
             self._set_progress_phase('done', 100)
             self.status.set(f'แปลงเสร็จครบ {len(completed)} ไฟล์')
 
+    def _run_url_queue(
+        self,
+        specs: tuple[ImportSpec, ...],
+        cancellation: CancellationToken,
+    ) -> None:
+        """Download queued links one at a time; Tk is only touched via after().
+
+        A failure stops the queue like the local batch does, keeping the files
+        already completed. Cancellation keeps the same invariant.
+        """
+        completed: list[Path] = []
+        sources_by_target: dict[Path, str] = {}
+        failed: tuple[str, str] | None = None
+        cancelled = False
+        total = len(specs)
+        for index, spec in enumerate(specs, start=1):
+            if cancellation.cancelled:
+                cancelled = True
+                break
+            self._post_to_ui(self._set_queue_item_status, index, total)
+            try:
+                target = import_url(
+                    spec,
+                    lambda value, index=index: self._post_to_ui(
+                        self._set_queue_item_progress, index, total, value * 100),
+                    cancellation,
+                    on_conflict=self._ask_overwrite,
+                    on_detail=lambda speed, eta: self._post_to_ui(
+                        self._set_download_detail, cancellation, speed, eta),
+                )
+            except ConversionCancelled:
+                cancelled = True
+                break
+            except (URLImportError, OSError, ValueError) as exc:
+                failed = (spec.url, str(exc))
+                break
+            completed.append(target)
+            sources_by_target[target] = spec.url
+        self._post_to_ui(
+            self._finish_url_queue, completed, sources_by_target, failed,
+            cancelled, cancellation,
+        )
+
+    def _set_queue_item_status(self, index: int, total: int) -> None:
+        self._queue_progress = (index, total)
+        self.status.set(f'คิว {index}/{total}')
+        overall = aggregate_percent(index, total, 0)
+        self.progress['value'] = overall
+        self.progress_text.set(f'{index}/{total} • {overall:.0f}%')
+        self._debug(f'คิว {index}/{total}: เริ่มดาวน์โหลด')
+
+    def _set_queue_item_progress(
+        self, index: int, total: int, item_percent: float,
+    ) -> None:
+        self._queue_progress = (index, total)
+        overall = aggregate_percent(index, total, item_percent)
+        self.progress['value'] = overall
+        self.progress_text.set(f'{index}/{total} • {overall:.0f}%')
+
+    def _finish_url_queue(
+        self,
+        completed: list[Path],
+        sources_by_target: dict[Path, str],
+        failed: tuple[str, str] | None,
+        cancelled: bool,
+        cancellation: CancellationToken,
+    ) -> None:
+        if not self._finish_job(cancellation):
+            return
+        succeeded = {url.lower() for url in sources_by_target.values()}
+        if succeeded:
+            # Only completed links leave the queue; failed/unprocessed rows
+            # stay so the user can retry them as-is.
+            self._url_queue = [
+                url for url in self._url_queue if url.lower() not in succeeded
+            ]
+            self._refresh_url_queue()
+        self.authorized.set(False)
+        if completed:
+            self._show_result(completed, sources_by_target)
+            self._flash_start_success()
+        if failed is not None:
+            url, detail = failed
+            self._set_progress_phase('error', 0)
+            message = (
+                f'คิวหยุดที่ {url} — ดาวน์โหลดสำเร็จแล้ว {len(completed)} ลิงก์\n\n'
+                f'{sanitize_error_message(detail)}'
+            )
+            self.status.set(f'คิวหยุดกลางทาง — สำเร็จ {len(completed)} ลิงก์')
+            ErrorDialog(self, 'คิวดาวน์โหลดหยุดแล้ว', message)
+        elif cancelled:
+            self._set_progress_phase('error', 0)
+            self.status.set(f'ยกเลิกคิวแล้ว — สำเร็จ {len(completed)} ลิงก์')
+        else:
+            self._set_progress_phase('done', 100)
+            self.status.set(f'ดาวน์โหลดเสร็จ {len(completed)} ลิงก์')
+
     def _ask_overwrite(self, target: Path) -> bool:
         """Ask on the main thread whether to replace an existing output file.
 
@@ -3026,7 +3354,11 @@ class CliporaApp(tk.Tk):
             percent = float(self.progress['value'])
         except (tk.TclError, TypeError, ValueError):
             return
-        self.progress_text.set(f'{percent:.0f}%  •  {detail}')
+        if self._queue_progress is not None:
+            index, total = self._queue_progress
+            self.progress_text.set(f'{index}/{total} • {percent:.0f}%  •  {detail}')
+        else:
+            self.progress_text.set(f'{percent:.0f}%  •  {detail}')
 
     def _set_progress(self, value: float, cancellation: CancellationToken) -> None:
         if cancellation is not self._cancellation or cancellation.cancelled:
@@ -3039,6 +3371,7 @@ class CliporaApp(tk.Tk):
         if cancellation is not self._cancellation:
             return False
         self._cancellation = None
+        self._queue_progress = None
         self._set_inputs_enabled(True)
         self._sync_source_kind()
         self._sync_options()

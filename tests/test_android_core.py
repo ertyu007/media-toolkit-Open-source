@@ -13,11 +13,13 @@ in the app's private dir instead of the PC settings folder.
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ANDROID_ROOT = REPO_ROOT / 'android'
@@ -166,6 +168,34 @@ class BuildCommandParity(_PinnedTools, unittest.TestCase):
             android_ffmpeg.PRORES_PROFILES,
         )
         self.assertEqual(pc_ffmpeg.PROGRESS_KEYS, android_ffmpeg.PROGRESS_KEYS)
+
+    def test_android_hardware_flag_always_uses_libx264(self):
+        self.assertEqual(
+            _android_build(mode='video', hardware=True),
+            _android_build(mode='video'),
+        )
+        command = _android_build(mode='video', hardware=True)
+        self.assertEqual(command[command.index('-c:v') + 1], 'libx264')
+        self.assertNotIn('h264_nvenc', command)
+
+    @patch('clipora.ffmpeg.hardware_h264_encoder', return_value=None)
+    def test_pc_hardware_without_encoder_matches_android(self, _hardware_encoder):
+        self.assertEqual(
+            _pc_build(mode='video', hardware=True),
+            _android_build(mode='video', hardware=True),
+        )
+
+    def test_job_spec_hardware_field_matches(self):
+        self.assertEqual(
+            [field.name for field in dataclasses.fields(pc_ffmpeg.JobSpec)],
+            [field.name for field in dataclasses.fields(android_ffmpeg.JobSpec)],
+        )
+        self.assertFalse(
+            pc_ffmpeg.JobSpec(SOURCE, TARGET.parent, 'video', 'Balanced', 'm4a').hardware
+        )
+        self.assertFalse(
+            android_ffmpeg.JobSpec(SOURCE, TARGET.parent, 'video', 'Balanced', 'm4a').hardware
+        )
 
 
 class PureHelperParity(unittest.TestCase):

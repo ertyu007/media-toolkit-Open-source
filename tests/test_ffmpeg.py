@@ -16,9 +16,12 @@ from clipora.ffmpeg import (
     collision_free_output_path,
     convert,
     finalize_output,
+    hardware_encoder_args,
+    hardware_h264_encoder,
     keep_intervals,
     normalize_trim,
     output_path,
+    parse_encoder_list,
     parse_progress_line,
     parse_silence_report,
     parse_trim_seconds,
@@ -139,6 +142,196 @@ class FFmpegCommandTests(unittest.TestCase):
             'สูงสุด',
         )
         self.assertNotIn('-r', command)
+
+
+ENCODER_LIST_SAMPLE = """
+Encoders:
+ V..... = Video
+ A..... = Audio
+ S..... = Subtitle
+ .F.... = Frame-level multithreading
+ ..S... = Slice-level multithreading
+ ...X.. = Codec is experimental
+ ....B. = Supports draw_horiz_band
+ .....D = Supports direct rendering method 1
+ ------
+ V....D a64multi             Multicolor charset for Commodore 64 (codec a64multi)
+ V....D h264_nvenc           NVIDIA NVENC H.264 encoder (codec h264)
+ V....D h264_amf             AMD AMF H.264 Encoder (codec h264)
+ A....D aac                  AAC (Advanced Audio Coding)
+ V....D h264_qsv             H.264 (Intel Quick Sync Video) (codec h264)
+ V....D libx264              libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 (codec h264)
+"""
+
+
+class HardwareEncoderTests(unittest.TestCase):
+    def test_parse_encoder_list_skips_banner_and_legend(self):
+        self.assertEqual(
+            parse_encoder_list(ENCODER_LIST_SAMPLE),
+            ('a64multi', 'h264_nvenc', 'h264_amf', 'aac', 'h264_qsv', 'libx264'),
+        )
+
+    def test_parse_encoder_list_handles_empty_or_banner_only_text(self):
+        self.assertEqual(parse_encoder_list(''), ())
+        self.assertEqual(parse_encoder_list('Encoders:\n V..... = Video\n'), ())
+
+    @patch('clipora.ffmpeg._HARDWARE_ENCODERS', ('h264_amf', 'h264_qsv'))
+    def test_chooses_qsv_over_amf(self):
+        self.assertEqual(hardware_h264_encoder(), 'h264_qsv')
+
+    @patch('clipora.ffmpeg._HARDWARE_ENCODERS', ('h264_amf', 'h264_nvenc', 'h264_qsv'))
+    def test_chooses_nvenc_first(self):
+        self.assertEqual(hardware_h264_encoder(), 'h264_nvenc')
+
+    @patch('clipora.ffmpeg._HARDWARE_ENCODERS', ('libx264', 'aac'))
+    def test_returns_none_without_hardware_encoder(self):
+        self.assertIsNone(hardware_h264_encoder())
+
+    @patch('clipora.ffmpeg._HARDWARE_ENCODERS', ())
+    def test_returns_none_when_list_is_empty(self):
+        self.assertIsNone(hardware_h264_encoder())
+
+    @patch('clipora.ffmpeg._HARDWARE_ENCODERS', None)
+    @patch('clipora.ffmpeg.find_executable', return_value=Path('C:/fake/ffmpeg.exe'))
+    @patch('clipora.ffmpeg.subprocess.run')
+    def test_probes_real_binary_once_and_caches(self, run, _find_executable):
+        run.return_value = SimpleNamespace(
+            returncode=0, stdout=ENCODER_LIST_SAMPLE, stderr='',
+        )
+
+        self.assertEqual(hardware_h264_encoder(), 'h264_nvenc')
+        self.assertEqual(hardware_h264_encoder(), 'h264_nvenc')
+
+        run.assert_called_once()
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], str(Path('C:/fake/ffmpeg.exe')))
+        self.assertIn('-encoders', command)
+
+    @patch('clipora.ffmpeg._HARDWARE_ENCODERS', None)
+    @patch('clipora.ffmpeg.find_executable', return_value=None)
+    @patch('clipora.ffmpeg.subprocess.run')
+    def test_missing_ffmpeg_returns_none_without_running(self, run, _find_executable):
+        self.assertIsNone(hardware_h264_encoder())
+        run.assert_not_called()
+
+    @patch('clipora.ffmpeg._HARDWARE_ENCODERS', None)
+    @patch('clipora.ffmpeg.find_executable', return_value=Path('C:/fake/ffmpeg.exe'))
+    @patch('clipora.ffmpeg.subprocess.run')
+    def test_failed_encoder_probe_returns_none(self, run, _find_executable):
+        run.return_value = SimpleNamespace(returncode=1, stdout='', stderr='boom')
+        self.assertIsNone(hardware_h264_encoder())
+
+    @patch('clipora.ffmpeg._HARDWARE_ENCODERS', None)
+    @patch('clipora.ffmpeg.find_executable', return_value=Path('C:/fake/ffmpeg.exe'))
+    @patch('clipora.ffmpeg.subprocess.run', side_effect=OSError('denied'))
+    def test_oserror_during_probe_returns_none(self, _run, _find_executable):
+        self.assertIsNone(hardware_h264_encoder())
+
+
+class HardwareEncoderArgsTests(unittest.TestCase):
+    def test_nvenc_quality_mapping(self):
+        for quality, cq in (('High', '20'), ('Balanced', '23'), ('Small', '28')):
+            with self.subTest(quality=quality):
+                self.assertEqual(
+                    hardware_encoder_args('h264_nvenc', quality),
+                    ['-c:v', 'h264_nvenc', '-rc', 'vbr', '-cq', cq,
+                     '-b:v', '0', '-preset', 'p5'],
+                )
+
+    def test_qsv_global_quality_mapping(self):
+        for quality, global_quality in (('High', '20'), ('Balanced', '23'), ('Small', '28')):
+            with self.subTest(quality=quality):
+                self.assertEqual(
+                    hardware_encoder_args('h264_qsv', quality),
+                    ['-c:v', 'h264_qsv', '-global_quality', global_quality,
+                     '-preset', 'medium'],
+                )
+
+    def test_amf_cqp_mapping(self):
+        for quality, qp, level in (
+            ('High', '18', 'quality'),
+            ('Balanced', '23', 'balanced'),
+            ('Small', '28', 'speed'),
+        ):
+            with self.subTest(quality=quality):
+                self.assertEqual(
+                    hardware_encoder_args('h264_amf', quality),
+                    ['-c:v', 'h264_amf', '-rc', 'cqp',
+                     '-qp_i', qp, '-qp_p', qp, '-quality', level],
+                )
+
+    def test_unknown_backend_or_quality_is_rejected(self):
+        with self.assertRaises(ValueError):
+            hardware_encoder_args('h264_vaapi', 'Balanced')
+        with self.assertRaises(ValueError):
+            hardware_encoder_args('h264_nvenc', 'Ultra')
+
+
+class HardwareCommandTests(unittest.TestCase):
+    @patch('clipora.ffmpeg.hardware_h264_encoder', return_value='h264_nvenc')
+    def test_video_command_uses_hardware_encoder(self, _encoder):
+        command = build_command(
+            Path('in.mov'), Path('out.mp4'), 'video', 'Balanced', 'mp3',
+            hardware=True,
+        )
+        self.assertEqual(command[command.index('-c:v') + 1], 'h264_nvenc')
+        self.assertNotIn('libx264', command)
+        self.assertNotIn('-crf', command)
+        self.assertIn('-cq', command)
+        self.assertIn('+faststart', command)
+
+    @patch('clipora.ffmpeg.hardware_h264_encoder', return_value='h264_qsv')
+    def test_hardware_keeps_audio_and_faststart_block_identical(self, _encoder):
+        hardware = build_command(
+            Path('in.mov'), Path('out.mp4'), 'video', 'High', 'mp3',
+            hardware=True,
+        )
+        software = build_command(
+            Path('in.mov'), Path('out.mp4'), 'video', 'High', 'mp3',
+        )
+        self.assertEqual(
+            hardware[hardware.index('-c:a'):],
+            software[software.index('-c:a'):],
+        )
+
+    @patch('clipora.ffmpeg.hardware_h264_encoder', return_value=None)
+    def test_missing_hardware_encoder_falls_back_to_libx264(self, _encoder):
+        self.assertEqual(
+            build_command(
+                Path('in.mov'), Path('out.mp4'), 'video', 'Balanced', 'mp3',
+                hardware=True,
+            ),
+            build_command(Path('in.mov'), Path('out.mp4'), 'video', 'Balanced', 'mp3'),
+        )
+
+    @patch('clipora.ffmpeg.hardware_h264_encoder', return_value='h264_nvenc')
+    def test_audio_mode_ignores_hardware_flag(self, _encoder):
+        self.assertEqual(
+            build_command(
+                Path('in.mp4'), Path('out.mp3'), 'audio', 'Balanced', 'mp3',
+                hardware=True,
+            ),
+            build_command(Path('in.mp4'), Path('out.mp3'), 'audio', 'Balanced', 'mp3'),
+        )
+        _encoder.assert_not_called()
+
+    @patch('clipora.ffmpeg.hardware_h264_encoder', return_value='h264_nvenc')
+    @patch('clipora.ffmpeg.prores_encoder', return_value='prores_ks')
+    def test_mov_prores_ignores_hardware_flag(self, _prores, hw_encoder):
+        command = build_command(
+            Path('in.mp4'), Path('out.mov'), 'video', 'High', 'mp3', 'mov',
+            hardware=True,
+        )
+        self.assertIn('prores_ks', command)
+        self.assertNotIn('h264_nvenc', command)
+        hw_encoder.assert_not_called()
+
+    @patch('clipora.ffmpeg.hardware_h264_encoder', return_value='h264_amf')
+    def test_default_command_is_unchanged_without_hardware_flag(self, _encoder):
+        command = build_command(Path('in.mov'), Path('out.mp4'), 'video', 'Small', 'mp3')
+        self.assertEqual(command[command.index('-c:v') + 1], 'libx264')
+        self.assertEqual(command[command.index('-crf') + 1], '28')
+        self.assertEqual(command[command.index('-preset') + 1], 'medium')
 
 
 class TrimParsingTests(unittest.TestCase):

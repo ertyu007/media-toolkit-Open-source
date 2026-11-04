@@ -31,6 +31,7 @@ from .ffmpeg import (
     probe,
     temporary_output_path,
     validate_operation,
+    validate_output,
 )
 from .tools import find_executable
 
@@ -892,15 +893,28 @@ def _run_enhance_post_pass(
         try:
             if spec.mode == 'audio':
                 validate_operation(info, 'audio')
-                command = build_command(
-                    completed,
-                    temporary,
-                    'audio',
-                    spec.quality,
-                    spec.audio_format,
-                    enhance=True,
-                )
-                convert(command, temporary, info.duration, on_progress, cancellation)
+
+                def convert_audio(enhance: bool) -> None:
+                    command = build_command(
+                        completed,
+                        temporary,
+                        'audio',
+                        spec.quality,
+                        spec.audio_format,
+                        enhance=enhance,
+                    )
+                    convert(command, temporary, info.duration, on_progress, cancellation)
+
+                convert_audio(True)
+                try:
+                    validate_output(temporary, 'audio')
+                except FFmpegError:
+                    # A fully silent download loses every frame to the enhance
+                    # chain (leading-silence trim); keep the audio unenhanced.
+                    cleanup_temporary_output(temporary, completed)
+                    temporary = temporary_output_path(completed)
+                    convert_audio(False)
+                    validate_output(temporary, 'audio')
             else:
                 # URL quality is a resolution preset (1080p/...), not a convert
                 # preset: re-encode (only when cutting) at Balanced.
@@ -915,6 +929,7 @@ def _run_enhance_post_pass(
                     on_progress=on_progress,
                     cancellation=cancellation,
                 )
+                validate_output(temporary, 'video')
         except ConversionCancelled:
             raise
         except FFmpegError as exc:

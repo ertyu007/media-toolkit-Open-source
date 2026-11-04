@@ -65,6 +65,7 @@ class JobSpec:
     trim_start: float | None = None
     trim_duration: float | None = None
     enhance: bool = False
+    hardware: bool = False
 
 
 PODCAST_ENHANCE_AF = (
@@ -413,6 +414,103 @@ def prores_encoder() -> str | None:
     return None
 
 
+#: H.264 hardware encoders in preference order (NVENC > QSV > AMF).
+HARDWARE_H264_ENCODERS = ('h264_nvenc', 'h264_qsv', 'h264_amf')
+
+#: ``ffmpeg -hide_banner -encoders`` rows: 6-char flag field + encoder name.
+_ENCODER_LIST_RE = re.compile(r'(?m)^\s*[VAS][A-Z.]{5}\s+([A-Za-z0-9_]+)(?:\s|$)')
+
+#: Cached encoder names from the last probe; ``None`` means "not probed yet".
+#: Tests reset this to ``None`` to force a fresh probe.
+_HARDWARE_ENCODERS: tuple[str, ...] | None = None
+
+
+def parse_encoder_list(text: str) -> tuple[str, ...]:
+    """Extract encoder names from ``ffmpeg -hide_banner -encoders`` output.
+
+    Skips the banner, the legend rows (they start with a dot or end in
+    ``= Video``) and keeps only rows whose flag field starts with V/A/S.
+    """
+    return tuple(match.group(1) for match in _ENCODER_LIST_RE.finditer(text or ''))
+
+
+def _probe_encoder_list() -> tuple[str, ...]:
+    """Run ``ffmpeg -encoders`` once; return ``()`` when ffmpeg is unusable."""
+    ffmpeg = find_executable('ffmpeg')
+    if ffmpeg is None:
+        return ()
+    try:
+        result = subprocess.run(
+            [str(ffmpeg), '-hide_banner', '-encoders'],
+            capture_output=True,
+            text=True,
+            check=False,
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+        )
+    except OSError:
+        return ()
+    if result.returncode:
+        return ()
+    return parse_encoder_list(result.stdout or '')
+
+
+def hardware_h264_encoder() -> str | None:
+    """Best H.264 hardware encoder available to the real ffmpeg, or ``None``.
+
+    The encoder list is probed once per process and cached in
+    ``_HARDWARE_ENCODERS``; tests can clear it. A compiled-in encoder may still
+    fail at runtime (no driver/GPU), which is why the conversion path keeps a
+    libx264 fallback.
+    """
+    global _HARDWARE_ENCODERS
+    if _HARDWARE_ENCODERS is None:
+        _HARDWARE_ENCODERS = _probe_encoder_list()
+    for candidate in HARDWARE_H264_ENCODERS:
+        if candidate in _HARDWARE_ENCODERS:
+            return candidate
+    return None
+
+
+#: Quality mapping per hardware backend (documented in docs/USER_GUIDE.md).
+NVENC_CQ = {'High': '20', 'Balanced': '23', 'Small': '28'}
+QSV_GLOBAL_QUALITY = {'High': '20', 'Balanced': '23', 'Small': '28'}
+AMF_QP = {'High': '18', 'Balanced': '23', 'Small': '28'}
+AMF_QUALITY = {'High': 'quality', 'Balanced': 'balanced', 'Small': 'speed'}
+
+
+def hardware_encoder_args(encoder: str, quality: str) -> list[str]:
+    """Video codec args for one hardware encoder and quality level.
+
+    Pure and testable without a GPU; raises ``ValueError`` for unknown
+    encoders/qualities so ``build_command`` can fall back to libx264.
+    """
+    if encoder == 'h264_nvenc':
+        try:
+            cq = NVENC_CQ[quality]
+        except KeyError as exc:
+            raise ValueError(f'ไม่รองรับระดับคุณภาพ: {quality}') from exc
+        return ['-c:v', 'h264_nvenc', '-rc', 'vbr', '-cq', cq, '-b:v', '0', '-preset', 'p5']
+    if encoder == 'h264_qsv':
+        try:
+            global_quality = QSV_GLOBAL_QUALITY[quality]
+        except KeyError as exc:
+            raise ValueError(f'ไม่รองรับระดับคุณภาพ: {quality}') from exc
+        return [
+            '-c:v', 'h264_qsv', '-global_quality', global_quality, '-preset', 'medium',
+        ]
+    if encoder == 'h264_amf':
+        try:
+            qp = AMF_QP[quality]
+            quality_level = AMF_QUALITY[quality]
+        except KeyError as exc:
+            raise ValueError(f'ไม่รองรับระดับคุณภาพ: {quality}') from exc
+        return [
+            '-c:v', 'h264_amf', '-rc', 'cqp',
+            '-qp_i', qp, '-qp_p', qp, '-quality', quality_level,
+        ]
+    raise ValueError(f'ไม่รองรับ hardware encoder: {encoder}')
+
+
 def _fps_value(fps: str) -> str | None:
     digits = ''.join(character for character in fps if character.isdigit())
     if not digits:
@@ -499,6 +597,7 @@ def build_command(
     start_time: str | None = None,
     duration_time: str | None = None,
     enhance: bool = False,
+    hardware: bool = False,
 ) -> list[str]:
     ffmpeg = find_executable('ffmpeg')
     command = [str(ffmpeg) if ffmpeg is not None else 'ffmpeg']
@@ -511,7 +610,10 @@ def build_command(
         command += ['-map', '0:a:0', '-vn', *_audio_codec_args(audio_format)]
     elif mode == 'video':
         container = video_format.lower()
-        command += ['-map', '0:v:0', '-map', '0:a:0?', *_video_codec_args(container, quality)]
+        command += [
+            '-map', '0:v:0', '-map', '0:a:0?',
+            *_video_codec_args(container, quality, hardware=hardware),
+        ]
         fps_value = _fps_value(fps)
         if fps_value is not None:
             command += ['-r', fps_value]
@@ -581,9 +683,26 @@ def enhance_audio(
             target, base, on_progress, cancellation)
 
 
-def _video_codec_args(container: str, quality: str) -> list[str]:
-    """Video+audio codec args for ``container`` (shared by convert + enhance)."""
+def _video_codec_args(container: str, quality: str, hardware: bool = False) -> list[str]:
+    """Video+audio codec args for ``container`` (shared by convert + enhance).
+
+    ``hardware`` only affects MP4: MOV/ProRes always uses the ProRes encoder.
+    When no usable hardware encoder is compiled in, the libx264 args are
+    returned unchanged so ``hardware=True`` is always safe.
+    """
     if container == 'mp4':
+        if hardware:
+            encoder = hardware_h264_encoder()
+            if encoder is not None:
+                try:
+                    hw_args = hardware_encoder_args(encoder, quality)
+                except ValueError:
+                    hw_args = []
+                if hw_args:
+                    return [
+                        *hw_args,
+                        '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart',
+                    ]
         try:
             crf = {'High': '18', 'Balanced': '23', 'Small': '28'}[quality]
         except KeyError as exc:

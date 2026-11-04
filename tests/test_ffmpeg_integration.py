@@ -4,13 +4,17 @@ import threading
 import unittest
 from pathlib import Path
 
+from clipora.conversion import run_local_conversion
 from clipora.ffmpeg import (
     CancellationToken,
     ConversionCancelled,
+    FFmpegError,
+    JobSpec,
     build_command,
     cleanup_temporary_output,
     convert,
     enhance_video,
+    hardware_h264_encoder,
     normalize_trim,
     probe,
     temporary_output_path,
@@ -271,6 +275,52 @@ class FFmpegIntegrationTests(unittest.TestCase):
             self.assertEqual(progress[-1], 1.0)
 
 
+    def test_enhanced_silent_recording_still_extracts_audio(self):
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            source = root / 'silent recording.mp4'
+            target = root / 'silent recording_audio.mp3'
+            creation = subprocess.run(
+                [
+                    'ffmpeg',
+                    '-y',
+                    '-loglevel',
+                    'error',
+                    '-f',
+                    'lavfi',
+                    '-i',
+                    'color=c=black:s=160x90:d=1',
+                    '-f',
+                    'lavfi',
+                    '-i',
+                    'anullsrc=r=44100:cl=mono:d=1',
+                    '-shortest',
+                    '-c:v',
+                    'libx264',
+                    '-pix_fmt',
+                    'yuv420p',
+                    '-c:a',
+                    'aac',
+                    str(source),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(creation.returncode, 0, creation.stderr)
+
+            job = JobSpec(source, root, 'audio', 'Balanced', 'mp3', enhance=True)
+            run_local_conversion(job, target, CancellationToken())
+
+            result = probe(target)
+            self.assertTrue(result.has_audio)
+            self.assertFalse(result.has_video)
+            self.assertAlmostEqual(result.duration or 0.0, 1.0, delta=0.3)
+            self.assertEqual(
+                [path.name for path in root.iterdir() if '.clipora-' in path.name],
+                [],
+            )
+
     def test_enhanced_video_cuts_silence_from_picture_and_sound(self):
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
@@ -311,6 +361,58 @@ class FFmpegIntegrationTests(unittest.TestCase):
             self.assertAlmostEqual(result.duration, 2.5, delta=0.4)
             self.assertTrue(progress)
             self.assertEqual(progress[-1], 1.0)
+
+
+@unittest.skipUnless(tools_available(), 'FFmpeg and ffprobe are required')
+class HardwareEncodeIntegrationTests(unittest.TestCase):
+    """Real 1s hardware H.264 encode; skips when the GPU/driver cannot do it."""
+
+    def test_real_hardware_encoder_encodes_mp4_or_skips(self):
+        encoder = hardware_h264_encoder()
+        if encoder is None:
+            self.skipTest('no hardware H.264 encoder compiled into this ffmpeg')
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            source = root / 'hardware source.mp4'
+            target = root / 'hardware output.mp4'
+            creation = subprocess.run(
+                [
+                    'ffmpeg',
+                    '-y',
+                    '-loglevel',
+                    'error',
+                    '-f',
+                    'lavfi',
+                    '-i',
+                    'testsrc=size=320x180:rate=30',
+                    '-t',
+                    '1',
+                    '-an',
+                    '-c:v',
+                    'libx264',
+                    '-pix_fmt',
+                    'yuv420p',
+                    str(source),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(creation.returncode, 0, creation.stderr)
+
+            command = build_command(
+                source, target, 'video', 'Balanced', 'm4a', hardware=True,
+            )
+            self.assertIn(encoder, command)
+            try:
+                convert(command, target, 1.0, lambda _value: None)
+            except FFmpegError as exc:
+                # The build advertises the encoder but the GPU/driver refuses.
+                self.skipTest(f'{encoder} is compiled in but cannot encode here: {exc}')
+
+            info = probe(target)
+            self.assertTrue(info.has_video)
+            self.assertGreater(target.stat().st_size, 0)
 
 
 if __name__ == '__main__':

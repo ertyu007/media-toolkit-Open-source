@@ -77,6 +77,9 @@ class JobSpec:
     trim_start: float | None = None
     trim_duration: float | None = None
     enhance: bool = False
+    #: Accepted for API parity with the PC module; the p4a build ships no
+    #: hardware H.264 encoders, so Android always encodes with libx264.
+    hardware: bool = False
 
 
 PODCAST_ENHANCE_AF = (
@@ -546,7 +549,11 @@ def build_command(
     start_time: str | None = None,
     duration_time: str | None = None,
     enhance: bool = False,
+    hardware: bool = False,
 ) -> list[str]:
+    # ``hardware`` exists only for signature parity with the PC module: the
+    # p4a ffmpeg build has no hardware H.264 encoders, so this is libx264.
+    del hardware
     ffmpeg = find_executable('ffmpeg')
     command = [str(ffmpeg) if ffmpeg is not None else 'ffmpeg']
     if start_time:
