@@ -74,7 +74,16 @@ class SettingsDialog(tk.Toplevel):
             value=_label_for(MODE_LABELS, str(initial.get('mode', 'video')), 'แปลงเป็นวิดีโอ'))
         self._audio_format = tk.StringVar(value=str(initial.get('audio_format', 'MP3')))
         self._video_format = tk.StringVar(value=str(initial.get('video_format', '')))
-        self._quality = tk.StringVar(value=str(initial.get('quality', 'Balanced')))
+        raw_qualities = initial.get('qualities') or {}
+        if isinstance(raw_qualities, dict):
+            self._quality_map = {
+                str(value): str(label) for value, label in raw_qualities.items()
+            }
+        else:
+            self._quality_map = {str(value): str(value) for value in raw_qualities}
+        initial_quality = str(initial.get('quality', 'Balanced'))
+        self._quality = tk.StringVar(
+            value=self._quality_map.get(initial_quality, initial_quality))
         self._fps = tk.StringVar(value=str(initial.get('fps', '')))
         max_threads = initial.get('separator_max_threads', 0)
         try:
@@ -88,7 +97,7 @@ class SettingsDialog(tk.Toplevel):
         self._destination = tk.StringVar(value=str(initial.get('destination', '')))
         self._audio_formats = tuple(initial.get('audio_formats', ()))
         self._video_formats = tuple(initial.get('video_formats', ()))
-        self._qualities = tuple(initial.get('qualities', ()))
+        self._quality_values = {label: value for value, label in self._quality_map.items()}
         self._fps_options = tuple(initial.get('fps_options', ()))
 
         shell = ttk.Frame(self, padding=(28, 22, 28, 20))
@@ -142,7 +151,7 @@ class SettingsDialog(tk.Toplevel):
             self._video_formats or ('MP4',), width=18)
         self._combo_row(
             body, 8, 'คุณภาพ', self._quality,
-            self._qualities or ('Balanced',), width=18)
+            tuple(self._quality_map.values()) or ('สมดุล (Balanced)',), width=20)
         self._combo_row(
             body, 9, 'FPS', self._fps,
             self._fps_options or ('สูงสุด',), width=18)
@@ -301,7 +310,7 @@ class SettingsDialog(tk.Toplevel):
             'mode': MODE_LABELS.get(self._mode.get(), 'video'),
             'audio_format': self._audio_format.get(),
             'video_format': self._video_format.get(),
-            'quality': self._quality.get(),
+            'quality': self._quality_values.get(self._quality.get(), 'Balanced'),
             'fps': self._fps.get(),
             'separator_max_threads': (
                 0 if self._separator_max_threads.get() == 'ไม่จำกัด'

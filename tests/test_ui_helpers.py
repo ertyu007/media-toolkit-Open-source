@@ -228,6 +228,24 @@ class UiSmokeTests(_AppTestCase):
             self.assertTrue(app.start_button.winfo_exists())
 
 
+class QualityLabelUiTests(_AppTestCase):
+    def test_internal_value_maps_to_formal_label(self):
+        app = self._make_app()
+        app.quality.set('1080p')
+        self.assertEqual(app.quality_display.get(), '1080p (FHD)')
+        app.quality.set('Balanced')
+        self.assertEqual(app.quality_display.get(), 'สมดุล (Balanced)')
+
+    def test_picked_label_maps_back_to_internal_value(self):
+        app = self._make_app()
+        app.input_kind.set('url')
+        app.mode.set('video')
+        app._sync_options()
+        app.quality_display.set('2160p (4K UHD)')
+        self.assertEqual(app.quality.get(), '2160p')
+        self.assertIn('2160p (4K UHD)', app.quality_box._values)
+
+
 class HardwareToggleUiTests(_AppTestCase):
     def _video_app(self):
         app = self._make_app()

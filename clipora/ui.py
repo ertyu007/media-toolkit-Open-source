@@ -169,6 +169,26 @@ VIDEO_FORMAT_VALUES = {
 FPS_LABELS = ('สูงสุด', '60fps', '30fps')
 FPS_VALUES = {'สูงสุด': 'สูงสุด', '60fps': '60', '30fps': '30'}
 
+# Display labels for the internal quality presets. Core/CLI/settings keep the
+# existing values; only the UI wording is formalised (resolution + standard).
+QUALITY_LABELS = {
+    'High': 'คุณภาพสูง (High)',
+    'Balanced': 'สมดุล (Balanced)',
+    'Small': 'ประหยัดพื้นที่ (Small)',
+    'สูงสุด': 'สูงสุด (ตามต้นฉบับ)',
+    '2160p': '2160p (4K UHD)',
+    '1080p': '1080p (FHD)',
+    '720p': '720p (HD)',
+    '480p': '480p (SD)',
+    '360p': '360p (SD)',
+}
+QUALITY_VALUES = {label: value for value, label in QUALITY_LABELS.items()}
+
+
+def quality_option_labels(values: tuple[str, ...]) -> tuple[str, ...]:
+    """Display labels for internal quality values; unknown values pass through."""
+    return tuple(QUALITY_LABELS.get(value, value) for value in values)
+
 # Progress phases
 PROGRESS_PHASES = {
     'idle': 'พร้อมเริ่มงาน',
@@ -403,6 +423,11 @@ class CliporaApp(tk.Tk):
         self.hardware_encode = tk.BooleanVar(value=False)
         self.fps = tk.StringVar(value=defaults['fps'])
         self.quality = tk.StringVar(value=defaults['quality'])
+        self.quality_display = tk.StringVar(
+            value=QUALITY_LABELS.get(defaults['quality'], defaults['quality']))
+        self._syncing_quality = False
+        self.quality.trace_add('write', self._sync_quality_display)
+        self.quality_display.trace_add('write', self._sync_quality_value)
         self.mode_desc = tk.StringVar(value='')
         self._details_expanded = False
         self._last_av_mode = 'video'
@@ -1186,11 +1211,11 @@ class CliporaApp(tk.Tk):
         self.quality_label = ttk.Label(self._details_box, text='คุณภาพ', style='ModeDesc.TLabel')
         self.quality_label.grid(row=0, column=0, padx=(0, 8), sticky='e')
         self.quality_box = RoundedCombobox(
-            self._details_box, textvariable=self.quality, values=VIDEO_QUALITY_PRESETS,
-            width=12,
+            self._details_box, textvariable=self.quality_display,
+            values=quality_option_labels(VIDEO_QUALITY_PRESETS), width=20,
         )
         self.quality_box.grid(row=0, column=1, sticky='w')
-        self.fps_label = ttk.Label(self._details_box, text='FPS', style='ModeDesc.TLabel')
+        self.fps_label = ttk.Label(self._details_box, text='อัตราเฟรม (FPS)', style='ModeDesc.TLabel')
         self.fps_label.grid(row=0, column=2, padx=(16, 8), sticky='e')
         self.fps_box = RoundedCombobox(
             self._details_box, textvariable=self.fps, values=FPS_LABELS,
@@ -1201,12 +1226,12 @@ class CliporaApp(tk.Tk):
         # Trim row for local file jobs (audio/video modes only)
         self._trim_options = ttk.Frame(self._details_box, style='TFrame')
         self._trim_options.grid(row=1, column=0, columnspan=4, sticky='ew', pady=(12, 0))
-        ttk.Label(self._trim_options, text='เริ่ม (วิ/HH:MM:SS)', style='ModeDesc.TLabel').grid(
+        ttk.Label(self._trim_options, text='จุดเริ่ม (วินาที หรือ HH:MM:SS)', style='ModeDesc.TLabel').grid(
             row=0, column=0, padx=(0, 8), sticky='e',
         )
         self.start_time_entry = RoundedEntry(self._trim_options, width=12)
         self.start_time_entry.grid(row=0, column=1, sticky='w')
-        ttk.Label(self._trim_options, text='ระยะเวลา (ว่าง = ทั้งหมด)', style='ModeDesc.TLabel').grid(
+        ttk.Label(self._trim_options, text='ระยะเวลา (เว้นว่าง = ทั้งหมด)', style='ModeDesc.TLabel').grid(
             row=0, column=2, padx=(16, 8), sticky='e',
         )
         self.duration_entry = RoundedEntry(self._trim_options, width=12)
@@ -1218,7 +1243,7 @@ class CliporaApp(tk.Tk):
         self._hardware_row.grid(row=2, column=0, columnspan=4, sticky='ew', pady=(12, 0))
         self.hardware_check = Switch(
             self._hardware_row,
-            text='ใช้ Hardware encode (เร็วขึ้น ถ้ารองรับ)',
+            text='ใช้การเข้ารหัสด้วยฮาร์ดแวร์ (เร็วขึ้น หากเครื่องรองรับ)',
             variable=self.hardware_encode,
         )
         self.hardware_check.pack(side='left')
@@ -1769,12 +1794,12 @@ class CliporaApp(tk.Tk):
                     'mode': self.mode.get(),
                     'audio_format': self.audio_format.get(),
                     'video_format': self.video_format.get(),
-                    'quality': self.quality.get(),
+                    'quality': self.quality_display.get(),
                     'fps': self.fps.get(),
                     'separator_max_threads': self.separator_max_threads,
                     'audio_formats': AUDIO_FORMAT_LABELS,
                     'video_formats': VIDEO_FORMAT_LABELS,
-                    'qualities': VIDEO_QUALITY_PRESETS,
+                    'qualities': QUALITY_LABELS,
                     'fps_options': FPS_LABELS,
                 },
                 version=__version__,
@@ -1983,6 +2008,28 @@ class CliporaApp(tk.Tk):
             self._details_box.grid_remove()
             self.details_toggle.grid_remove() if not has_details else self.details_toggle.grid()
 
+    def _sync_quality_display(self, *_args) -> None:
+        """Mirror the internal quality value into its formal display label."""
+        if self._syncing_quality:
+            return
+        self._syncing_quality = True
+        try:
+            value = self.quality.get()
+            self.quality_display.set(QUALITY_LABELS.get(value, value))
+        finally:
+            self._syncing_quality = False
+
+    def _sync_quality_value(self, *_args) -> None:
+        """Map a picked display label back to the internal quality value."""
+        if self._syncing_quality:
+            return
+        self._syncing_quality = True
+        try:
+            label = self.quality_display.get()
+            self.quality.set(QUALITY_VALUES.get(label, label))
+        finally:
+            self._syncing_quality = False
+
     def _sync_options(self) -> None:
         self._sync_mode_lock()
         is_url = self.input_kind.get() == 'url'
@@ -2022,12 +2069,12 @@ class CliporaApp(tk.Tk):
             self.fps_box.grid()
             self.mode_desc.set('แปลงเป็น MP4/MOV พร้อมคุมคุณภาพและ FPS')
             if is_url:
-                self.quality_box.configure(values=VIDEO_QUALITIES)
+                self.quality_box.configure(values=quality_option_labels(VIDEO_QUALITIES))
                 if self.quality.get() not in VIDEO_QUALITIES:
                     self.quality.set(VIDEO_QUALITIES[0])
                 action_text = 'เริ่มดาวน์โหลดวิดีโอ'
             else:
-                self.quality_box.configure(values=VIDEO_QUALITY_PRESETS)
+                self.quality_box.configure(values=quality_option_labels(VIDEO_QUALITY_PRESETS))
                 if self.quality.get() not in VIDEO_QUALITY_PRESETS:
                     self.quality.set('Balanced')
                 action_text = 'เริ่มแปลงวิดีโอ'
@@ -2665,7 +2712,7 @@ class CliporaApp(tk.Tk):
         if mode == 'audio':
             return f'เสียง {self.audio_format.get()}'
         return (f'วิดีโอ {self.video_format.get()} '
-                f'คุณภาพ={self.quality.get()} fps={self._fps_value()}')
+                f'คุณภาพ={self.quality_display.get()} fps={self._fps_value()}')
 
     def _start(self) -> None:
         if self._cancellation is not None:
