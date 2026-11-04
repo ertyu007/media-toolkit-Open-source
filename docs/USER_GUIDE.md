@@ -348,6 +348,8 @@ Clipora สร้างชื่อจาก stem ของต้นฉบับ
 - build ที่ไม่ได้ลงนาม code signing อาจเห็นคำเตือน SmartScreen (ดู [CODE_SIGNING.md](CODE_SIGNING.md))
 - ประมวลผลทีละไฟล์
 - คิวไฟล์ในเครื่องและคิวลิงก์ทำงานแบบทีละรายการ (sequential) ไม่มี parallel batch; โหมดแยก Stem ยังไม่มีคิว
+- คิวลิงก์ไม่มี retry อัตโนมัติ — เมื่อลิงก์ใดล้มเหลว คิวหยุดและเก็บบรรทัดที่เหลือไว้ให้กดเริ่มซ้ำเอง (ไม่วนลองซ้ำเงียบ ๆ)
+- CLI (`python -m clipora.cli`) ยังไม่มีโหมดแยก Stem และไม่มี parallel batch; รายละเอียดข้อจำกัดดูที่ [CLI.md](CLI.md)
 - ยังไม่มี custom output name หรือ preset
 - URL รองรับตาม extractor ของ yt-dlp และอาจหยุดทำงานเมื่อเว็บไซต์เปลี่ยน
 - ไม่รองรับ playlist, live, private/paid media, login, cookies หรือ DRM
