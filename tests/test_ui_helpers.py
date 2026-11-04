@@ -243,6 +243,32 @@ class UiSmokeTests(_AppTestCase):
         app.update()
         self.assertTrue(app._trim_options.winfo_manager())
 
+    def test_source_kind_toggle_visible_in_every_mode(self):
+        app = self._make_app()
+        app.input_kind.set('file')
+        for mode in ('audio', 'video', 'stems'):
+            app.mode.set(mode)
+            app._sync_options()
+            app.update()
+            self.assertTrue(app._source_kind_frame.winfo_manager())
+
+    def test_typing_url_switches_source_kind(self):
+        app = self._make_app()
+        app.input_kind.set('file')
+        app._sync_source_kind()
+        app.source.set(LINK_A)
+        self.assertEqual(app.input_kind.get(), 'url')
+        self.assertEqual(app._source_values['url'], LINK_A)
+        self.assertEqual(app.source_button_text.get(), 'วางลิงก์')
+        self.assertTrue(app.rights_row.winfo_manager())
+
+    def test_typing_existing_path_switches_to_file(self):
+        app = self._make_app()
+        app.input_kind.set('url')
+        app._sync_source_kind()
+        app.source.set(__file__)
+        self.assertEqual(app.input_kind.get(), 'file')
+
     def test_builds_at_common_display_scalings(self):
         app = self._make_app()
         for factor in (1.0, 1.25, 1.5):

@@ -352,9 +352,9 @@ def route_dropped_paths(paths: list[str]) -> tuple[str, str] | None:
 def classify_source_text(raw: str) -> str | None:
     """'url' | 'file' | None for pasted source text; None when unsure.
 
-    Only confident cases switch modes (paste-time only, never per-keystroke):
-    a valid public URL, or a path to an existing file. Anything else
-    (private/localhost URLs, missing files, plain text) keeps the current mode.
+    Only confident cases switch modes: a valid public URL, or a path to an
+    existing file. Anything else (private/localhost URLs, missing files, plain
+    text) keeps the current mode.
     """
     text = (raw or '').strip().strip('"')
     if not text:
@@ -2099,10 +2099,9 @@ class CliporaApp(tk.Tk):
                     self.quality.set('Balanced')
                 action_text = 'เริ่มแปลงวิดีโอ'
         if self._source_kind_frame is not None:
-            if self.mode.get() == 'stems':
-                self._source_kind_frame.grid()
-            else:
-                self._source_kind_frame.grid_remove()
+            # File/URL is a per-job choice in every mode, not a stems-only
+            # control; the smart content detection above can flip it too.
+            self._source_kind_frame.grid()
         if getattr(self, '_enhance_row', None) is not None:
             show_enhance = self.mode.get() in ('audio', 'video', 'stems')
             if show_enhance:
@@ -2153,7 +2152,12 @@ class CliporaApp(tk.Tk):
             self._source_values[self._active_source_kind] = self.source.get()
             self._active_source_kind = new_kind
             self.source.set(self._source_values[new_kind])
-        if new_kind == 'url':
+        self._refresh_source_kind_ui()
+        self._on_source_changed()
+
+    def _refresh_source_kind_ui(self) -> None:
+        """Reflect the current source kind in hints, buttons and panels."""
+        if self.input_kind.get() == 'url':
             self.source_hint.set(
                 'วางลิงก์สาธารณะที่นี่'
             )
@@ -2164,14 +2168,22 @@ class CliporaApp(tk.Tk):
             self.source_button_text.set('เลือกไฟล์')
             self.rights_row.grid_remove()
         self._sync_url_queue_panel()
-        self._on_source_changed()
         self._sync_options()
 
     def _on_source_changed(self, *_args: object) -> None:
         value = self.source.get()
         if self._selected_local_sources and value != str(self._selected_local_sources[0]):
             self._selected_local_sources = ()
-        self._source_values[self._active_source_kind] = value
+        # Smart source kind: adopt a confident URL/file typed or pasted into the
+        # box without reloading the other kind's stored value (the text stays).
+        kind = classify_source_text(value)
+        if kind is not None and kind != self.input_kind.get():
+            self.input_kind.set(kind)
+            self._active_source_kind = kind
+            self._source_values[kind] = value
+            self._refresh_source_kind_ui()
+        else:
+            self._source_values[self._active_source_kind] = value
         if self.input_kind.get() == 'url':
             self.source_detail.set(url_summary(value))
         else:
