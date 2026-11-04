@@ -161,9 +161,9 @@ from .sound import play_completion_chime
 
 AUDIO_FORMAT_LABELS = ('MP3', 'M4A', 'WAV', 'FLAC', 'OPUS')
 AUDIO_FORMAT_VALUES = {'MP3': 'mp3', 'M4A': 'm4a', 'WAV': 'wav', 'FLAC': 'flac', 'OPUS': 'opus'}
-VIDEO_FORMAT_LABELS = ('MP4  •  เล่นได้ทั่วไป', 'MOV  •  ProRes')
+VIDEO_FORMAT_LABELS = ('MP4', 'MOV  •  ProRes')
 VIDEO_FORMAT_VALUES = {
-    'MP4  •  เล่นได้ทั่วไป': 'mp4',
+    'MP4': 'mp4',
     'MOV  •  ProRes': 'mov',
 }
 FPS_LABELS = ('สูงสุด', '60fps', '30fps')
@@ -175,7 +175,7 @@ QUALITY_LABELS = {
     'High': 'คุณภาพสูง (High)',
     'Balanced': 'สมดุล (Balanced)',
     'Small': 'ประหยัดพื้นที่ (Small)',
-    'สูงสุด': 'สูงสุด (ตามต้นฉบับ)',
+    'สูงสุด': 'ตามต้นฉบับ',
     '2160p': '2160p (4K UHD)',
     '1080p': '1080p (FHD)',
     '720p': '720p (HD)',
