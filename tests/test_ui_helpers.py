@@ -16,6 +16,7 @@ from clipora.ui import (
     find_clipora_uninstaller,
     find_history_index,
     format_debug_line,
+    next_history_selection,
     format_file_size,
     route_dropped_paths,
     source_summary,
@@ -126,6 +127,30 @@ class SourceClassifyTests(unittest.TestCase):
         self.assertIsNone(classify_source_text('http://127.0.0.1/video.mp4'))
         with TemporaryDirectory() as directory:
             self.assertIsNone(classify_source_text(directory))
+
+
+class HistoryMultiSelectTests(unittest.TestCase):
+    def test_plain_click_replaces_selection(self):
+        indices, anchor = next_history_selection({0, 1}, 0, 3)
+        self.assertEqual(indices, {3})
+        self.assertEqual(anchor, 3)
+
+    def test_ctrl_click_toggles_rows(self):
+        indices, anchor = next_history_selection({1}, 1, 3, toggle=True)
+        self.assertEqual(indices, {1, 3})
+        self.assertEqual(anchor, 1)
+        indices, _ = next_history_selection(indices, anchor, 1, toggle=True)
+        self.assertEqual(indices, {3})
+
+    def test_shift_click_selects_range_from_anchor(self):
+        indices, anchor = next_history_selection({1}, 1, 4, extend=True)
+        self.assertEqual(indices, {1, 2, 3, 4})
+        self.assertEqual(anchor, 1)
+
+    def test_shift_without_anchor_selects_one(self):
+        indices, anchor = next_history_selection(set(), None, 2, extend=True)
+        self.assertEqual(indices, {2})
+        self.assertEqual(anchor, 2)
 
 
 class DebugLineTests(unittest.TestCase):
@@ -244,6 +269,29 @@ class QualityLabelUiTests(_AppTestCase):
         app.quality_display.set('2160p (4K UHD)')
         self.assertEqual(app.quality.get(), '2160p')
         self.assertIn('2160p (4K UHD)', app.quality_box._values)
+
+
+class HistoryPanelUiTests(_AppTestCase):
+    def test_ctrl_click_multi_selects_rows(self):
+        app = self._make_app()
+        panel = app._history_panel
+        entries = [
+            HistoryEntry(
+                id=f'id{index}', finished_at=0.0, kind='audio',
+                source_kind='file', name=f'a{index}.mp3',
+                target=f'C:/nowhere/a{index}.mp3',
+            )
+            for index in range(3)
+        ]
+        with patch('clipora.ui.load_history', return_value=entries), \
+                patch('clipora.ui.save_selected_history_id'):
+            panel._render()
+            ctrl_click = type('Click', (), {'state': 0x0004})()
+            panel._on_row_click(ctrl_click, 0)
+            panel._on_row_click(ctrl_click, 2)
+        self.assertEqual(panel._selected_indices, {0, 2})
+        self.assertEqual(panel._selected, 2)
+        self.assertEqual(panel._action_indices(), (0, 2))
 
 
 class HardwareToggleUiTests(_AppTestCase):

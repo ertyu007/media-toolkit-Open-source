@@ -10,6 +10,14 @@
 - **เทสต์**: `tests/test_ui_helpers.py` เพิ่ม `QualityLabelUiTests` 2 เคส (ค่า→ป้าย, ป้าย→ค่า + ค่าตัวเลือก URL)
 - **เอกสาร**: `docs/USER_GUIDE.md` (ตารางคุณภาพ URL/local, ชื่อช่องตัดช่วง, ข้อความสวิตช์ฮาร์ดแวร์) และ `README.md` (รายการคุณภาพ) — ไม่ bump version
 
+## ทำวันนี้ (2026-11-04) — เลือกหลายรายการในประวัติ + ลดข้อความอธิบายที่ซ้ำซ้อน
+
+- **Multi-select ประวัติ**: `next_history_selection()` (pure) — plain click เลือกแถวเดียว, Ctrl คลิกสลับเลือก/ยกเลิก, Shift คลิกเลือกช่วงจาก anchor; `HistoryPanel` เก็บ `_selected_indices`/`_anchor`, ไฮไลต์ทุกแถวที่เลือก, จำ primary ไว้เปิดโฟลเดอร์
+- **เมนูทำงานกับทุกแถวที่เลือก**: `_delete_indices`, `_restore_indices`, `_delete_forever_indices` (ยืนยันครั้งเดียว, ข้อความระบุจำนวน), label เมนูปรับเป็น `ลบ N รายการ…`; คลิกขวาบนแถวที่เลือกอยู่จะคง selection ไว้
+- **ไอคอนแทนข้อความ**: เพิ่มปุ่ม `⋯` ท้ายแถวประวัติเปิดเมนูได้ (ไม่ต้องบอกให้ผู้ใช้รู้ว่าต้องคลิกขวา), ลบข้อความ `• คลิกขวาเพื่อดูเมนู` ออกจากคำอธิบาย; คิวลิงก์ว่างเหลือ `ยังไม่มีลิงก์ในคิว`; คำอธิบายโหมดสั้นลง (ไม่บอกสิ่งที่ปุ่ม/ตัวเลือกแสดงอยู่แล้ว)
+- **เทสต์**: `tests/test_ui_helpers.py` เพิ่ม 4 เคส pure (`HistoryMultiSelectTests`) + 1 เคส UI (`HistoryPanelUiTests` ตรวจ Ctrl คลิกสองแถวแล้ว `_selected_indices`/`_action_indices`)
+- **เอกสาร**: `docs/USER_GUIDE.md` §ประวัติดาวน์โหลด ปรับขั้นตอนเลือกหลายแถว/เมนู `⋯`; ไม่ bump version
+
 ## ทำวันนี้ (2026-10-30) — ซ่อม: ปรับเสียงพอดแคสต์บนไฟล์เงียบทั้งช่วงทำให้ error
 
 - **อาการที่ผู้ใช้เจอ**: แปลงอัดหน้าจอ (เสียงดิจิทัลเงียบล้วน, `volumedetect` = -91 dB) เป็น MP3 โดยติ๊ก **ปรับเสียงพอดแคสต์** → FFmpeg เขียนไฟล์สำเร็จแต่เหลือแค่หัว ID3/Xing (~330 ไบต์ ไม่มีเฟรมเสียง) จากนั้น `validate_output` → ffprobe ฟ้อง `[mp3] Failed to find two consecutive MPEG audio frames` + `Invalid data found when processing input` พร้อมพาธไฟล์ชั่วคราว (สาเหตุ: `silenceremove` ใน `PODCAST_ENHANCE_AF` กินทุกเฟรมเมื่อทั้งช่วงเงียบ)

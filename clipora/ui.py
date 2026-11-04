@@ -214,6 +214,7 @@ def destination_path(value: str) -> Path:
 # Explorer-style history columns: name stretches, the rest keep pixel widths
 # so the fixed header always lines up with the rows.
 _HISTORY_COLUMN_MINSIZES = {1: 70, 2: 110, 3: 90}
+_HISTORY_MENU_MINSIZE = 24
 _SELECTED_HISTORY_KEY = 'selected_history_id'
 
 
@@ -279,6 +280,25 @@ def find_history_index(entries: list, selected_id: str | None) -> int | None:
         if getattr(entry, 'target', None) == selected_id:
             return index
     return None
+
+
+def next_history_selection(
+    current: set[int],
+    anchor: int | None,
+    index: int,
+    *,
+    toggle: bool = False,
+    extend: bool = False,
+) -> tuple[set[int], int | None]:
+    """Windows-style list selection: plain click, Ctrl toggle, Shift range."""
+    if extend and anchor is not None:
+        start, end = sorted((anchor, index))
+        return set(range(start, end + 1)), anchor
+    if toggle:
+        if index in current:
+            return current - {index}, anchor
+        return current | {index}, index if anchor is None else anchor
+    return {index}, index
 
 
 def load_selected_history_id() -> str | None:
@@ -1094,7 +1114,7 @@ class CliporaApp(tk.Tk):
         self._url_queue_listbox.grid(row=1, column=0, sticky='ew', pady=(6, 0))
         self._url_queue_hint = ttk.Label(
             self._url_queue_frame,
-            text='ยังไม่มีลิงก์ในคิว — วางลิงก์แล้วกด เพิ่มเข้าคิว',
+            text='ยังไม่มีลิงก์ในคิว',
             style='ModeDesc.TLabel',
         )
         self._url_queue_hint.grid(row=2, column=0, sticky='w', pady=(4, 0))
@@ -2043,7 +2063,7 @@ class CliporaApp(tk.Tk):
                 self._stems_options.grid()
             self.format_box.grid()
             self.option_label.configure(text='รูปแบบเสียง')
-            self.mode_desc.set('แยกเสียงร้อง/ดนตรีบนเครื่อง (ติดตั้งเครื่องมือครั้งแรกครั้งเดียว)')
+            self.mode_desc.set('แยกเสียงร้อง/ดนตรีบนเครื่อง')
             action_text = 'ดาวน์โหลดและแยก Stem' if is_url else 'เริ่มแยก Stem'
         elif self.mode.get() == 'audio':
             self.video_format_box.grid_remove()
@@ -2055,7 +2075,7 @@ class CliporaApp(tk.Tk):
                 self._stems_options.grid_remove()
             self.format_box.grid()
             self.option_label.configure(text='รูปแบบเสียง')
-            self.mode_desc.set('แยกเสียงเป็น MP3 / M4A / WAV / FLAC / OPUS')
+            self.mode_desc.set('แยกเสียงเป็นไฟล์เสียง')
             action_text = 'เริ่มดาวน์โหลดเสียง' if is_url else 'เริ่มแยกเสียง'
         else:
             self.format_box.grid_remove()
@@ -2067,7 +2087,7 @@ class CliporaApp(tk.Tk):
             self.quality_box.grid()
             self.fps_label.grid()
             self.fps_box.grid()
-            self.mode_desc.set('แปลงเป็น MP4/MOV พร้อมคุมคุณภาพและ FPS')
+            self.mode_desc.set('แปลงเป็นไฟล์วิดีโอ')
             if is_url:
                 self.quality_box.configure(values=quality_option_labels(VIDEO_QUALITIES))
                 if self.quality.get() not in VIDEO_QUALITIES:
@@ -3763,6 +3783,8 @@ class HistoryPanel(ttk.Frame):
         self._filter = tk.StringVar(value='all')
         self._entries: list = []
         self._selected: int | None = None
+        self._selected_indices: set[int] = set()
+        self._anchor: int | None = None
         self._selected_id: str | None = load_selected_history_id()
         self._row_widgets: list[tuple[tk.Frame, list[tk.Label]]] = []
         self._filter.trace_add('write', lambda *_: self._render())
@@ -3778,8 +3800,7 @@ class HistoryPanel(ttk.Frame):
         ttk.Label(
             shell,
             text=(f'จำที่อยู่ไฟล์ที่ทำเสร็จ '
-                  f'(ลบย้ายไปถังขยะก่อน หายถาวรใน {TRASH_RETENTION_DAYS} วัน) '
-                  '• คลิกขวาเพื่อดูเมนู'),
+                  f'(ลบย้ายไปถังขยะก่อน หายถาวรใน {TRASH_RETENTION_DAYS} วัน)'),
             style='Muted.TLabel',
             wraplength=560,
             justify='left',
@@ -3806,6 +3827,7 @@ class HistoryPanel(ttk.Frame):
         header.columnconfigure(0, weight=1)
         for column, minsize in _HISTORY_COLUMN_MINSIZES.items():
             header.grid_columnconfigure(column, minsize=minsize)
+        header.grid_columnconfigure(4, minsize=_HISTORY_MENU_MINSIZE)
         ttk.Label(header, text='ชื่อ', style='Muted.TLabel').grid(
             row=0, column=0, sticky='w', padx=(12, 4))
         ttk.Label(header, text='ประเภท', style='Muted.TLabel').grid(
@@ -3865,6 +3887,8 @@ class HistoryPanel(ttk.Frame):
             child.destroy()
         self._row_widgets = []
         self._selected = None
+        self._selected_indices = set()
+        self._anchor = None
         if not self._entries:
             empty_text = ('ถังขยะว่าง' if self._in_trash() else 'ยังไม่มีประวัติ')
             ttk.Label(self._rows, text=empty_text, style='Muted.TLabel').pack(
@@ -3884,6 +3908,7 @@ class HistoryPanel(ttk.Frame):
             row.columnconfigure(0, weight=1)
             for column, minsize in _HISTORY_COLUMN_MINSIZES.items():
                 row.grid_columnconfigure(column, minsize=minsize)
+            row.grid_columnconfigure(4, minsize=_HISTORY_MENU_MINSIZE)
             font = (getattr(self, 'ui_font', FONT_FAMILY), FONT_SIZE_BASE)
             name_label = tk.Label(
                 row, text=text, bg=CARD, fg=MUTED if missing else TEXT,
@@ -3904,10 +3929,15 @@ class HistoryPanel(ttk.Frame):
                 row, text=size_text, bg=CARD, fg=MUTED, font=font, anchor='e',
             )
             size_label.grid(row=0, column=3, sticky='e', padx=(0, 4), pady=7)
-            cells = [name_label, kind_label, date_label, size_label]
+            menu_label = tk.Label(
+                row, text='⋯', bg=CARD, fg=MUTED, font=font, cursor='hand2',
+            )
+            menu_label.grid(row=0, column=4, padx=(4, 8), pady=7)
+            cells = [name_label, kind_label, date_label, size_label, menu_label]
             for widget in [row, name_label, kind_label, date_label, size_label]:
-                widget.bind('<Button-1>', lambda _e, i=index: self._select_row(i))
+                widget.bind('<Button-1>', lambda e, i=index: self._on_row_click(e, i))
                 widget.bind('<Button-3>', lambda e, i=index: self._popup_menu(e, i))
+            menu_label.bind('<Button-1>', lambda e, i=index: self._popup_menu(e, i))
             name_label.bind(
                 '<Double-Button-1>', lambda _e, i=index: self._open_row(i))
             self._row_widgets.append((row, cells))
@@ -3927,16 +3957,32 @@ class HistoryPanel(ttk.Frame):
         except (OSError, OverflowError, ValueError):
             return ''
 
-    def _select_row(self, index: int, persist: bool = True) -> None:
-        self._selected = index
+    def _on_row_click(self, event: tk.Event, index: int) -> None:
+        state = int(getattr(event, 'state', 0))
+        self._select_row(
+            index,
+            toggle=bool(state & 0x0004),   # Ctrl
+            extend=bool(state & 0x0001),   # Shift
+        )
+
+    def _select_row(self, index: int, persist: bool = True,
+                    toggle: bool = False, extend: bool = False) -> None:
+        indices, self._anchor = next_history_selection(
+            self._selected_indices, self._anchor, index,
+            toggle=toggle, extend=extend,
+        )
+        self._selected_indices = indices
+        self._selected = (
+            index if index in indices else (min(indices) if indices else None)
+        )
         if persist:
-            if 0 <= index < len(self._entries):
-                self._selected_id = self._entries[index].id
+            if self._selected is not None and self._selected < len(self._entries):
+                self._selected_id = self._entries[self._selected].id
             else:
                 self._selected_id = None
             save_selected_history_id(self._selected_id)
         for i, (row, cells) in enumerate(self._row_widgets):
-            bg = ACCENT_SOFT if i == index else CARD
+            bg = ACCENT_SOFT if i in indices else CARD
             try:
                 row.configure(bg=bg)
                 for cell in cells:
@@ -3974,36 +4020,58 @@ class HistoryPanel(ttk.Frame):
             self._selected_id = None
             save_selected_history_id(None)
 
-    def _delete_one(self, index: int) -> None:
-        if index >= len(self._entries):
+    def _action_indices(self) -> tuple[int, ...]:
+        """Rows the context menu acts on (Ctrl/Shift multi-select aware)."""
+        return tuple(sorted(self._selected_indices))
+
+    def _entries_at(self, indices: tuple[int, ...]) -> list:
+        return [
+            self._entries[index] for index in indices
+            if 0 <= index < len(self._entries)
+        ]
+
+    def _delete_indices(self, indices: tuple[int, ...]) -> None:
+        entries = self._entries_at(indices)
+        if not entries:
             return
-        entry = self._entries[index]
+        subject = (
+            f'ย้าย “{entries[0].name}” ไปถังขยะ?'
+            if len(entries) == 1 else f'ย้าย {len(entries)} รายการไปถังขยะ?'
+        )
         if messagebox.askyesno(
             'ย้ายไปถังขยะ',
-            f'ย้าย “{entry.name}” ไปถังขยะ?\n(ไฟล์จริงไม่ถูกลบ กู้คืนได้ใน {TRASH_RETENTION_DAYS} วัน)',
+            f'{subject}\n(ไฟล์จริงไม่ถูกลบ กู้คืนได้ใน {TRASH_RETENTION_DAYS} วัน)',
             parent=self,
         ):
-            trash_entry(entry.id)
-            self._forget_selected_id(entry.id)
+            for entry in entries:
+                trash_entry(entry.id)
+                self._forget_selected_id(entry.id)
             self._render()
 
-    def _restore_one(self, index: int) -> None:
-        if index >= len(self._entries):
+    def _restore_indices(self, indices: tuple[int, ...]) -> None:
+        entries = self._entries_at(indices)
+        if not entries:
             return
-        restore_entry(self._entries[index].id)
+        for entry in entries:
+            restore_entry(entry.id)
         self._render()
 
-    def _delete_forever_one(self, index: int) -> None:
-        if index >= len(self._entries):
+    def _delete_forever_indices(self, indices: tuple[int, ...]) -> None:
+        entries = self._entries_at(indices)
+        if not entries:
             return
-        entry = self._entries[index]
+        subject = (
+            f'ลบ “{entries[0].name}” ถาวร?'
+            if len(entries) == 1 else f'ลบ {len(entries)} รายการถาวร?'
+        )
         if messagebox.askyesno(
             'ลบถาวร',
-            f'ลบ “{entry.name}” ถาวร? (กู้คืนไม่ได้ แต่ไฟล์จริงไม่ถูกลบ)',
+            f'{subject} (กู้คืนไม่ได้ แต่ไฟล์จริงไม่ถูกลบ)',
             parent=self,
         ):
-            remove_entry(entry.id)
-            self._forget_selected_id(entry.id)
+            for entry in entries:
+                remove_entry(entry.id)
+                self._forget_selected_id(entry.id)
             self._render()
 
     def _confirm_empty_trash(self) -> None:
@@ -4021,10 +4089,13 @@ class HistoryPanel(ttk.Frame):
     def _popup_menu(self, event: tk.Event, index: int | None = None) -> None:
         """Right-click menu (dismisses itself on outside click, like Windows)."""
         if index is not None:
-            self._select_row(index)
-        has_selection = (
-            self._selected is not None and self._selected < len(self._entries)
-        )
+            if index not in self._selected_indices:
+                self._select_row(index)
+            else:
+                self._selected = index
+        indices = self._action_indices()
+        count = len(indices)
+        has_selection = bool(indices)
         menu = tk.Menu(
             self, tearoff=0, bg=MENU_BG, fg=TEXT,
             activebackground=ACCENT, activeforeground=MENU_ACTIVE_FG,
@@ -4032,14 +4103,14 @@ class HistoryPanel(ttk.Frame):
         )
         if self._in_trash():
             menu.add_command(
-                label='กู้คืนรายการนี้',
+                label='กู้คืนรายการนี้' if count <= 1 else f'กู้คืน {count} รายการ',
                 state='normal' if has_selection else 'disabled',
-                command=lambda: self._restore_one(self._selected or 0),
+                command=lambda: self._restore_indices(indices),
             )
             menu.add_command(
-                label='ลบถาวร…',
+                label='ลบถาวร…' if count <= 1 else f'ลบ {count} รายการถาวร…',
                 state='normal' if has_selection else 'disabled',
-                command=lambda: self._delete_forever_one(self._selected or 0),
+                command=lambda: self._delete_forever_indices(indices),
             )
             menu.add_separator()
             menu.add_command(label='ล้างถังขยะ…', command=self._confirm_empty_trash)
@@ -4050,9 +4121,9 @@ class HistoryPanel(ttk.Frame):
                 command=self._open_selected,
             )
             menu.add_command(
-                label='ลบรายการนี้…',
+                label='ลบรายการนี้…' if count <= 1 else f'ลบ {count} รายการ…',
                 state='normal' if has_selection else 'disabled',
-                command=lambda: self._delete_one(self._selected or 0),
+                command=lambda: self._delete_indices(indices),
             )
         try:
             menu.tk_popup(event.x_root, event.y_root)
