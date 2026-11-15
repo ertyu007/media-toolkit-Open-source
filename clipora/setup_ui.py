@@ -15,6 +15,8 @@ from .dependencies import (
 from .separator import separator_installed
 from .ui_components.motion import fade_in_window
 from .ui_components.theme import (
+    ACCENT,
+    ACCENT_HOVER,
     BG,
     CARD,
     ERROR,
@@ -23,6 +25,7 @@ from .ui_components.theme import (
     SUCCESS,
     TEXT,
 )
+from .ui_components.widgets import RoundedButton
 from scripts.check_environment import (
     check_javascript_runtime,
     check_tool,
@@ -133,24 +136,23 @@ class ToolSetupDialog(tk.Toplevel):
         actions = ttk.Frame(shell)
         actions.grid(row=4, column=0, sticky='ew')
         actions.columnconfigure(1, weight=1)
-        self.cancel_button = ttk.Button(
+        self.cancel_button = RoundedButton(
             actions,
             text='ยกเลิก',
-            style='Secondary.TButton',
             command=self._request_close,
         )
         self.cancel_button.grid(row=0, column=0, sticky='w')
-        self.back_button = ttk.Button(
+        self.back_button = RoundedButton(
             actions,
             text='ย้อนกลับ',
-            style='Secondary.TButton',
             command=self._go_back,
         )
         self.back_button.grid(row=0, column=2, padx=(8, 8))
-        self.next_button = ttk.Button(
+        self.next_button = RoundedButton(
             actions,
             text='ถัดไป',
-            style='DialogAccent.TButton',
+            fill=ACCENT,
+            hover_fill=ACCENT_HOVER,
             command=self._go_next,
         )
         self.next_button.grid(row=0, column=3, sticky='e')

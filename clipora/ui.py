@@ -11,6 +11,7 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, font as tkfont, messagebox, ttk
+from typing import Callable
 
 from . import __version__
 
@@ -148,8 +149,10 @@ from .ui_components.theme import (
     pick_ui_font,
 )
 from .ui_components.widgets import (
+    IconButton,
     InlineError,
     RainbowBar,
+    draw_line_icon,
     RoundedButton,
     RoundedCombobox,
     RoundedEntry,
@@ -213,8 +216,33 @@ def destination_path(value: str) -> Path:
 
 # Explorer-style history columns: name stretches, the rest keep pixel widths
 # so the fixed header always lines up with the rows.
-_HISTORY_COLUMN_MINSIZES = {1: 70, 2: 110, 3: 90}
-_HISTORY_MENU_MINSIZE = 24
+_HISTORY_HEADER_HEIGHT = 24
+_HISTORY_NAME_MIN = 120
+_HISTORY_KIND_MIN = 70
+_HISTORY_DATE_MIN = 110
+_HISTORY_SIZE_MIN = 90
+_HISTORY_MENU_MINSIZE = 36
+
+
+def elide_text(
+    text: str,
+    measure: Callable[[str], int],
+    max_width: float,
+    suffix: str = '…',
+) -> str:
+    """Trim *text* until it fits *max_width* pixels, adding an ellipsis."""
+    if max_width <= 0:
+        return ''
+    if measure(text) <= max_width:
+        return text
+    low, high = 0, len(text)
+    while low < high:
+        mid = (low + high + 1) // 2
+        if measure(text[:mid] + suffix) <= max_width:
+            low = mid
+        else:
+            high = mid - 1
+    return text[:low] + suffix if low else suffix
 _SELECTED_HISTORY_KEY = 'selected_history_id'
 
 
@@ -805,14 +833,15 @@ class CliporaApp(tk.Tk):
         self._sidebar.grid(row=0, column=0, rowspan=4, sticky='nsew')
         self._sidebar_visible = True
         self._view = 'job'
-        self._view_buttons: dict[str, ttk.Button] = {}
+        self._view_buttons: dict[str, RoundedButton] = {}
 
         ttk.Label(self._sidebar, text='เมนู', style='TopBarMuted.TLabel').pack(
             anchor='w', pady=(0, 8)
         )
         for value, label in (('job', 'งานปัจจุบัน'), ('history', 'ประวัติ')):
-            button = ttk.Button(
-                self._sidebar, text=label, style='Side.TButton',
+            button = RoundedButton(
+                self._sidebar, text=label, fill=TOP_BAR_BG,
+                hover_fill=SECONDARY_BG, height=36, anchor='w',
                 command=lambda v=value: self._show_view(v),
             )
             button.pack(fill='x', pady=(0, 6))
@@ -823,8 +852,10 @@ class CliporaApp(tk.Tk):
             ('อัปเดต yt-dlp (Ctrl+U)', lambda: self._check_ytdlp_update(auto=False)),
             ('ตรวจอัปเดต Clipora...', lambda: self._check_app_update(auto=False)),
         ):
-            ttk.Button(
-                self._sidebar, text=label, style='Ghost.TButton', command=command,
+            RoundedButton(
+                self._sidebar, text=label, fill=TOP_BAR_BG,
+                hover_fill=SECONDARY_BG, height=32, font_size=FONT_SIZE_SMALL,
+                anchor='w', command=command,
             ).pack(fill='x', anchor='w', pady=(0, 2))
         ttk.Separator(self._sidebar, orient='horizontal').pack(fill='x', pady=(12, 12))
         for label, command in (
@@ -836,14 +867,17 @@ class CliporaApp(tk.Tk):
                 'https://github.com/ertyu007/media-toolkit-Open-source/discussions')),
             ('สนับสนุนโครงการ', self._open_donate_dialog),
         ):
-            ttk.Button(
-                self._sidebar, text=label, style='Ghost.TButton', command=command,
+            RoundedButton(
+                self._sidebar, text=label, fill=TOP_BAR_BG,
+                hover_fill=SECONDARY_BG, height=32, font_size=FONT_SIZE_SMALL,
+                anchor='w', command=command,
             ).pack(fill='x', anchor='w', pady=(0, 2))
         ttk.Frame(self._sidebar, style='TopBar.TFrame').pack(fill='both', expand=True)
         ttk.Separator(self._sidebar, orient='horizontal').pack(fill='x', pady=(0, 8))
-        ttk.Button(
-            self._sidebar, text='⚙ ตั้งค่า', style='Ghost.TButton',
-            command=self._open_settings,
+        IconButton(
+            self._sidebar, icon='sliders', text='ตั้งค่า',
+            command=self._open_settings, height=36, icon_size=18,
+            bg=TOP_BAR_BG, hover_bg=TOPBAR_BUTTON_HOVER,
         ).pack(fill='x', anchor='w')
 
         # ── Top bar ───────────────────────────────────────────────────────────
@@ -851,9 +885,10 @@ class CliporaApp(tk.Tk):
         topbar.grid(row=0, column=1, sticky='ew')
         topbar.columnconfigure(2, weight=1)
 
-        self._sidebar_toggle = ttk.Button(
-            topbar, text='«', style='GhostLarge.TButton', width=4,
-            command=self._toggle_sidebar,
+        self._sidebar_toggle = IconButton(
+            topbar, icon='chevron-left', command=self._toggle_sidebar,
+            width=40, height=36, icon_size=18,
+            bg=TOP_BAR_BG, hover_bg=TOPBAR_BUTTON_HOVER,
         )
         self._sidebar_toggle.grid(row=0, column=0, padx=(0, 6))
         self._sync_sidebar_toggle()
@@ -1220,9 +1255,10 @@ class CliporaApp(tk.Tk):
         self._stems_options.grid_remove()
 
         # Collapsible extra options (quality / fps / trim)
-        self.details_toggle = ttk.Button(
-            fmt_body, text='▸ ตัวเลือกเพิ่มเติม', style='Ghost.TButton',
+        self.details_toggle = IconButton(
+            fmt_body, icon='chevron-right', text='ตัวเลือกเพิ่มเติม',
             command=self._toggle_details,
+            height=30, icon_size=14, pad_x=0,
         )
         self.details_toggle.grid(row=3, column=0, sticky='w', pady=(12, 0))
 
@@ -1888,10 +1924,10 @@ class CliporaApp(tk.Tk):
             pass
 
     def _sync_sidebar_toggle(self) -> None:
-        """Topbar button doubles as the hide button: « when open, ☰ when shut."""
+        """Topbar button doubles as the hide button (chevron vs menu icon)."""
         try:
-            self._sidebar_toggle.configure(
-                text='«' if self._sidebar_visible else '☰')
+            self._sidebar_toggle.set_icon(
+                'chevron-left' if self._sidebar_visible else 'menu')
         except (tk.TclError, AttributeError):
             pass
 
@@ -1912,9 +1948,10 @@ class CliporaApp(tk.Tk):
             pass
         for value, button in self._view_buttons.items():
             try:
-                button.configure(
-                    style='SideActive.TButton' if value == name else 'Side.TButton'
-                )
+                if value == name:
+                    button.set_fill(ACCENT_SOFT)
+                else:
+                    button.reset_fill()
             except tk.TclError:
                 pass
 
@@ -2020,11 +2057,11 @@ class CliporaApp(tk.Tk):
                 self._hardware_row.grid_remove()
         has_details = mode == 'video' or show_trim
         if has_details and self._details_expanded:
-            self.details_toggle.configure(text='▾ ตัวเลือกเพิ่มเติม')
+            self.details_toggle.set_icon('chevron-down')
             self._details_box.grid()
         else:
             if has_details:
-                self.details_toggle.configure(text='▸ ตัวเลือกเพิ่มเติม')
+                self.details_toggle.set_icon('chevron-right')
             self._details_box.grid_remove()
             self.details_toggle.grid_remove() if not has_details else self.details_toggle.grid()
 
@@ -2340,7 +2377,8 @@ class CliporaApp(tk.Tk):
                 if self._preview_tmp is None:
                     self._preview_tmp = tempfile.TemporaryDirectory(prefix='clipora-preview-')
                 png_path = download_thumbnail(
-                    preview.thumbnail_url, Path(self._preview_tmp.name) / 'thumb.png'
+                    preview.thumbnail_url,
+                    Path(self._preview_tmp.name) / f'thumb-{generation}.png',
                 )
             self._post_to_ui(
                 self._apply_preview,
@@ -3385,7 +3423,10 @@ class CliporaApp(tk.Tk):
             finally:
                 ready.set()
 
-        self.after(0, ask)
+        try:
+            self.after(0, ask)
+        except tk.TclError:
+            return False
         ready.wait()
         return result['decision'] == OVERWRITE
 
@@ -3568,6 +3609,12 @@ class CliporaApp(tk.Tk):
         threading.Thread(target=cancellation.cancel, daemon=True).start()
 
     def _on_close(self) -> None:
+        if self._preview_tmp is not None:
+            try:
+                self._preview_tmp.cleanup()
+            except OSError:
+                pass
+            self._preview_tmp = None
         if self._app_update_cancel is not None:
             self._app_update_cancel.set()
         try:
@@ -3661,10 +3708,13 @@ class DisclaimerDialog(tk.Toplevel):
         text.grid(row=2, column=1, sticky='nsew')
         text.insert('1.0', DISCLAIMER_TEXT)
         text.configure(state='disabled')
-        close = ttk.Button(
+        close = RoundedButton(
             shell,
             text='ปิด',
-            style='Accent.TButton',
+            fill=ACCENT,
+            hover_fill=ACCENT_HOVER,
+            height=44,
+            font_size=11,
             command=self.destroy,
         )
         close.grid(row=3, column=1, sticky='e', pady=(16, 0))
@@ -3776,10 +3826,11 @@ class DonateDialog(tk.Toplevel):
             style='CardMuted.TLabel',
             wraplength=360,
         ).grid(row=3, column=0, sticky='w')
-        ttk.Button(
+        RoundedButton(
             shell,
             text='ปิด',
-            style='DialogAccent.TButton',
+            fill=ACCENT,
+            hover_fill=ACCENT_HOVER,
             command=self.destroy,
         ).grid(row=4, column=0, sticky='e', pady=(12, 0))
         fade_in_window(self, self.after)
@@ -3798,7 +3849,15 @@ class HistoryPanel(ttk.Frame):
         self._selected_indices: set[int] = set()
         self._anchor: int | None = None
         self._selected_id: str | None = load_selected_history_id()
-        self._row_widgets: list[tuple[tk.Frame, list[tk.Label]]] = []
+        self._row_widgets: list[tuple[tk.Frame, list[tk.Widget]]] = []
+        self._name_labels: list[tuple[tk.Label, str]] = []
+        self._kind_width = _HISTORY_KIND_MIN
+        self._date_width = _HISTORY_DATE_MIN
+        self._size_width = _HISTORY_SIZE_MIN
+        self._boundaries: tuple[float, ...] = ()
+        self._drag: tuple[int, float, tuple[int, ...]] | None = None
+        self._name_font = tkfont.Font(
+            family=FONT_FAMILY, size=FONT_SIZE_BASE)
         self._filter.trace_add('write', lambda *_: self._render())
 
         shell = ttk.Frame(self, padding=(28, 22, 28, 20))
@@ -3834,40 +3893,39 @@ class HistoryPanel(ttk.Frame):
             command=lambda _value: self._render(),
         ).grid(row=0, column=0, sticky='ew')
 
-        header = ttk.Frame(shell, style='TFrame')
-        header.grid(row=3, column=0, sticky='ew', pady=(0, 4))
-        header.columnconfigure(0, weight=1)
-        for column, minsize in _HISTORY_COLUMN_MINSIZES.items():
-            header.grid_columnconfigure(column, minsize=minsize)
-        header.grid_columnconfigure(4, minsize=_HISTORY_MENU_MINSIZE)
-        ttk.Label(header, text='ชื่อ', style='Muted.TLabel').grid(
-            row=0, column=0, sticky='w', padx=(12, 4))
-        ttk.Label(header, text='ประเภท', style='Muted.TLabel').grid(
-            row=0, column=1, sticky='w')
-        ttk.Label(header, text='วันที่', style='Muted.TLabel').grid(
-            row=0, column=2, sticky='w')
-        ttk.Label(header, text='ขนาด', style='Muted.TLabel').grid(
-            row=0, column=3, sticky='e', padx=(0, 4))
-
         list_frame = ttk.Frame(shell, style='Card.TFrame')
         list_frame.grid(row=4, column=0, sticky='nsew', pady=(0, 12))
         list_frame.columnconfigure(0, weight=1)
-        list_frame.rowconfigure(0, weight=1)
+        list_frame.rowconfigure(1, weight=1)
+
+        # Header doubles as the column-resize grip. It shares column 0 with
+        # the rows canvas so separators line up at every width.
+        self._header = tk.Canvas(
+            list_frame, height=_HISTORY_HEADER_HEIGHT, bg=BG,
+            highlightthickness=0, borderwidth=0,
+        )
+        self._header.grid(row=0, column=0, sticky='ew', pady=(0, 4))
+        self._header.bind('<Configure>', lambda _e: self._sync_widths())
+        self._header.bind('<Button-1>', self._on_header_press)
+        self._header.bind('<B1-Motion>', self._on_header_drag)
+        self._header.bind('<ButtonRelease-1>', lambda _e: self._end_drag())
+        self._header.bind('<Motion>', self._on_header_motion)
+        self._header.bind('<Leave>', self._on_header_leave)
+
         self._canvas = tk.Canvas(
             list_frame, bg=FIELD, highlightthickness=1,
             highlightbackground=BORDER, highlightcolor=ACCENT,
             borderwidth=0,
         )
-        self._canvas.grid(row=0, column=0, sticky='nsew')
+        self._canvas.grid(row=1, column=0, sticky='nsew')
         scrollbar = ttk.Scrollbar(list_frame, orient='vertical', command=self._canvas.yview)
-        scrollbar.grid(row=0, column=1, sticky='ns')
+        scrollbar.grid(row=0, column=1, rowspan=2, sticky='ns')
         self._canvas.configure(yscrollcommand=scrollbar.set)
         self._rows = ttk.Frame(self._canvas, style='Card.TFrame')
         self._rows_window = self._canvas.create_window((0, 0), window=self._rows, anchor='nw')
         self._rows.bind('<Configure>', lambda _e: self._canvas.configure(
             scrollregion=self._canvas.bbox('all')))
-        self._canvas.bind('<Configure>', lambda e: self._canvas.itemconfigure(
-            self._rows_window, width=e.width))
+        self._canvas.bind('<Configure>', self._on_canvas_configure)
         self._canvas.bind('<Enter>', lambda _e: self._canvas.bind_all(
             '<MouseWheel>', self._on_wheel))
         self._canvas.bind('<Leave>', lambda _e: self._canvas.unbind_all('<MouseWheel>'))
@@ -3878,6 +3936,117 @@ class HistoryPanel(ttk.Frame):
         self._rows.bind('<Button-3>', self._popup_menu)
 
         self._render()
+
+    def _on_canvas_configure(self, event: tk.Event) -> None:
+        self._canvas.itemconfigure(self._rows_window, width=event.width)
+        self._sync_widths()
+
+    def _column_widths(self) -> tuple[int, int, int, int, int]:
+        total = self._header.winfo_width()
+        fixed = (
+            self._kind_width + self._date_width
+            + self._size_width + _HISTORY_MENU_MINSIZE
+        )
+        name = max(_HISTORY_NAME_MIN, total - fixed)
+        return name, self._kind_width, self._date_width, self._size_width, _HISTORY_MENU_MINSIZE
+
+    def _sync_widths(self) -> None:
+        widths = self._column_widths()
+        for row, _cells in self._row_widgets:
+            try:
+                row.grid_columnconfigure(0, weight=1, minsize=widths[0])
+                row.grid_columnconfigure(1, minsize=widths[1])
+                row.grid_columnconfigure(2, minsize=widths[2])
+                row.grid_columnconfigure(3, minsize=widths[3])
+                row.grid_columnconfigure(4, minsize=widths[4])
+            except tk.TclError:
+                continue
+        self._draw_header(widths)
+        self._elide_names(widths[0])
+
+    def _draw_header(self, widths: tuple[int, int, int, int, int]) -> None:
+        canvas = self._header
+        canvas.delete('all')
+        height = _HISTORY_HEADER_HEIGHT
+        font = (FONT_FAMILY, FONT_SIZE_SMALL)
+        name_w, kind_w, date_w, size_w = widths[:4]
+        first = name_w
+        second = first + kind_w
+        third = second + date_w
+        fourth = third + size_w
+        canvas.create_text(
+            8, height / 2, text='ชื่อ', anchor='w', fill=MUTED, font=font)
+        canvas.create_text(
+            first, height / 2, text='ประเภท', anchor='w', fill=MUTED, font=font)
+        canvas.create_text(
+            second, height / 2, text='วันที่', anchor='w', fill=MUTED, font=font)
+        canvas.create_text(
+            fourth - 4, height / 2, text='ขนาด', anchor='e', fill=MUTED, font=font)
+        for x in (first, second, third):
+            canvas.create_line(x, 4, x, height - 4, fill=BORDER)
+        self._boundaries = (first, second, third)
+
+    def _elide_names(self, name_width: int) -> None:
+        max_width = max(0, name_width - 12)
+        for label, full_text in self._name_labels:
+            try:
+                label.configure(
+                    text=elide_text(full_text, self._name_font.measure, max_width))
+            except tk.TclError:
+                continue
+
+    @staticmethod
+    def _resize_pair(
+        left: int, right: int, delta: float, left_min: int, right_min: int,
+    ) -> tuple[int, int]:
+        total = left + right
+        new_left = int(max(left_min, min(total - right_min, left + delta)))
+        return new_left, total - new_left
+
+    def _on_header_press(self, event: tk.Event) -> None:
+        for index, x in enumerate(self._boundaries):
+            if abs(event.x - x) <= 4:
+                self._drag = (index, event.x, self._column_widths())
+                return
+
+    def _on_header_drag(self, event: tk.Event) -> None:
+        if self._drag is None:
+            return
+        index, start_x, start = self._drag
+        delta = event.x - start_x
+        if index == 0:
+            max_kind = start[0] + start[1] - _HISTORY_NAME_MIN
+            self._kind_width = int(
+                max(_HISTORY_KIND_MIN, min(max_kind, start[1] - delta)))
+        elif index == 1:
+            self._kind_width, self._date_width = self._resize_pair(
+                start[1], start[2], delta, _HISTORY_KIND_MIN, _HISTORY_DATE_MIN)
+        else:
+            self._date_width, self._size_width = self._resize_pair(
+                start[2], start[3], delta, _HISTORY_DATE_MIN, _HISTORY_SIZE_MIN)
+        self._sync_widths()
+
+    def _end_drag(self) -> None:
+        self._drag = None
+        try:
+            self._header.configure(cursor='')
+        except tk.TclError:
+            pass
+
+    def _on_header_motion(self, event: tk.Event) -> None:
+        near = any(abs(event.x - x) <= 4 for x in self._boundaries)
+        try:
+            self._header.configure(
+                cursor='sb_h_double_arrow' if near else '')
+        except tk.TclError:
+            pass
+
+    def _on_header_leave(self, _event: tk.Event) -> None:
+        if self._drag is None:
+            try:
+                self._header.configure(cursor='')
+            except tk.TclError:
+                pass
 
     def refresh(self) -> None:
         """Reload entries (called when the history view is shown)."""
@@ -3898,6 +4067,7 @@ class HistoryPanel(ttk.Frame):
         for child in self._rows.winfo_children():
             child.destroy()
         self._row_widgets = []
+        self._name_labels = []
         self._selected = None
         self._selected_indices = set()
         self._anchor = None
@@ -3912,20 +4082,15 @@ class HistoryPanel(ttk.Frame):
             except OSError:
                 size_text = '—'
                 missing = True
-            text = entry.name
-            if len(text) > 40:
-                text = text[:40] + '…'
             row = tk.Frame(self._rows, bg=CARD)
             row.pack(fill='x', padx=4, pady=1)
             row.columnconfigure(0, weight=1)
-            for column, minsize in _HISTORY_COLUMN_MINSIZES.items():
-                row.grid_columnconfigure(column, minsize=minsize)
-            row.grid_columnconfigure(4, minsize=_HISTORY_MENU_MINSIZE)
-            font = (getattr(self, 'ui_font', FONT_FAMILY), FONT_SIZE_BASE)
+            font = (FONT_FAMILY, FONT_SIZE_BASE)
             name_label = tk.Label(
-                row, text=text, bg=CARD, fg=MUTED if missing else TEXT,
+                row, text=entry.name, bg=CARD, fg=MUTED if missing else TEXT,
                 font=font, anchor='w', justify='left', cursor='hand2',
             )
+            self._name_labels.append((name_label, entry.name))
             name_label.grid(row=0, column=0, sticky='ew', padx=(8, 4), pady=7)
             kind_label = tk.Label(
                 row, text=KIND_LABELS.get(entry.kind, entry.kind),
@@ -3941,15 +4106,30 @@ class HistoryPanel(ttk.Frame):
                 row, text=size_text, bg=CARD, fg=MUTED, font=font, anchor='e',
             )
             size_label.grid(row=0, column=3, sticky='e', padx=(0, 4), pady=7)
-            menu_label = tk.Label(
-                row, text='⋯', bg=CARD, fg=MUTED, font=font, cursor='hand2',
+            menu_icon = tk.Canvas(
+                row, width=24, height=20, bg=CARD,
+                highlightthickness=0, borderwidth=0, cursor='hand2',
             )
-            menu_label.grid(row=0, column=4, padx=(4, 8), pady=7)
-            cells = [name_label, kind_label, date_label, size_label, menu_label]
+            menu_icon.grid(row=0, column=4, padx=(4, 8), pady=7)
+
+            def _paint_more(canvas: tk.Canvas = menu_icon) -> None:
+                canvas.delete('icon')
+                size = 16
+                draw_line_icon(
+                    canvas, 'more',
+                    (canvas.winfo_width() - size) / 2,
+                    (canvas.winfo_height() - size) / 2,
+                    size, MUTED, 2,
+                )
+
+            menu_icon.bind(
+                '<Configure>', lambda _e, c=menu_icon: _paint_more(c))
+            _paint_more()
+            cells = [name_label, kind_label, date_label, size_label, menu_icon]
             for widget in [row, name_label, kind_label, date_label, size_label]:
                 widget.bind('<Button-1>', lambda e, i=index: self._on_row_click(e, i))
                 widget.bind('<Button-3>', lambda e, i=index: self._popup_menu(e, i))
-            menu_label.bind('<Button-1>', lambda e, i=index: self._popup_menu(e, i))
+            menu_icon.bind('<Button-1>', lambda e, i=index: self._popup_menu(e, i))
             name_label.bind(
                 '<Double-Button-1>', lambda _e, i=index: self._open_row(i))
             self._row_widgets.append((row, cells))
@@ -3957,6 +4137,7 @@ class HistoryPanel(ttk.Frame):
         restored = find_history_index(self._entries, self._selected_id)
         if restored is not None:
             self._select_row(restored, persist=False)
+        self._sync_widths()
         try:
             self._canvas.yview_moveto(0.0)
         except tk.TclError:

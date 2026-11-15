@@ -13,6 +13,7 @@ from clipora.ui import (
     CliporaApp,
     classify_source_text,
     destination_path,
+    elide_text,
     find_clipora_uninstaller,
     find_history_index,
     format_debug_line,
@@ -44,6 +45,18 @@ class FileSummaryTests(unittest.TestCase):
 
     def test_missing_source_has_recovery_message(self):
         self.assertIn('ไม่พบไฟล์', source_summary('missing-video.mp4'))
+
+
+class ElideTextTests(unittest.TestCase):
+    def test_keeps_text_that_fits(self):
+        self.assertEqual(elide_text('short', len, 10), 'short')
+
+    def test_trims_and_adds_ellipsis(self):
+        self.assertEqual(elide_text('abcdef', len, 5), 'abcd…')
+
+    def test_no_room_returns_ellipsis(self):
+        self.assertEqual(elide_text('abcdef', len, 0), '')
+        self.assertEqual(elide_text('abcdef', len, 0.5), '…')
 
 
 class DestinationValidationTests(unittest.TestCase):

@@ -17,6 +17,7 @@ from .theme import (
     ERROR,
     FIELD,
     FONT_FAMILY,
+    FONT_SIZE_SMALL,
     MUTED,
     PROGRESS_TROUGH,
     SECONDARY_BG,
@@ -125,6 +126,207 @@ def parent_surface_bg(parent: tk.Misc, fallback: str = BG) -> str:
         return str(parent.cget('background'))
     except tk.TclError:
         return fallback
+
+
+_LINE_ICONS: dict[str, tuple[tuple[tuple[float, float], ...], ...]] = {
+    'menu': (
+        ((0.16, 0.30), (0.84, 0.30)),
+        ((0.16, 0.50), (0.84, 0.50)),
+        ((0.16, 0.70), (0.84, 0.70)),
+    ),
+    'chevron-left': (((0.62, 0.22), (0.38, 0.50), (0.62, 0.78)),),
+    'chevron-right': (((0.38, 0.22), (0.62, 0.50), (0.38, 0.78)),),
+    'chevron-down': (((0.22, 0.40), (0.50, 0.66), (0.78, 0.40)),),
+    'sliders': (
+        ((0.14, 0.30), (0.86, 0.30)),
+        ((0.14, 0.50), (0.86, 0.50)),
+        ((0.14, 0.70), (0.86, 0.70)),
+    ),
+}
+
+
+def draw_line_icon(
+    canvas: tk.Canvas,
+    name: str,
+    x: float,
+    y: float,
+    size: float,
+    color: str,
+    width: float = 2.0,
+) -> None:
+    """Draw a thin rounded-line icon with its top-left at ``(x, y)``."""
+    for polyline in _LINE_ICONS.get(name, ()):
+        coords: list[float] = []
+        for px, py in polyline:
+            coords.extend((x + px * size, y + py * size))
+        canvas.create_line(
+            *coords, fill=color, width=width,
+            capstyle='round', joinstyle='round',
+        )
+    if name == 'sliders':
+        for cx, cy in ((0.36, 0.30), (0.64, 0.50), (0.46, 0.70)):
+            r = size * 0.075
+            canvas.create_oval(
+                x + cx * size - r, y + cy * size - r,
+                x + cx * size + r, y + cy * size + r,
+                fill=color, outline='',
+            )
+    elif name == 'more':
+        r = size * 0.075
+        for cx in (0.24, 0.50, 0.76):
+            canvas.create_oval(
+                x + cx * size - r, y + 0.5 * size - r,
+                x + cx * size + r, y + 0.5 * size + r,
+                fill=color, outline='',
+            )
+
+
+class IconButton(tk.Canvas):
+    """Flat button with a drawn thin-line icon and optional Thai label.
+
+    A canvas (not a ttk button) so the icon follows the theme palette and
+    never depends on emoji or symbol fonts. Keyboard focus works like a
+    button: Enter/Space invoke.
+    """
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        icon: str,
+        text: str = '',
+        command: Optional[Callable[[], None]] = None,
+        *,
+        width: int | None = None,
+        height: int = 34,
+        icon_size: int = 18,
+        font_size: int = FONT_SIZE_SMALL,
+        fg: str = MUTED,
+        bg: str | None = None,
+        hover_bg: str = SECONDARY_BG,
+        pad_x: int = 10,
+        gap: int = 8,
+        **kwargs,
+    ) -> None:
+        self._icon = icon
+        self._text = text
+        self._command = command
+        self._hover = False
+        self._pressed = False
+        self._focus = False
+        self._enabled = True
+        self._icon_size = icon_size
+        self._fg = fg
+        self._hover_bg = hover_bg
+        self._pad_x = pad_x
+        self._gap = gap
+        self._font = (
+            getattr(parent, 'ui_font', FONT_FAMILY), font_size,
+        )
+        self._bg = bg or parent_surface_bg(parent)
+        measure = tkfont.Font(font=self._font).measure
+        requested = width
+        if requested is None:
+            requested = pad_x * 2 + icon_size
+            if text:
+                requested += gap + measure(text)
+        super().__init__(
+            parent, width=requested, height=height, bg=self._bg,
+            highlightthickness=0, borderwidth=0, takefocus=True,
+            cursor='hand2', **kwargs,
+        )
+        self.bind('<Enter>', lambda _e: self._set_hover(True))
+        self.bind('<Leave>', lambda _e: (self._set_hover(False), self._set_pressed(False)))
+        self.bind('<ButtonPress-1>', lambda _e: self._set_pressed(True))
+        self.bind('<ButtonRelease-1>', self._on_release)
+        self.bind('<FocusIn>', lambda _e: self._set_focus(True))
+        self.bind('<FocusOut>', lambda _e: self._set_focus(False))
+        self.bind('<Return>', lambda _e: self.invoke())
+        self.bind('<space>', lambda _e: self.invoke())
+        self.bind('<Configure>', lambda _e: self._draw())
+        self._draw()
+
+    def _set_hover(self, value: bool) -> None:
+        self._hover = value
+        self._draw()
+
+    def _set_pressed(self, value: bool) -> None:
+        self._pressed = value
+        self._draw()
+
+    def _set_focus(self, value: bool) -> None:
+        self._focus = value
+        self._draw()
+
+    def _on_release(self, event: tk.Event) -> None:
+        was_pressed = self._pressed
+        self._pressed = False
+        self._draw()
+        if (
+            was_pressed
+            and self._enabled
+            and 0 <= event.x <= self.winfo_width()
+            and 0 <= event.y <= self.winfo_height()
+        ):
+            self.invoke()
+
+    def invoke(self) -> None:
+        if self._enabled and self._command:
+            self._command()
+
+    def state(self, states: Sequence[str] | None = None):
+        """ttk-style state shim so shared enable/disable code works."""
+        if states is None:
+            return () if self._enabled else ('disabled',)
+        for state in states:
+            if state == 'disabled':
+                self._enabled = False
+            elif state in ('!disabled', 'normal'):
+                self._enabled = True
+        self._draw()
+        return ()
+
+    def set_icon(self, icon: str) -> None:
+        self._icon = icon
+        self._draw()
+
+    def set_text(self, text: str) -> None:
+        self._text = text
+        self._draw()
+
+    def _draw(self) -> None:
+        try:
+            width = self.winfo_width()
+            height = self.winfo_height()
+        except tk.TclError:
+            return
+        if width <= 1 or height <= 1:
+            return
+        self.delete('all')
+        if self._enabled and (self._hover or self._pressed):
+            _rounded_rect(
+                self, 2, 2, width - 2, height - 2, 8,
+                fill=SECONDARY_HOVER if self._pressed else self._hover_bg,
+                outline='',
+            )
+        if self._enabled and self._focus:
+            self.create_rectangle(
+                1, 1, width - 1, height - 1, fill='', outline=BORDER,
+            )
+        if not self._enabled:
+            color = DISABLED_FG
+        else:
+            color = TEXT if (self._hover or self._pressed) else self._fg
+        top = (height - self._icon_size) / 2
+        if self._text:
+            left = self._pad_x
+            draw_line_icon(self, self._icon, left, top, self._icon_size, color)
+            self.create_text(
+                left + self._icon_size + self._gap, height / 2,
+                text=self._text, anchor='w', fill=color, font=self._font,
+            )
+        else:
+            left = (width - self._icon_size) / 2
+            draw_line_icon(self, self._icon, left, top, self._icon_size, color)
 
 
 class SegmentedControl(tk.Canvas):
@@ -813,11 +1015,13 @@ class RoundedButton(tk.Canvas):
         fill: str | None = None,
         hover_fill: str | None = None,
         hover_internal: bool = True,
+        anchor: str = 'center',
         **kwargs,
     ) -> None:
         self._text = text
         self._variable = textvariable
         self._command = command
+        self._anchor = anchor
         self._enabled = True
         self._hover = False
         self._pressed = False
@@ -943,10 +1147,16 @@ class RoundedButton(tk.Canvas):
         else:
             fill, fg = self._base_fill, TEXT
         _stadium_items(self, 1, 1, width - 1, height - 1, fill)
-        self.create_text(
-            width / 2, height / 2,
-            text=self._label(), fill=fg, font=self._font,
-        )
+        if self._anchor == 'w':
+            self.create_text(
+                18, height / 2, text=self._label(), fill=fg,
+                font=self._font, anchor='w',
+            )
+        else:
+            self.create_text(
+                width / 2, height / 2,
+                text=self._label(), fill=fg, font=self._font,
+            )
 
     def state(self, states) -> None:
         self._enabled = 'disabled' not in set(states)

@@ -116,6 +116,7 @@ def detect_silences(
     min_duration: float = SILENCE_CUT_MIN_DURATION,
     start_time: str | None = None,
     duration_time: str | None = None,
+    cancellation: CancellationToken | None = None,
 ) -> list[tuple[float, float]]:
     """Find silent spans with ``silencedetect`` (timeline matches trim args)."""
     ffmpeg = find_executable('ffmpeg')
@@ -131,17 +132,26 @@ def detect_silences(
         '-af', f'silencedetect=noise={threshold_db}dB:d={min_duration}',
         '-f', 'null', '-',
     ]
-    result = subprocess.run(
+    process = subprocess.Popen(
         command,
-        capture_output=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
         text=True,
-        check=False,
         creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
     )
-    if result.returncode:
-        tail = (result.stderr or '').strip().splitlines()[-5:]
+    if cancellation is not None:
+        cancellation.attach(process)
+    try:
+        _stdout, stderr = process.communicate()
+    finally:
+        if cancellation is not None:
+            cancellation.detach(process)
+    if cancellation is not None and cancellation.cancelled:
+        raise ConversionCancelled('ยกเลิกงานแล้ว')
+    if process.returncode:
+        tail = (stderr or '').strip().splitlines()[-5:]
         raise FFmpegError('\n'.join(tail) or 'ตรวจช่วงเงียบไม่สำเร็จ')
-    return parse_silence_report(result.stderr or '', duration)
+    return parse_silence_report(stderr or '', duration)
 
 
 def keep_intervals(
@@ -356,7 +366,26 @@ def finalize_output(temporary: Path, target: Path, overwrite: bool = True) -> No
     if overwrite:
         temporary.replace(target)
         return
-    os.link(temporary, target)
+    try:
+        os.link(temporary, target)
+    except OSError:
+        # FAT32/exFAT and some network shares reject hard links; fall back to
+        # an exclusive-create copy so "keep both" still works there.
+        try:
+            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+        except FileExistsError:
+            raise
+        except OSError as exc:
+            raise FFmpegError(f'ไม่สามารถสร้างไฟล์ผลลัพธ์: {exc}') from exc
+        try:
+            with os.fdopen(descriptor, 'wb') as target_file, temporary.open('rb') as source_file:
+                shutil.copyfileobj(source_file, target_file, length=1024 * 1024)
+        except (OSError, ValueError):
+            try:
+                target.unlink()
+            except OSError:
+                pass
+            raise
     temporary.unlink()
 
 
@@ -660,6 +689,7 @@ def enhance_audio(
         silences = detect_silences(
             source, base,
             start_time=start_time, duration_time=duration_time,
+            cancellation=cancellation,
         )
         keeps = keep_intervals(silences, base)
         if keeps and not (len(keeps) == 1 and keeps[0][0] <= 0 and keeps[0][1] >= base):
@@ -763,6 +793,7 @@ def enhance_video(
         silences = detect_silences(
             source, base,
             start_time=start_time, duration_time=duration_time,
+            cancellation=cancellation,
         )
         keeps = keep_intervals(silences, base)
         if keeps and not (len(keeps) == 1 and keeps[0][0] <= 0 and keeps[0][1] >= base):

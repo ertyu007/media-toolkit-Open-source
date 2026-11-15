@@ -3,321 +3,948 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Clipora — ภาพรวม สถาปัตยกรรม และเว็บจำลองการทำงาน</title>
-<meta name="description" content="ภาพรวม สถาปัตยกรรม และการไหลทำงานของ Clipora พร้อมเว็บจำลองการทำงาน (ไม่ประมวลผลจริง)">
+<title>Clipora — แปลง ตัด แยกเสียง บนเครื่อง Windows</title>
+<meta name="description" content="Clipora คือชุดเครื่องมือมีเดีย local-first สำหรับ Windows: แปลงวิดีโอและเสียง ดาวน์โหลดลิงก์สาธารณะที่ได้รับอนุญาต และแยก Stem ด้วย FFmpeg, yt-dlp และ Demucs ไม่มีบัญชี ไม่มีโฆษณา">
+<meta name="theme-color" content="#0b0b0f">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Clipora — แปลง ตัด แยกเสียง บนเครื่อง Windows">
+<meta property="og:description" content="แปลงวิดีโอและเสียง ดาวน์โหลดลิงก์สาธารณะ และแยก Stem บนเครื่องคุณ ฟรี โอเพนซอร์ส ไม่มีบัญชี">
+<meta property="og:url" content="https://ertyu007.github.io/media-toolkit-Open-source/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230b0b0f'/%3E%3Cpath d='M5 10v4M9 7v10M13 4v16M17 8v8M21 11v2' stroke='%23a78bfa' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#f2f3f1;--panel:#fbfbfa;--ink:#1b1f23;--mut:#586067;--line:#c8ccca;--tint:#e6e8e5;--tally:#c8321f;--tally-bg:#f8e3df}
-*{box-sizing:border-box}
-body{margin:0;font-family:"IBM Plex Sans Thai","Leelawadee UI","Segoe UI",Tahoma,sans-serif;font-size:16px;line-height:1.75;background:var(--bg);color:var(--ink)}
-a{color:var(--ink);text-underline-offset:3px}a:hover{color:var(--tally)}
-a:focus-visible{outline:3px solid var(--tally);outline-offset:3px}
-.wrap,main{max-width:1040px;margin:0 auto;padding:0 20px}
-header{border-bottom:2px solid var(--ink);padding:64px 0 32px}
-h1{margin:0;display:flex;align-items:center;gap:.16em;font-size:clamp(56px,11vw,112px);line-height:1.1;font-weight:700;letter-spacing:-.02em}
-h1:before{content:"";flex:none;width:.24em;height:.24em;border-radius:50%;background:var(--tally)}
-.lead{max-width:38em;margin:16px 0 22px;font-size:19px}
-.links{display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px;margin:0 0 12px}
-.btn{background:var(--ink);color:#fff;padding:8px 20px;border-radius:4px;text-decoration:none;font-weight:600}
-.btn:hover{background:var(--tally);color:#fff}
-.note{margin:.5em 0 0;font-size:14px;color:var(--mut)}
-section{display:grid;grid-template-columns:190px minmax(0,1fr);column-gap:40px;padding:32px 0 36px;border-top:1px solid var(--ink)}
-main>section:first-child{border-top:0}
-section>*{grid-column:2;margin-top:0}
-section>h2{grid-column:1;grid-row:1}
-section.wide>*{grid-column:1/-1}
-section.wide>h2{grid-row:auto;margin-bottom:16px}
-h2{margin:0 0 12px;font-size:22px;line-height:1.35;font-weight:700}
-section p{margin:0 0 12px}
-.mut{color:var(--mut)}
-.grid{display:grid;gap:24px;margin:16px 0}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}
-.box{border-top:2px solid var(--ink);padding-top:10px;font-size:15px}
-code{font-family:"IBM Plex Mono",Consolas,monospace;font-size:.86em;background:var(--tint);border-radius:3px;padding:1px 5px}
-.tag{display:inline-block;margin:2px 4px 2px 0;padding:0 8px;font-size:13px;color:var(--mut);background:var(--tint);border-radius:3px}
-.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 16px}
-.step{border:1px solid var(--ink);border-radius:3px;padding:4px 10px;font-size:14px;background:var(--panel)}
-.arrow{color:var(--mut)}
-.docs a{margin-right:24px}
-footer{max-width:1040px;margin:0 auto;padding:24px 20px 40px;border-top:1px solid var(--ink);font-size:14px;color:var(--mut)}
-/* flow tree */
-.tree-shell{border:1px solid var(--ink);border-radius:4px;background:var(--panel);padding:22px}
-.tree-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
-.tree-live{font-weight:700}
-.tree-status{font-size:13px;color:var(--mut)}
-.tree-node,.branch-card,.mini-step{border:1px solid var(--line);border-radius:4px;background:var(--panel);transition:background .3s,border-color .3s;min-width:0}
-.tree-node{padding:11px 12px}
-.tree-node .title{font-weight:700;font-size:14px;line-height:1.35}
-.tree-node .sub{margin-top:3px;font-size:12px;line-height:1.5;color:var(--mut)}
-.root-node,.core-node{width:min(340px,90%);margin:0 auto;text-align:center}
-.tree-output{width:min(360px,90%);margin:0 auto;text-align:center}
-.tree-output .check{font-weight:700;line-height:1.2;color:var(--mut)}
-.active{border-color:var(--tally)!important;background:var(--tally-bg)!important}
-.done{border-color:var(--ink)!important;background:var(--tint)!important}
-.tree-output.active{border-color:var(--ink)!important;background:var(--ink)!important;color:#fff}
-.tree-output.active .sub,.tree-output.active .check{color:#d5d9dc}
-/* connectors sit between nodes, so they never depend on node heights */
-.link{position:relative;height:40px}.link-fork{height:60px}
-.link>*{position:absolute;background:var(--line)}
-.link .trunk{left:50%;top:0;bottom:0;width:2px;margin-left:-1px}
-.link-fork .trunk{bottom:50%}
-.link-fork .fork{left:calc((100% - 36px)/6);right:calc((100% - 36px)/6);top:50%;height:2px}
-.link-fork .drop{top:50%;bottom:0;width:2px;margin-left:-1px}
-.drop.b1{left:calc((100% - 36px)/6)}.drop.b2{left:50%}.drop.b3{left:calc(100% - (100% - 36px)/6)}
-.link .flowing{background:var(--tally)}
-.branches{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start}
-.branch-card{padding:12px;text-align:center}
-.branch-card b{display:block;font-size:14px}.branch-card span{display:block;font-size:12px;color:var(--mut)}
-.branch-steps{position:relative;display:grid;gap:10px;margin-top:20px;padding-left:16px}
-.branch-steps:before{content:"";position:absolute;left:5px;top:-12px;bottom:14px;width:2px;background:var(--line)}
-.mini-step{position:relative;min-height:66px;padding:9px 10px}
-.mini-step:before{content:"";position:absolute;left:-15px;top:22px;width:10px;height:10px;border-radius:50%;background:var(--bg);border:2px solid var(--line)}
-.mini-step.active:before{background:var(--tally);border-color:var(--tally)}
-.mini-step.done:before{background:var(--ink);border-color:var(--ink)}
-.mini-step .n{font-size:11px;color:var(--mut);font-variant-numeric:tabular-nums}
-.mini-step b{display:block;font-size:13px;line-height:1.4}
-.mini-step span{display:block;margin-top:2px;font-size:11.5px;line-height:1.5;color:var(--mut)}
-.tree-meta{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:22px}
-.live-card{border-top:2px solid var(--ink);padding-top:10px}
-.live-card h3{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--mut)}
-.live-row{display:flex;justify-content:space-between;gap:10px;margin:5px 0;font-size:13px}.live-row b{text-align:right}
-.tree-progress{height:6px;margin-top:12px;background:var(--tint)}
-.tree-progress>div{height:100%;width:0;background:var(--tally);transition:width .35s}
-.tree-log{height:132px;overflow:auto;padding:9px 11px;background:var(--ink);border-radius:4px;font:12px/1.6 "IBM Plex Mono",Consolas,monospace;white-space:pre-wrap;color:#c6cbcf}
-.tree-log .inf{color:#fff}.tree-log .ok{color:#fff;font-weight:700}
-@media(max-width:820px){
- section{display:block}
- .branches,.tree-meta{grid-template-columns:1fr}.branches{gap:16px}
- .branch-card{text-align:left}
- .link{height:24px}.link>*{display:none}
+:root{
+  color-scheme:dark;
+  --bg:#0b0b0f;
+  --bg-deep:#08080c;
+  --panel:#14141b;
+  --panel-2:#111117;
+  --rail:#2a2a35;
+  --rail-soft:rgba(255,255,255,.07);
+  --ink:#f1eff8;
+  --mut:#a7a4b6;
+  --dim:#8c899c;
+  --faint:#6f6c7f;
+  --violet:#8b5cf6;
+  --violet-2:#c4b5fd;
+  --violet-deep:#6d28d9;
+  --mint:#5eead4;
+  --amber:#fbbf24;
+  --radius:16px;
+  --sans:"IBM Plex Sans Thai","Leelawadee UI","Segoe UI",Tahoma,sans-serif;
+  --mono:"IBM Plex Mono","Cascadia Code",Consolas,monospace;
 }
-@media(max-width:720px){.g2,.g3{grid-template-columns:1fr}}
-@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.75;
+  color:var(--ink);
+  background:var(--bg);
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  pointer-events:none;
+  background:
+    radial-gradient(900px 620px at 76% -8%,rgba(124,58,237,.20),transparent 62%),
+    radial-gradient(760px 560px at 8% 30%,rgba(139,92,246,.06),transparent 64%),
+    linear-gradient(180deg,#0d0d13 0%,var(--bg) 58%);
+}
+body::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+  background-image:
+    linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
+  background-size:72px 72px;
+  -webkit-mask-image:radial-gradient(1100px 720px at 70% 0%,#000 10%,transparent 78%);
+  mask-image:radial-gradient(1100px 720px at 70% 0%,#000 10%,transparent 78%);
+}
+
+::selection{background:var(--violet);color:#0b0b0f}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-track{background:#0b0b0f}
+::-webkit-scrollbar-thumb{background:#30303c;border:3px solid #0b0b0f;border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:#454552}
+a{color:inherit;text-underline-offset:4px;text-decoration-thickness:1px}
+a:hover{color:var(--violet-2)}
+:focus-visible{outline:2px solid var(--violet-2);outline-offset:4px;border-radius:4px}
+img,svg{display:block}
+.wrap{width:min(1180px,calc(100% - 48px));margin-inline:auto}
+.skip{position:absolute;left:16px;top:-60px;z-index:100;background:var(--violet-deep);color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-size:.9rem}
+.skip:focus{top:12px}
+.skip:hover,.skip:focus{color:#fff}
+.icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.mono{font-family:var(--mono)}
+.nowrap{white-space:nowrap}
+
+.site-nav{position:sticky;top:0;z-index:60;background:rgba(10,10,14,.94);border-bottom:1px solid var(--rail-soft)}
+.nav-inner{height:68px;display:flex;align-items:center;gap:26px}
+.brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;font-weight:600;letter-spacing:-.01em;font-size:1.08rem}
+.brand-mark{width:30px;height:30px;border:1px solid #3a3156;border-radius:9px;display:grid;place-items:center;background:linear-gradient(180deg,#1d1730,#14111e);color:var(--violet-2)}
+.brand-mark .icon{width:18px;height:18px;stroke-width:1.7}
+.nav-links{display:flex;align-items:center;gap:24px;margin-left:auto}
+.nav-links a{font-size:.9rem;color:var(--mut);text-decoration:none;line-height:1}
+.nav-links a:hover{color:var(--ink)}
+.nav-actions{display:flex;align-items:center;gap:14px;margin-left:auto}
+.nav-github{display:inline-flex;align-items:center;gap:7px;color:var(--mut);text-decoration:none;font-size:.86rem}
+.nav-github:hover{color:var(--ink)}
+.nav-github .icon{width:17px;height:17px}
+.nav-download{display:inline-flex;align-items:center;gap:8px;background:#191922;border:1px solid #353543;color:var(--ink);text-decoration:none;font-size:.86rem;font-weight:500;padding:8px 14px;border-radius:9px;transition:background .2s,border-color .2s}
+.nav-download:hover{background:#20202b;border-color:#4a4a5c;color:var(--ink)}
+.nav-download .icon{width:15px;height:15px}
+
+.hero{position:relative;display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,.98fr);gap:clamp(36px,5vw,74px);align-items:center;padding:clamp(52px,7vw,96px) 0 clamp(64px,8vw,112px)}
+.hero-copy{min-width:0}
+.hero-copy h1{margin:0 0 24px;font-size:clamp(2.9rem,5vw,5.4rem);line-height:1.08;letter-spacing:-.03em;font-weight:600;text-wrap:balance}
+.lede{margin:0 0 30px;max-width:56ch;color:var(--mut);font-size:clamp(1rem,1.25vw,1.12rem);line-height:1.85}
+.cta-row{display:flex;flex-wrap:wrap;gap:12px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;padding:0 20px;border-radius:10px;font-family:var(--sans);font-size:.95rem;font-weight:500;text-decoration:none;border:1px solid transparent;cursor:pointer;transition:background .2s,border-color .2s,transform .2s,box-shadow .2s}
+.btn .icon{width:18px;height:18px}
+.btn-primary{background:#6d28d9;border-color:#8b5cf6;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+.btn-primary:hover{background:#7c3aed;border-color:#a78bfa;color:#fff}
+.btn-ghost{background:rgba(255,255,255,.035);border-color:#353543;color:var(--ink)}
+.btn-ghost:hover{background:rgba(255,255,255,.06);border-color:#4a4a5c;color:var(--ink)}
+.hero-meta{display:flex;flex-wrap:wrap;gap:8px 18px;margin:20px 0 0;font-family:var(--mono);font-size:.78rem;line-height:1.6;color:var(--dim)}
+.hero-meta span{display:inline-flex;align-items:center;gap:7px}
+.hero-meta span+span::before{content:"";width:3px;height:3px;border-radius:50%;background:#4b485b;margin-right:11px}
+
+.hero .deck{max-width:520px;width:100%;justify-self:end}
+.deck{position:relative;min-width:0;border:1px solid #323240;border-radius:18px;padding:16px;background:linear-gradient(180deg,#171720,#101016);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.deck::before{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;background:radial-gradient(62% 46% at 72% 0%,rgba(139,92,246,.16),transparent 72%)}
+.deck-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 4px 12px;font-family:var(--mono);font-size:.75rem;letter-spacing:.15em;color:var(--dim);text-transform:uppercase}
+.deck-title{display:inline-flex;align-items:center;gap:8px}
+.deck-title .icon{width:15px;height:15px;color:var(--violet-2)}
+.deck-state{display:inline-flex;align-items:center;gap:7px;color:var(--mint);letter-spacing:.1em}
+.deck-state i{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 0 4px rgba(94,234,212,.07)}
+.deck-screen{background:transparent;padding:0;overflow:hidden}
+.tc-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:.75rem;font-variant-numeric:tabular-nums;color:var(--violet-2)}
+.tc-row .total{color:#676477}
+.wave{display:flex;align-items:center;gap:2px;height:76px;margin:12px 0 10px;overflow:hidden}
+.wave i{flex:1;min-width:2px;height:calc(var(--h)*1%);border-radius:2px;background:linear-gradient(180deg,var(--violet-2),var(--violet));opacity:.82;transform-origin:center;animation:breathe 2.5s ease-in-out infinite;animation-delay:calc(var(--d)*-1s)}
+.wave i:nth-child(4n){background:linear-gradient(180deg,#a78bfa,#6d28d9)}
+.wave i:nth-child(7n){opacity:.48}
+@keyframes breathe{0%,100%{transform:scaleY(.56);opacity:.5}50%{transform:scaleY(1);opacity:.94}}
+.deck.paused .wave i{animation-play-state:paused}
+.deck-ticks{display:flex;justify-content:space-between;padding-top:7px;border-top:1px solid #202029;font-family:var(--mono);font-size:.75rem;color:#6f6c7f}
+.job-list{display:grid;margin-top:10px}
+.job{display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 8px;color:#8e8b9d;transition:background .3s,color .3s}
+.job+.job{box-shadow:inset 0 1px 0 rgba(255,255,255,.045)}
+.job .jicon{width:17px;height:17px;color:#625f72}
+.job .jname{display:block;font-size:.79rem;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.job .jout{display:block;font-family:var(--mono);font-size:.75rem;line-height:1.5;color:#8c899c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.job .jstate{font-family:var(--mono);font-size:.75rem;letter-spacing:.07em;color:#8c899c;white-space:nowrap}
+.job.active{background:rgba(139,92,246,.10);color:var(--ink)}
+.job.active .jicon,.job.active .jstate{color:var(--violet-2)}
+.job.active .jout{color:#8f84b1}
+.job.done .jicon,.job.done .jstate{color:var(--mint)}
+.deck-progress{padding:14px 4px 0}
+.stage-row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.75rem;letter-spacing:.12em;color:#6f6c7f}
+.stage-row span.on{color:var(--violet-2)}
+.bar{height:6px;margin:8px 0 7px;background:#20202a;border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#6d28d9,#a78bfa)}
+.deck-readout{display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:.75rem;color:var(--mut)}
+.deck-readout b{font-weight:500;color:var(--violet-2)}
+.deck-log{display:flex;gap:8px;margin-top:10px;padding:9px 0 0;border-top:1px solid #24242e;font-family:var(--mono);font-size:.75rem;line-height:1.6;color:#8c899c;white-space:nowrap;overflow:hidden}
+.deck-log em{font-style:normal;color:var(--violet-2);flex:none}
+.deck-log span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.deck-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 4px 0}
+.deck-note{font-family:var(--mono);font-size:.75rem;line-height:1.5;color:#8c899c}
+.deck-toggle{width:28px;height:28px;display:grid;place-items:center;border:1px solid #32323e;border-radius:8px;background:#171720;color:var(--mut);cursor:pointer;transition:background .2s,color .2s,border-color .2s}
+.deck-toggle:hover{background:#20202b;color:var(--ink);border-color:#464655}
+.deck-toggle .icon{width:14px;height:14px}
+.deck-toggle .icon-play{display:none}
+.deck-toggle[aria-pressed="true"] .icon-pause{display:none}
+.deck-toggle[aria-pressed="true"] .icon-play{display:block}
+.deck-toggle[hidden]{display:none}
+
+.section{padding:clamp(64px,9vw,116px) 0;border-top:1px solid var(--rail-soft)}
+.section-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.72fr);gap:clamp(24px,5vw,72px);align-items:end;margin-bottom:clamp(30px,5vw,50px)}
+h2{margin:0;font-size:clamp(1.8rem,3.2vw,2.9rem);line-height:1.22;letter-spacing:-.025em;font-weight:600;text-wrap:balance}
+.section-head p{margin:0 0 4px;max-width:54ch;color:var(--mut);line-height:1.85}
+h3{font-weight:600}
+
+.rack{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+.panel{position:relative;grid-column:span 6;min-width:0;overflow:hidden;border:1px solid var(--rail);border-radius:14px;padding:clamp(20px,2.4vw,30px);background:linear-gradient(155deg,#16161e,#101016)}
+.panel-audio{grid-column:span 7}
+.panel-video{grid-column:span 5}
+.panel-url,.panel-stem{grid-column:1/-1}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+.panel-label{font-family:var(--mono);font-size:.75rem;letter-spacing:.16em;color:var(--dim)}
+.panel-icon{color:var(--violet-2)}
+.panel-icon .icon{width:22px;height:22px}
+.panel h3{margin:0 0 10px;font-size:clamp(1.25rem,1.5vw,1.45rem);line-height:1.35}
+.panel p{margin:0 0 18px;max-width:54ch;color:var(--mut);font-size:.94rem;line-height:1.8}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 18px;padding:0;list-style:none}
+.chips li{border:1px solid #373150;border-radius:6px;background:rgba(139,92,246,.09);color:#d6ccf7;padding:3px 8px;font-size:.75rem;line-height:1.7}
+.spec-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.spec-list li{position:relative;padding-left:18px;color:var(--mut);font-size:.87rem;line-height:1.65}
+.spec-list li::before{content:"";position:absolute;left:2px;top:.62em;width:5px;height:5px;border-radius:50%;background:var(--violet);box-shadow:0 0 0 3px rgba(139,92,246,.11)}
+.panel-url .panel-body{display:grid;grid-template-columns:minmax(0,1.18fr) minmax(0,.82fr);gap:clamp(24px,4vw,48px);align-items:start}
+.panel-stem .panel-body{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:clamp(24px,4vw,40px);align-items:start}
+.mini-label{display:block;margin-bottom:8px;font-family:var(--mono);font-size:.75rem;letter-spacing:.13em;color:#8c899c}
+.queue{display:grid;min-width:0;gap:2px;padding:8px 0}
+.q-row{display:flex;min-width:0;align-items:center;gap:8px;padding:6px 5px;font-family:var(--mono);font-size:.75rem;color:#8b8899;white-space:nowrap;overflow:hidden}
+.q-row .q-dot{width:5px;height:5px;border-radius:50%;background:#45424f;flex:none}
+.q-row .q-name{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.q-row .q-state{margin-left:auto;flex:none;font-size:.75rem;letter-spacing:.06em;color:#8c899c}
+.q-row.is-active{background:rgba(139,92,246,.09);color:#d3c9f2}
+.q-row.is-active .q-dot{background:var(--violet);box-shadow:0 0 0 3px rgba(139,92,246,.15)}
+.q-row.is-active .q-state{color:var(--violet-2)}
+.q-row.is-done .q-dot{background:var(--mint)}
+.q-row.is-done .q-state{color:var(--mint)}
+.stems{display:grid;min-width:0;gap:10px;padding:10px 0}
+.stem{display:grid;grid-template-columns:64px minmax(0,1fr) 32px;align-items:center;gap:10px;font-family:var(--mono);font-size:.75rem;color:#8b8899}
+.stem .stem-bar{position:relative;height:4px;border-radius:99px;background:#22222c;overflow:hidden}
+.stem .stem-bar::after{content:"";position:absolute;inset:0 auto 0 0;width:var(--w);border-radius:inherit;background:linear-gradient(90deg,#6d28d9,#c4b5fd)}
+.stem .stem-pct{text-align:right;color:#666375}
+.cli-strip{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.35fr) auto;gap:20px;align-items:center;margin-top:16px;padding:18px 22px;border:1px solid var(--rail);border-radius:14px;background:#101017}
+.cli-strip>*{min-width:0}
+.cli-strip h3{margin:0 0 4px;font-size:1.22rem}
+.cli-strip p{margin:0;color:var(--mut);font-size:.84rem;line-height:1.65}
+.cli-strip a{display:inline-flex;align-items:center;gap:7px;font-size:.82rem;color:var(--violet-2);text-decoration:none;white-space:nowrap}
+.cli-strip a:hover{color:var(--ink)}
+.cli-strip a .icon{width:15px;height:15px}
+pre{margin:0;padding:12px 14px;border:1px solid #24242e;border-radius:8px;background:#09090e;overflow-x:auto;font-family:var(--mono);font-size:.75rem;line-height:1.65;color:#cfc9e8;tab-size:2}
+pre code{font-family:inherit}
+
+.route{border:1px solid var(--rail);border-radius:16px;padding:32px;background:linear-gradient(180deg,#13131a,#0e0e14)}
+.route-steps{position:relative;display:grid;grid-template-columns:repeat(4,1fr);margin:0;padding:0;list-style:none}
+.route-steps::before{content:"";position:absolute;top:6px;left:12.5%;right:12.5%;height:1px;background:linear-gradient(90deg,transparent,#4b3677 10%,#8b5cf6 50%,#4b3677 90%,transparent)}
+.route-step{position:relative;padding:0 18px 0 0}
+.route-step .node{position:relative;z-index:1;display:block;width:13px;height:13px;margin-bottom:18px;border:1px solid #6d5a9e;border-radius:50%;background:#0b0b10}
+.route-step:first-child .node{border-color:var(--violet-2);background:var(--violet);box-shadow:0 0 0 5px rgba(139,92,246,.12)}
+.route-step h3{margin:0 0 6px;font-size:1.22rem}
+.route-step p{margin:0 0 10px;color:var(--mut);font-size:.86rem;line-height:1.7}
+.route-tag{font-family:var(--mono);font-size:.75rem;letter-spacing:.12em;color:#a99bd0}
+.route-engines{display:flex;flex-wrap:wrap;gap:7px 22px;margin-top:26px;padding-top:16px;border-top:1px solid #24242e;font-family:var(--mono);font-size:.75rem;color:var(--dim)}
+.route-engines b{font-weight:500;color:var(--violet-2)}
+.fine{margin:14px 0 0;font-size:.78rem;color:var(--dim);line-height:1.7}
+
+.install{display:grid;grid-template-columns:minmax(0,.82fr) minmax(0,1.18fr);gap:clamp(32px,6vw,80px);align-items:start}
+.install-copy{position:sticky;top:96px}
+.install-copy p{margin:16px 0 0;max-width:46ch;color:var(--mut);line-height:1.85}
+.req{margin:28px 0 0;border-top:1px solid var(--rail)}
+.req-row{display:flex;justify-content:space-between;gap:20px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:.82rem;line-height:1.6}
+.req-row dt{color:var(--dim);flex:none}
+.req-row dd{margin:0;text-align:right;color:var(--ink)}
+.steps{margin:0;padding:0;list-style:none;border-top:1px solid var(--rail)}
+.steps li{display:grid;grid-template-columns:32px minmax(0,1fr);gap:16px;padding:24px 0;border-bottom:1px solid var(--rail)}
+.steps li>div{min-width:0}
+.step-num{display:grid;place-items:center;width:28px;height:28px;border:1px solid #3b3358;border-radius:7px;background:rgba(139,92,246,.08);font-family:var(--mono);font-size:.75rem;color:var(--violet-2)}
+.steps h3{margin:0 0 7px;font-size:1.22rem}
+.steps p{margin:0 0 11px;color:var(--mut);font-size:.89rem;line-height:1.75}
+.steps p:last-child{margin-bottom:0}
+.steps pre{margin:10px 0 11px}
+.callout{display:grid;grid-template-columns:20px minmax(0,1fr);gap:12px;margin-top:24px;padding:16px 18px;border:1px solid #3d3320;border-radius:12px;background:rgba(251,191,36,.05)}
+.callout .icon{width:18px;height:18px;margin-top:3px;color:var(--amber)}
+.callout h4{margin:0 0 4px;font-size:.975rem;font-weight:500;color:#f0d08c}
+.callout p{margin:0;font-size:.82rem;line-height:1.7;color:#c6b58d}
+
+.download-deck{position:relative;overflow:hidden;border:1px solid #37304f;border-radius:18px;padding:44px;background:radial-gradient(76% 150% at 50% 0%,rgba(124,58,237,.22),transparent 62%),linear-gradient(180deg,#17141f,#0f0f15)}
+.download-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:clamp(28px,4vw,44px);font-family:var(--mono);font-size:.75rem;letter-spacing:.14em;color:var(--dim)}
+.download-top span:last-child{color:var(--violet-2)}
+.download-body{display:grid;grid-template-columns:minmax(0,1.16fr) minmax(0,.84fr);gap:clamp(28px,5vw,64px);align-items:end}
+.download-deck h2{max-width:15ch;font-size:clamp(2rem,4vw,3.5rem)}
+.download-deck p{margin:16px 0 0;max-width:54ch;color:var(--mut);line-height:1.85}
+.download-deck .cta-row{margin-top:28px}
+.download-deck .fine{margin-top:16px}
+.manifest{border-top:1px solid rgba(255,255,255,.14);padding-top:12px}
+.manifest .mini-label{margin-bottom:2px}
+.manifest-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.08);font-size:.78rem;line-height:1.5}
+.manifest-row .m-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d7d2e7}
+.manifest-row .m-meta{flex:none;font-family:var(--mono);font-size:.75rem;color:var(--dim)}
+
+.doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 40px;border-top:1px solid var(--rail)}
+.doc-link{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 18px;align-items:center;padding:18px 0;border-bottom:1px solid var(--rail);text-decoration:none;color:var(--ink)}
+.doc-link .doc-title{grid-column:1;grid-row:1;font-size:.98rem;font-weight:500;line-height:1.4}
+.doc-link .doc-desc{grid-column:1;grid-row:2;color:var(--mut);font-size:.8rem;line-height:1.6}
+.doc-link .icon{grid-column:2;grid-row:1/3;color:var(--dim);transition:color .2s,transform .2s}
+.doc-link:hover .icon{color:var(--violet-2);transform:translate(2px,-2px)}
+
+.footer{border-top:1px solid var(--rail-soft);padding:34px 0 46px}
+.footer-inner{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap}
+.footer-brand{display:inline-flex;align-items:center;gap:9px;font-weight:500}
+.footer-brand .brand-mark{width:26px;height:26px;border-radius:8px}
+.footer-brand .brand-mark .icon{width:15px;height:15px}
+.footer p{margin:8px 0 0;max-width:52ch;color:var(--dim);font-size:.76rem;line-height:1.7}
+.footer-links{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:.78rem}
+.footer-links a{color:var(--mut);text-decoration:none}
+.footer-links a:hover{color:var(--ink)}
+
+@media(max-width:1080px){
+  .nav-links{gap:18px}
+  .panel-url .panel-body,.panel-stem .panel-body{grid-template-columns:minmax(0,1fr)}
+  .route-step{padding-right:12px}
+}
+@media(max-width:920px){
+  .nav-links{display:none}
+  .hero{grid-template-columns:minmax(0,1fr);padding-top:clamp(44px,7vw,72px)}
+  .deck{max-width:560px}
+  .section-head{grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+  .panel{grid-column:1/-1}
+  .install{grid-template-columns:minmax(0,1fr)}
+  .install-copy{position:static}
+  .install-copy p{max-width:60ch}
+  .cli-strip{grid-template-columns:minmax(0,1fr)}
+  .cli-strip a{justify-self:start}
+  .download-body{grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:760px){
+  .wave{height:64px}
+  .route-steps{grid-template-columns:1fr;gap:24px;padding-left:34px}
+  .route-steps::before{top:7px;bottom:7px;left:6px;right:auto;width:1px;height:auto;background:linear-gradient(180deg,transparent,#4b3677 8%,#8b5cf6 50%,#4b3677 92%,transparent)}
+  .route-step{padding:0}
+  .route-step .node{position:absolute;left:-34px;top:3px;margin:0}
+  .doc-grid{grid-template-columns:minmax(0,1fr)}
+  .doc-link:nth-child(odd){border-bottom:1px solid var(--rail)}
+}
+@media(max-width:620px){
+  .wrap{width:calc(100% - 32px)}
+  .nav-inner{height:60px;gap:14px}
+  .nav-github span{display:none}
+  .nav-download{padding:8px 12px}
+  .hero{padding-bottom:56px}
+  .hero-copy h1{font-size:clamp(2.3rem,11vw,3.2rem)}
+  .hero-meta{font-size:.75rem}
+  .hero-meta span+span::before{display:none}
+  .section{padding:56px 0}
+  .panel{padding:20px}
+  .deck{padding:12px}
+  .deck-log{font-size:.75rem}
+  .deck-note{font-size:.75rem}
+  .job{grid-template-columns:18px minmax(0,1fr)}
+  .job .jstate{display:none}
+  .stem{grid-template-columns:56px minmax(0,1fr) 28px}
+  .req-row{flex-direction:column;gap:2px}
+  .req-row dd{text-align:left}
+  .steps li{grid-template-columns:28px minmax(0,1fr);gap:12px}
+  .download-deck h2{max-width:100%}
+  .route{padding:22px}
+  .download-deck{padding:26px}
+  pre{white-space:pre-wrap;overflow-wrap:anywhere}
+  .footer-inner{flex-direction:column}
+}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+  .wave i{animation:none;transform:scaleY(1);opacity:.7}
+  .deck-toggle{display:none}
+}
 </style>
 </head>
 <body>
-<header>
-<div class="wrap">
-<h1>Clipora</h1>
-<p class="lead">โปรแกรม Windows สำหรับแปลงวิดีโอ แยกเสียง และดาวน์โหลดสื่อสาธารณะที่ได้รับอนุญาต ประมวลผลบนเครื่องทั้งหมด ฟรี ไม่มีโฆษณา ไม่ต้องสมัครบัญชี</p>
-<p class="links"><a class="btn" href="https://github.com/ertyu007/media-toolkit-Open-source/releases">ดาวน์โหลด</a><a href="https://github.com/ertyu007/media-toolkit-Open-source">ซอร์สโค้ด</a><a href="USER_GUIDE.md">คู่มือผู้ใช้</a></p>
-<p class="note">เวอร์ชัน 0.7.1 สร้างด้วย Python 3.10+, Tkinter, FFmpeg, yt-dlp และ Demucs</p>
-</div>
+<a class="skip" href="#main">ข้ามไปยังเนื้อหา</a>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 10v4M7 7v10M11 4v16M15 8v8M19 11v2M22 10v4"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></symbol>
+  <symbol id="i-audio" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6l-5 4H4z"/><path d="M17 9a4 4 0 0 1 0 6"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></symbol>
+  <symbol id="i-stem" viewBox="0 0 24 24"><path d="M4 12h5m0 0 4-6h7m-11 6 4 6h7"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="m9 5 10 7-10 7z"/></symbol>
+  <symbol id="i-github" viewBox="0 0 24 24"><path d="M9 19c-4 1-4-2-5-2m10 4v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.3 4.3 0 0 0-.1-3.2s-1-.3-3.4 1.3a11.7 11.7 0 0 0-6 0C7.8 2.5 6.8 2.8 6.8 2.8a4.3 4.3 0 0 0-.1 3.2A4.6 4.6 0 0 0 5.4 9.2c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 3 20h18z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
+</svg>
+
+<header class="site-nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top" aria-label="Clipora หน้าแรก">
+      <span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-wave"/></svg></span>
+      Clipora
+    </a>
+    <nav class="nav-links" aria-label="เมนูหลัก">
+      <a href="#features">ฟีเจอร์</a>
+      <a href="#pipeline">ขั้นตอน</a>
+      <a href="#install">ติดตั้ง</a>
+      <a href="#download">ดาวน์โหลด</a>
+      <a href="#docs">เอกสาร</a>
+    </nav>
+    <div class="nav-actions">
+      <a class="nav-github" href="https://github.com/ertyu007/media-toolkit-Open-source" aria-label="GitHub">
+        <svg class="icon" aria-hidden="true"><use href="#i-github"/></svg>
+        <span>GitHub</span>
+      </a>
+      <a class="nav-download" href="https://github.com/ertyu007/media-toolkit-Open-source/releases">
+        ดาวน์โหลด
+        <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
+      </a>
+    </div>
+  </div>
 </header>
-<main>
 
-<section>
-<h2>ภาพรวมระบบ</h2>
-<p>Clipora เป็นแอป <b>local-first</b>: ไฟล์ต้นฉบับไม่ถูกแก้ไข ไม่ส่งไฟล์/ลิงก์ไปเซิร์ฟเวอร์ของ Clipora เก็บ output เดิมไว้จนกว่างานใหม่จะสำเร็จ ใช้งาน 3 ขั้นตอน: <b>วางลิงก์/เลือกไฟล์ → เลือกรูปแบบ → กดเริ่ม</b></p>
-<div class="grid g3">
-<div class="box"><b>ไฟล์ในเครื่อง</b><br><span class="mut">แยกเสียง MP3/M4A/WAV/FLAC/OPUS · แปลง MP4 (H.264/AAC) · MOV ProRes 422 · Hardware encode (NVENC/QSV/AMF) · ตัดช่วงเวลา · เลือก FPS สูงสุด/60/30 · คุณภาพ High/Balanced/Small</span></div>
-<div class="box"><b>ลิงก์สาธารณะ</b><br><span class="mut">คิวหลายลิงก์ (ทำทีละลิงก์) ผ่าน yt-dlp (สูงสุด/2160p/1080p/720p/480p/360p) · ไม่รับ playlist, live, private/paid, login, cookies, DRM</span></div>
-<div class="box"><b>แยก Stem</b><br><span class="mut">เสียงร้อง/ดนตรี ฯลฯ บนเครื่องด้วย Demucs (ออฟไลน์หลังติดตั้ง ~209 MB) พร้อมไฟล์ <code>_stems.zip</code></span></div>
-</div>
-<p class="note">งานอัตโนมัติ: มี CLI แบบไม่มีหน้าจอ (<code>python -m clipora.cli</code>) สำหรับแปลง/ดาวน์โหลดเป็นชุด พร้อม <code>--json</code> และ exit codes</p>
-<p class="note">Setup รวม Python/Tkinter + FFmpeg + yt-dlp + Deno (~250 MB) เปิดครั้งแรกใช้ได้ทันที ไม่ต้องต่อเน็ตตอนติดตั้ง</p>
-</section>
-
-<section>
-<h2>สถาปัตยกรรม</h2>
-<div class="flow">
-<span class="step"><code>app.py</code> (entry)</span><span class="arrow">→</span>
-<span class="step">CliporaApp <code>clipora/ui.py</code> (main thread)</span><span class="arrow">→</span>
-<span class="step">snapshot <code>JobSpec</code>/<code>ImportSpec</code></span><span class="arrow">→</span>
-<span class="step">worker thread</span><span class="arrow">→</span>
-<span class="step"><code>ffmpeg.py</code> / <code>importer.py</code> / <code>separator.py</code></span><span class="arrow">→</span>
-<span class="step"><code>after()</code> กลับมาอัปเดต UI</span>
-</div>
-<div class="grid g2">
-<div class="box"><b>งานไฟล์ในเครื่อง</b><br><code>probe</code> (ffprobe JSON) → <code>validate_operation</code> → <code>normalize_trim</code> → <code>build_command</code> → รัน FFmpeg → <code>finalize_output</code> (ตรวจ exit 0 + ขนาด &gt; 0)</div>
-<div class="box"><b>งาน URL</b><br><code>validate_url</code> → <code>build_import_command</code> (yt-dlp + <code>--ignore-config</code>) → ดาวน์โหลดลง workspace <code>.clipora-import-*</code> ชั่วคราว → finalize ชื่อชนกันเป็น <code>(1)</code>/<code>(2)</code> → ล้าง temp</div>
-<div class="box"><b>แยก Stem</b><br><code>separate_audio</code> (Demucs) → <code>separate_expected_outputs</code> → รวม <code>_stems.zip</code> · ต้องติดตั้งเครื่องมือก่อนครั้งแรกผ่านปุ่ม <b>เครื่องมือ</b></div>
-<div class="box"><b>กฎเหล็ก</b><br>ห้ามแตะ Tk จาก worker · subprocess แบบ argument list (<code>shell=False</code>) + ซ่อน console · ถือ process handle ตอนยกเลิก (URL ต้องหยุดทั้ง tree yt-dlp→FFmpeg) · source ห้ามเป็น cleanup target · ตรวจพื้นที่ดิสก์ก่อนเริ่ม</div>
-</div>
-<p><span class="tag">clipora/tools.py ค้นหา FFmpeg/yt-dlp/Deno</span><span class="tag">dependencies.py พิน URL+SHA-256</span><span class="tag">history.py ประวัติ/ถังขยะ</span><span class="tag">preview.py พรีวิวลิงก์</span><span class="tag">url_queue.py คิวลิงก์</span><span class="tag">cli.py โหมดไม่มีหน้าจอ</span><span class="tag">app_update.py / ytdlp_update.py อัปเดต</span></p>
-</section>
-
-<section class="wide">
-<h2>ลำดับการทำงานของระบบ</h2>
-<div class="tree-shell" id="flowTree">
-  <div class="tree-head">
-    <div class="tree-live">ตัวอย่างการไหลของงาน</div>
-    <span class="tree-status" id="treeStatus">กำลังรับงานเข้า Clipora</span>
-  </div>
-
-  <div class="tree-canvas">
-
-    <div class="tree-node root-node" id="inputNode">
-      <div class="title">รับงานจากผู้ใช้</div>
-      <div class="sub">ไฟล์ในเครื่อง, URL สาธารณะ, งานแยก Stem</div>
+<main id="main">
+  <section class="wrap hero" id="top">
+    <div class="hero-copy">
+      <h1>แปลง ตัด แยกเสียง<br>บนเครื่อง<br>ของคุณ</h1>
+      <p class="lede">Clipora แปลงวิดีโอและเสียง ดาวน์โหลดลิงก์สาธารณะที่คุณมีสิทธิ์ และแยก Stem ด้วย FFmpeg, yt-dlp และ Demucs — ทั้งหมดในเครื่องเดียว ไม่มีบัญชี ไม่มีโฆษณา</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/ertyu007/media-toolkit-Open-source/releases">
+          <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
+          ดาวน์โหลดสำหรับ Windows
+        </a>
+        <a class="btn btn-ghost" href="USER_GUIDE.md">
+          อ่านคู่มือผู้ใช้
+          <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+        </a>
+      </div>
+      <p class="hero-meta">
+        <span>เวอร์ชัน 0.7.2</span>
+        <span>Setup ประมาณ 250 MB</span>
+        <span>Windows 10/11 x64</span>
+        <span>GPL-3.0-only</span>
+      </p>
     </div>
 
-    <div class="link"><div class="trunk" id="lineInputCore"></div></div>
-
-    <div class="tree-node core-node" id="coreNode">
-      <div class="title">Snapshot JobSpec → Worker Thread</div>
-      <div class="sub">ตรวจค่า, ล็อกสถานะ UI, ตรวจพื้นที่ดิสก์, เลือก engine ที่ตรงกับงาน</div>
-    </div>
-
-    <div class="link link-fork">
-      <div class="trunk" id="lineCoreFork"></div>
-      <div class="fork" id="lineFork"></div>
-      <div class="drop b1" data-branch-line="file"></div>
-      <div class="drop b2" data-branch-line="url"></div>
-      <div class="drop b3" data-branch-line="stem"></div>
-    </div>
-
-    <div class="branches">
-      <div class="branch" data-branch="file">
-        <div class="branch-card">
-          <b>Local File Pipeline</b>
-          <span>FFprobe + FFmpeg</span>
+    <div class="deck" id="deck" role="group" aria-label="ตัวอย่างการทำงานของ Clipora">
+      <div class="deck-head">
+        <span class="deck-title"><svg class="icon" aria-hidden="true"><use href="#i-terminal"/></svg> Render Deck</span>
+        <span class="deck-state" id="deckState"><i></i> Running</span>
+      </div>
+      <div class="deck-screen">
+        <div class="tc-row">
+          <span id="deckTime">00:00.00</span>
+          <span class="total" id="deckTotal">03:47.02</span>
         </div>
-        <div class="branch-steps">
-          <div class="mini-step" data-step="file-0"><div class="n">01</div><b>Probe & Validate</b><span>อ่าน duration / stream และตรวจ operation</span></div>
-          <div class="mini-step" data-step="file-1"><div class="n">02</div><b>Build Command</b><span>format · quality · FPS · trim</span></div>
-          <div class="mini-step" data-step="file-2"><div class="n">03</div><b>FFmpeg Process</b><span>ประมวลผลบน worker และส่ง progress กลับ UI</span></div>
-          <div class="mini-step" data-step="file-3"><div class="n">04</div><b>Finalize Output</b><span>exit 0 + ขนาดไฟล์ &gt; 0</span></div>
+        <div class="wave" id="wave" aria-hidden="true"></div>
+        <div class="deck-ticks" aria-hidden="true">
+          <span>00:00</span><span>01:00</span><span>02:00</span><span>03:00</span>
+        </div>
+        <div class="job-list">
+          <div class="job active" data-job="0">
+            <svg class="icon jicon" aria-hidden="true"><use href="#i-video"/></svg>
+            <span><span class="jname">concert_2026.mov</span><span class="jout">→ concert_2026.mp4</span></span>
+            <span class="jstate">กำลังทำ</span>
+          </div>
+          <div class="job" data-job="1">
+            <svg class="icon jicon" aria-hidden="true"><use href="#i-audio"/></svg>
+            <span><span class="jname">interview_master.wav</span><span class="jout">→ interview_master.mp3</span></span>
+            <span class="jstate">รอคิว</span>
+          </div>
+          <div class="job" data-job="2">
+            <svg class="icon jicon" aria-hidden="true"><use href="#i-link"/></svg>
+            <span><span class="jname">youtube.com/watch?v=…</span><span class="jout">→ download_1080p.mp4</span></span>
+            <span class="jstate">รอคิว</span>
+          </div>
+          <div class="job" data-job="3">
+            <svg class="icon jicon" aria-hidden="true"><use href="#i-stem"/></svg>
+            <span><span class="jname">podcast_ep12.mp3</span><span class="jout">→ podcast_ep12_stems.zip</span></span>
+            <span class="jstate">รอคิว</span>
+          </div>
         </div>
       </div>
-
-      <div class="branch" data-branch="url">
-        <div class="branch-card">
-          <b>Public URL Pipeline</b>
-          <span>yt-dlp + FFmpeg</span>
-        </div>
-        <div class="branch-steps">
-          <div class="mini-step" data-step="url-0"><div class="n">01</div><b>Validate & Preview</b><span>ตรวจ URL และอ่าน metadata</span></div>
-          <div class="mini-step" data-step="url-1"><div class="n">02</div><b>Temp Workspace</b><span>สร้าง .clipora-import-* ชั่วคราว</span></div>
-          <div class="mini-step" data-step="url-2"><div class="n">03</div><b>Download & Merge</b><span>yt-dlp ดาวน์โหลด → FFmpeg รวมภาพ/เสียง</span></div>
-          <div class="mini-step" data-step="url-3"><div class="n">04</div><b>Finalize & Cleanup</b><span>ตั้งชื่อไม่ชนและล้าง temp</span></div>
+      <div class="deck-progress">
+        <div class="stage-row" aria-hidden="true"><span id="stage0">Probe</span><span id="stage1">Encode</span><span id="stage2">Verify</span></div>
+        <div class="bar" aria-hidden="true"><i id="deckBar"></i></div>
+        <div class="deck-readout">
+          <span id="deckStage">กำลังเตรียมงาน</span>
+          <b id="deckPct">0%</b>
         </div>
       </div>
+      <div class="deck-log"><em>›</em><span id="deckLog">ffprobe · 1920×1080 · h264</span></div>
+      <div class="deck-foot">
+        <span class="deck-note">ตัวอย่างการทำงาน · ไม่ได้ประมวลผลจริง</span>
+        <button class="deck-toggle" id="deckToggle" type="button" aria-label="หยุดตัวอย่าง" aria-pressed="false">
+          <svg class="icon icon-pause" aria-hidden="true"><use href="#i-pause"/></svg>
+          <svg class="icon icon-play" aria-hidden="true"><use href="#i-play"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
 
-      <div class="branch" data-branch="stem">
-        <div class="branch-card">
-          <b>Stem Separation</b>
-          <span>Demucs · Offline</span>
+  <section class="section" id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>สี่งาน หนึ่งคิว</h2>
+        <p>เลือกไฟล์หรือวางลิงก์ แล้วปล่อยให้คิวทำงานทีละรายการ ทุกโหมดใช้การตรวจค่าและตรวจผลชุดเดียวกัน</p>
+      </div>
+
+      <div class="rack">
+        <article class="panel panel-audio">
+          <div class="panel-head">
+            <span class="panel-label">Audio</span>
+            <span class="panel-icon"><svg class="icon" aria-hidden="true"><use href="#i-audio"/></svg></span>
+          </div>
+          <h3>แยกเสียงและปรับเสียง</h3>
+          <p>ดึงเสียงออกจากวิดีโอหรือแปลงไฟล์เสียงเป็นฟอร์แมตที่ต้องการ พร้อมตัดช่วงและปรับเสียงพอดแคสต์ในงานเดียว</p>
+          <ul class="chips" aria-label="ฟอร์แมตเสียง">
+            <li>MP3</li><li>M4A</li><li>WAV</li><li>FLAC</li><li>OPUS</li>
+          </ul>
+          <ul class="spec-list">
+            <li>ลดนอยส์ เกลี่ยเสียง และปรับดัง -16 LUFS</li>
+            <li>ตัดช่วงเงียบพร้อมภาพในงานวิดีโอ</li>
+            <li>เลือกคุณภาพ High / Balanced / Small</li>
+          </ul>
+        </article>
+
+        <article class="panel panel-video">
+          <div class="panel-head">
+            <span class="panel-label">Video</span>
+            <span class="panel-icon"><svg class="icon" aria-hidden="true"><use href="#i-video"/></svg></span>
+          </div>
+          <h3>แปลงวิดีโอโดยไม่แตะต้นฉบับ</h3>
+          <p>ได้ MP4 ที่เล่นได้ทุกอุปกรณ์ หรือ MOV ProRes 422 สำหรับงานตัดต่อ พร้อมเร่งความเร็วด้วยฮาร์ดแวร์เมื่อเครื่องรองรับ</p>
+          <ul class="chips" aria-label="ฟอร์แมตและตัวเร่งฮาร์ดแวร์">
+            <li>MP4 · H.264/AAC</li><li>MOV · ProRes 422</li><li>NVENC</li><li>QSV</li><li>AMF</li>
+          </ul>
+          <ul class="spec-list">
+            <li>ถ้าฮาร์ดแวร์ไม่พร้อม ถอยกลับไป libx264 อัตโนมัติ</li>
+            <li>เลือก FPS สูงสุด / 60 / 30 และตัดช่วงเวลา</li>
+            <li>MOV ProRes 422 นำไปตัดต่อใน After Effects ได้</li>
+          </ul>
+        </article>
+
+        <article class="panel panel-url">
+          <div class="panel-head">
+            <span class="panel-label">Public URL</span>
+            <span class="panel-icon"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg></span>
+          </div>
+          <div class="panel-body">
+            <div>
+              <h3>ดาวน์โหลดลิงก์ทีละรายการ</h3>
+              <p>วางลิงก์จาก YouTube, Facebook, Instagram หรือเว็บไซต์ที่ yt-dlp รองรับ เพิ่มเข้าคิวได้หลายลิงก์ และทำตามลำดับ</p>
+              <ul class="chips" aria-label="ระดับคุณภาพที่เลือกได้">
+                <li>สูงสุด</li><li>2160p</li><li>1080p</li><li>720p</li><li>480p</li><li>360p</li>
+              </ul>
+              <ul class="spec-list">
+                <li>ลิงก์ซ้ำถูกปฏิเสธ และดาวน์โหลดทีละรายการ</li>
+                <li>ล้มเหลวแล้วหยุดคิว เก็บลิงก์ที่เหลือไว้ลองใหม่</li>
+                <li>ไม่รับ playlist, live, private/paid, login, cookies หรือ DRM</li>
+              </ul>
+            </div>
+            <div>
+              <span class="mini-label">ตัวอย่างคิว</span>
+              <div class="queue" aria-hidden="true">
+                <div class="q-row is-active"><span class="q-dot"></span><span class="q-name">youtube.com/watch?v=…</span><span class="q-state">กำลังโหลด</span></div>
+                <div class="q-row"><span class="q-dot"></span><span class="q-name">instagram.com/reel/…</span><span class="q-state">รอคิว</span></div>
+                <div class="q-row"><span class="q-dot"></span><span class="q-name">soundcloud.com/…</span><span class="q-state">รอคิว</span></div>
+                <div class="q-row is-done"><span class="q-dot"></span><span class="q-name">example.com/talk.mp4</span><span class="q-state">เสร็จ</span></div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel panel-stem">
+          <div class="panel-head">
+            <span class="panel-label">Stem</span>
+            <span class="panel-icon"><svg class="icon" aria-hidden="true"><use href="#i-stem"/></svg></span>
+          </div>
+          <div class="panel-body">
+            <div>
+              <h3>แยกเสียงร้องและเครื่องดนตรี</h3>
+              <p>แยกเป็นแทร็กย่อยด้วย Demucs บนเครื่อง แล้วรวมทุก Stem ไว้ในไฟล์ <span class="mono">_stems.zip</span></p>
+              <p class="fine">ติดตั้งเครื่องมือครั้งแรกประมาณ 209 MB แล้วใช้ต่อได้แบบออฟไลน์</p>
+            </div>
+            <div>
+              <span class="mini-label">ตัวอย่าง Stem</span>
+              <div class="stems" aria-hidden="true">
+                <div class="stem"><span>เสียงร้อง</span><span class="stem-bar" style="--w:82%"></span><span class="stem-pct">82</span></div>
+                <div class="stem"><span>กลอง</span><span class="stem-bar" style="--w:64%"></span><span class="stem-pct">64</span></div>
+                <div class="stem"><span>เบส</span><span class="stem-bar" style="--w:48%"></span><span class="stem-pct">48</span></div>
+                <div class="stem"><span>อื่น ๆ</span><span class="stem-bar" style="--w:36%"></span><span class="stem-pct">36</span></div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="cli-strip">
+        <div>
+          <h3>เรียกงานเดิมจาก Terminal</h3>
+          <p>ใช้ core เดียวกับแอปสำหรับสคริปต์และงานเป็นชุด</p>
         </div>
-        <div class="branch-steps">
-          <div class="mini-step" data-step="stem-0"><div class="n">01</div><b>Check Demucs</b><span>ตรวจ dependency ที่ติดตั้งไว้ในเครื่อง</span></div>
-          <div class="mini-step" data-step="stem-1"><div class="n">02</div><b>Prepare Audio</b><span>probe และเตรียม source สำหรับแยกเสียง</span></div>
-          <div class="mini-step" data-step="stem-2"><div class="n">03</div><b>Separate Audio</b><span>แยก vocals / accompaniment บน worker</span></div>
-          <div class="mini-step" data-step="stem-3"><div class="n">04</div><b>Pack Results</b><span>ตรวจ outputs และรวม _stems.zip</span></div>
+        <pre><code>python -m clipora.cli convert "C:\media\clip.mp4" --format mp3</code></pre>
+        <a href="CLI.md">คู่มือ CLI <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="pipeline">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>ทุกงานผ่านด่านเดียวกัน</h2>
+        <p>ไม่ว่าจะเริ่มจากไฟล์ ลิงก์ หรือ Stem งานจะถูกตรวจก่อนเริ่ม ประมวลผลใน worker แยก และตรวจผลลัพธ์ก่อนแจ้งว่าสำเร็จ</p>
+      </div>
+      <div class="route">
+        <ol class="route-steps">
+          <li class="route-step">
+            <span class="node" aria-hidden="true"></span>
+            <h3>รับงาน</h3>
+            <p>เลือกไฟล์ วางลิงก์ หรือขอแยก Stem พร้อมตัวเลือกที่ต้องการ</p>
+            <span class="route-tag">Input</span>
+          </li>
+          <li class="route-step">
+            <span class="node" aria-hidden="true"></span>
+            <h3>ตรวจสอบ</h3>
+            <p>probe stream ตรวจตัวเลือก และเช็กพื้นที่ดิสก์ก่อนเริ่มงาน</p>
+            <span class="route-tag">Validate</span>
+          </li>
+          <li class="route-step">
+            <span class="node" aria-hidden="true"></span>
+            <h3>ประมวลผล</h3>
+            <p>FFmpeg, yt-dlp หรือ Demucs ทำงานใน worker แยกจากหน้าจอ</p>
+            <span class="route-tag">Render</span>
+          </li>
+          <li class="route-step">
+            <span class="node" aria-hidden="true"></span>
+            <h3>ตรวจผล</h3>
+            <p>ยืนยัน exit 0 ขนาดและ stream ของไฟล์ ก่อนเปิดให้ใช้งาน</p>
+            <span class="route-tag">Verify</span>
+          </li>
+        </ol>
+        <div class="route-engines">
+          <span><b>ไฟล์</b> FFprobe + FFmpeg</span>
+          <span><b>ลิงก์</b> yt-dlp + FFmpeg</span>
+          <span><b>Stem</b> Demucs + _stems.zip</span>
+        </div>
+      </div>
+      <p class="fine">แผนภาพจำลอง — หน้านี้ไม่ประมวลผลหรือดาวน์โหลดสื่อจริง</p>
+    </div>
+  </section>
+
+  <section class="section" id="install">
+    <div class="wrap install">
+      <div class="install-copy">
+        <h2>ติดตั้งจาก Releases</h2>
+        <p>ตัวติดตั้งรวม Python, FFmpeg, yt-dlp และ Deno ไว้แล้ว เปิดครั้งแรกใช้งานได้ทันที ไม่ต้องโหลดเครื่องมือเพิ่ม</p>
+        <dl class="req">
+          <div class="req-row"><dt>ระบบ</dt><dd>Windows 10/11 · x64</dd></div>
+          <div class="req-row"><dt>ขนาด Setup</dt><dd>ประมาณ 250 MB</dd></div>
+          <div class="req-row"><dt>พื้นที่ว่าง</dt><dd>สำหรับตัวติดตั้งและไฟล์ผลลัพธ์</dd></div>
+          <div class="req-row"><dt>อินเทอร์เน็ต</dt><dd>ดาวน์โหลดตัวติดตั้งและงาน URL</dd></div>
+          <div class="req-row"><dt>สิทธิ์</dt><dd>ใช้งานแบบผู้ใช้ปกติ</dd></div>
+        </dl>
+      </div>
+
+      <ol class="steps">
+        <li>
+          <span class="step-num" aria-hidden="true">01</span>
+          <div>
+            <h3>ดาวน์โหลดไฟล์จากแท็ก <span class="mono">pc-v0.7.2</span></h3>
+            <p>เลือก <span class="mono">Clipora-Setup-0.7.2-x64.exe</span> หรือ <span class="mono">Clipora-0.7.2-x64.zip</span> แบบพกพา พร้อมไฟล์ <span class="mono">.sha256</span> ที่อยู่คู่กัน</p>
+            <a class="btn btn-ghost" href="https://github.com/ertyu007/media-toolkit-Open-source/releases">เปิดหน้า Releases <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          </div>
+        </li>
+        <li>
+          <span class="step-num" aria-hidden="true">02</span>
+          <div>
+            <h3>ตรวจ SHA-256 ก่อนเปิดไฟล์</h3>
+            <pre><code>Get-FileHash -Algorithm SHA256 .\Clipora-Setup-0.7.2-x64.exe</code></pre>
+            <p>เทียบค่าที่ได้กับข้อความในไฟล์ <span class="mono">.sha256</span> ถ้าไม่ตรง ให้ดาวน์โหลดใหม่</p>
+          </div>
+        </li>
+        <li>
+          <span class="step-num" aria-hidden="true">03</span>
+          <div>
+            <h3>ติดตั้งหรือแตก ZIP แล้วเปิดโปรแกรม</h3>
+            <p>ตัวติดตั้งขอสิทธิ์ Administrator เพราะติดตั้งระดับเครื่อง ส่วนการใช้งานเปิดแบบผู้ใช้ปกติ ไม่ต้อง Run as administrator</p>
+            <p>ไฟล์ Setup เปิดได้ทันทีโดยไม่ต้องเชื่อมต่ออินเทอร์เน็ตระหว่างติดตั้ง</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="callout" style="grid-column:1/-1">
+        <svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+        <div>
+          <h4>ถ้า Windows แสดง SmartScreen</h4>
+          <p>ไฟล์ที่ยังไม่ได้ลงนามอาจถูกเตือน ตรวจ SHA-256 หรืออัปโหลดไฟล์ขึ้น VirusTotal ด้วยตัวเองก่อนตัดสินใจ หากมั่นใจแล้วให้กด “More info” → “Run anyway”</p>
         </div>
       </div>
     </div>
+  </section>
 
-    <div class="link"><div class="trunk" id="lineOutput"></div></div>
-
-    <div class="tree-node tree-output" id="outputNode">
-      <div class="check">✓</div>
-      <div class="title">งานเสร็จ → after() อัปเดต UI</div>
-      <div class="sub">ต้นฉบับไม่ถูกแตะ, เก็บเฉพาะ output ที่สำเร็จ, พร้อมเปิดโฟลเดอร์ผลลัพธ์</div>
+  <section class="section" id="download">
+    <div class="wrap">
+      <div class="download-deck">
+        <div class="download-top"><span>Output Ready</span><span>0.7.2</span></div>
+        <div class="download-body">
+          <div>
+            <h2>ดาวน์โหลด Clipora 0.7.2</h2>
+            <p>เลือก Setup สำหรับติดตั้งระดับเครื่อง หรือ ZIP สำหรับพกพา ทั้งคู่มาจาก GitHub Releases เดียวกัน พร้อม checksum และซอร์สโค้ดเต็ม</p>
+            <div class="cta-row">
+              <a class="btn btn-primary" href="https://github.com/ertyu007/media-toolkit-Open-source/releases">
+                <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
+                ดาวน์โหลด Setup
+              </a>
+              <a class="btn btn-ghost" href="https://github.com/ertyu007/media-toolkit-Open-source/releases">
+                ดาวน์โหลด ZIP แบบพกพา
+                <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
+              </a>
+            </div>
+            <p class="fine">ไฟล์และ <span class="mono">.sha256</span> อยู่ใต้แท็ก <span class="mono">pc-v0.7.2</span> · GPL-3.0-only · ไม่มีบัญชี ไม่มีโฆษณา ไม่มี telemetry</p>
+          </div>
+          <div class="manifest" aria-label="ไฟล์ใน Releases">
+            <span class="mini-label">ไฟล์ใน Releases</span>
+            <div class="manifest-row"><span class="m-name mono">Clipora-Setup-0.7.2-x64.exe</span><span class="m-meta">~250 MB</span></div>
+            <div class="manifest-row"><span class="m-name mono">Clipora-0.7.2-x64.zip</span><span class="m-meta">portable</span></div>
+            <div class="manifest-row"><span class="m-name mono">.sha256</span><span class="m-meta">checksum</span></div>
+            <div class="manifest-row"><span class="m-name mono">LICENSE</span><span class="m-meta">GPL-3.0</span></div>
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
+  </section>
 
-  <div class="tree-meta">
-    <div class="live-card">
-      <h3>งานที่กำลังไหล</h3>
-      <div class="live-row"><span>โหมด</span><b id="treeMode">Local File</b></div>
-      <div class="live-row"><span>ขั้นตอน</span><b id="treeStep">รับงานเข้า Clipora</b></div>
-      <div class="live-row"><span>Engine</span><b id="treeEngine">FFprobe / FFmpeg</b></div>
-      <div class="tree-progress"><div id="treeBar"></div></div>
+  <section class="section" id="docs">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>เอกสาร</h2>
+        <p>อ่านรายละเอียดการใช้งาน ข้อจำกัด และวิธีแก้ปัญหาก่อนเริ่มงานจริง</p>
+      </div>
+      <div class="doc-grid">
+        <a class="doc-link" href="USER_GUIDE.md">
+          <span class="doc-title">คู่มือผู้ใช้</span>
+          <span class="doc-desc">ทุกโหมด ตัวเลือก และขั้นตอนการใช้งาน</span>
+          <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+        </a>
+        <a class="doc-link" href="CLI.md">
+          <span class="doc-title">คู่มือ CLI</span>
+          <span class="doc-desc">คำสั่ง ตัวอย่าง และ exit codes สำหรับงานอัตโนมัติ</span>
+          <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+        </a>
+        <a class="doc-link" href="TROUBLESHOOTING.md">
+          <span class="doc-title">แก้ปัญหา</span>
+          <span class="doc-desc">Error log อาการที่พบบ่อย และวิธีตรวจเครื่องมือ</span>
+          <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+        </a>
+        <a class="doc-link" href="DEVELOPMENT.md">
+          <span class="doc-title">คู่มือนักพัฒนา</span>
+          <span class="doc-desc">สถาปัตยกรรม การทดสอบ และแนวทางร่วมพัฒนา</span>
+          <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+        </a>
+        <a class="doc-link" href="https://github.com/ertyu007/media-toolkit-Open-source/blob/main/android/README.md">
+          <span class="doc-title">สาขา Android</span>
+          <span class="doc-desc">สถานะการ build และข้อจำกัดของแพลตฟอร์ม</span>
+          <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+        </a>
+        <a class="doc-link" href="https://github.com/ertyu007/media-toolkit-Open-source">
+          <span class="doc-title">ซอร์สโค้ด</span>
+          <span class="doc-desc">ที่เก็บโค้ดทั้งหมดบน GitHub ภายใต้ GPL-3.0</span>
+          <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+        </a>
+      </div>
     </div>
-    <div class="live-card">
-      <h3>Live event log</h3>
-      <div class="tree-log" id="treeLog" aria-live="polite"></div>
-    </div>
-  </div>
-</div>
-<p class="note">แผนภาพนี้เป็นการจำลองเพื่ออธิบาย flow ของระบบ — ไม่ได้ประมวลผลหรือดาวน์โหลดไฟล์จริง</p>
-</section>
-
-
-<section>
-<h2>เอกสาร</h2>
-<p class="docs"><a href="USER_GUIDE.md">คู่มือผู้ใช้</a><a href="TROUBLESHOOTING.md">แก้ปัญหา + Error Log</a><a href="DEVELOPMENT.md">คู่มือนักพัฒนา/Architecture</a><a href="https://github.com/ertyu007/media-toolkit-Open-source/releases">Releases</a></p>
-<p class="note">สัญญาอนุญาต GPL-3.0-only ประมวลผลบนเครื่อง และไม่แก้ไขไฟล์ต้นฉบับ งาน URL รับเฉพาะสื่อสาธารณะที่ผู้ใช้มีสิทธิ์ตามกฎหมายและเงื่อนไขของแหล่งนั้น</p>
-</section>
-
+  </section>
 </main>
-<footer>Clipora 0.7.1 หน้านี้เป็นเว็บจำลอง ไม่มีการประมวลผลสื่อจริง</footer>
-<script>
-(function(){
-  var reduceMotion=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var branches={};
-  document.querySelectorAll('.branch').forEach(function(el){branches[el.dataset.branch]=el;});
-  var steps={};
-  document.querySelectorAll('.mini-step').forEach(function(el){steps[el.dataset.step]=el;});
-  var branchLines={};
-  document.querySelectorAll('[data-branch-line]').forEach(function(el){branchLines[el.dataset.branchLine]=el;});
-  var input=document.getElementById('inputNode'),core=document.getElementById('coreNode'),out=document.getElementById('outputNode');
-  var line1=document.getElementById('lineInputCore'),line2=document.getElementById('lineCoreFork'),fork=document.getElementById('lineFork'),lineOut=document.getElementById('lineOutput');
-  var status=document.getElementById('treeStatus'),modeText=document.getElementById('treeMode'),stepText=document.getElementById('treeStep'),engineText=document.getElementById('treeEngine'),bar=document.getElementById('treeBar'),log=document.getElementById('treeLog');
-  var flows=[
-    {key:'file',mode:'Local File',engine:'FFprobe / FFmpeg',labels:['Probe & Validate','Build Command','FFmpeg Process','Finalize Output'],logs:['probe source → ffprobe JSON [OK]','validate_operation + normalize_trim [OK]','build_command → FFmpeg worker running','finalize_output: exit 0 + size > 0 ✓']},
-    {key:'url',mode:'Public URL',engine:'yt-dlp / FFmpeg',labels:['Validate & Preview','Temp Workspace','Download & Merge','Finalize & Cleanup'],logs:['validate_url + preview metadata [OK]','create .clipora-import-* workspace','yt-dlp download → FFmpeg merge','unique filename + cleanup temp ✓']},
-    {key:'stem',mode:'Stem Separation',engine:'Demucs',labels:['Check Demucs','Prepare Audio','Separate Audio','Pack Results'],logs:['dependency check: Demucs available [OK]','probe source + prepare separation job','separate_audio worker running','expected outputs + _stems.zip ✓']}
-  ];
-  var flowIndex=0,phase=0,timer=null;
-  var phases=['input','core','branch','s0','s1','s2','s3','output'];
 
-  function clearState(){
-    [input,core,out].forEach(function(x){x.classList.remove('active','done');});
-    [line1,line2,fork,lineOut].forEach(function(x){x.classList.remove('flowing');});
-    Object.keys(branches).forEach(function(k){branches[k].classList.remove('active','done');branchLines[k].classList.remove('flowing');});
-    Object.keys(steps).forEach(function(k){steps[k].classList.remove('active','done');});
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <div>
+      <span class="footer-brand"><span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-wave"/></svg></span> Clipora</span>
+      <p>เครื่องมือมีเดีย local-first สำหรับ Windows สร้างด้วย Python, Tkinter, FFmpeg, yt-dlp และ Demucs · หน้านี้เป็นตัวอย่างการทำงาน ไม่ได้ประมวลผลสื่อจริง</p>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/ertyu007/media-toolkit-Open-source/releases">Releases</a>
+      <a href="https://github.com/ertyu007/media-toolkit-Open-source">GitHub</a>
+      <a href="https://github.com/ertyu007/media-toolkit-Open-source/blob/main/LICENSE">GPL-3.0</a>
+      <a href="USER_GUIDE.md">คู่มือ</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var deck = document.getElementById("deck");
+  var wave = document.getElementById("wave");
+  if (!deck || !wave) return;
+
+  var bar = document.getElementById("deckBar");
+  var pct = document.getElementById("deckPct");
+  var stage = document.getElementById("deckStage");
+  var log = document.getElementById("deckLog");
+  var time = document.getElementById("deckTime");
+  var total = document.getElementById("deckTotal");
+  var state = document.getElementById("deckState");
+  var toggle = document.getElementById("deckToggle");
+  var rows = Array.prototype.slice.call(deck.querySelectorAll(".job"));
+  var stages = [document.getElementById("stage0"), document.getElementById("stage1"), document.getElementById("stage2")];
+
+  var jobs = [
+    { name: "concert_2026.mov", out: "concert_2026.mp4", total: 227.02, log: "ffprobe · 1920×1080 · h264 → NVENC", stage: "กำลังเข้ารหัส H.264", seed: 1.2 },
+    { name: "interview_master.wav", out: "interview_master.mp3", total: 183.4, log: "FFmpeg · MP3 · normalize -16 LUFS", stage: "กำลังแปลงเสียง", seed: 2.7 },
+    { name: "youtube.com/watch?v=…", out: "download_1080p.mp4", total: 312.18, log: "yt-dlp · ตรวจ URL · ดาวน์โหลดทีละรายการ", stage: "กำลังดาวน์โหลด", seed: 4.1 },
+    { name: "podcast_ep12.mp3", out: "podcast_ep12_stems.zip", total: 405.55, log: "Demucs · แยก 4 Stem · รวม _stems.zip", stage: "กำลังแยก Stem", seed: 5.6 }
+  ];
+
+  var count = 64;
+  for (var i = 0; i < count; i++) {
+    var el = document.createElement("i");
+    el.style.setProperty("--h", (26 + Math.abs(Math.sin(i * 0.37 + 1.2)) * 70).toFixed(1));
+    el.style.setProperty("--d", ((i % 13) * 0.13).toFixed(2));
+    wave.appendChild(el);
   }
-  function addLog(t,cls){var s=document.createElement('span');if(cls)s.className=cls;s.textContent=t+'\n';log.appendChild(s);log.scrollTop=log.scrollHeight;}
-  function setBar(v){bar.style.width=Math.max(0,Math.min(100,v))+'%';}
-  function render(){
-    var f=flows[flowIndex],p=phases[phase];
-    clearState();
-    modeText.textContent=f.mode;engineText.textContent=f.engine;
-    document.querySelectorAll('.branch').forEach(function(b){if(b.dataset.branch!==f.key)b.style.opacity='.42';else b.style.opacity='1';});
-    if(phase>0){input.classList.add('done');line1.classList.add('flowing');}
-    if(phase===0){input.classList.add('active');status.textContent='กำลังรับงานจากผู้ใช้';stepText.textContent='รับงานเข้า Clipora';setBar(6);}
-    if(phase>=2){core.classList.add('done');line2.classList.add('flowing');fork.classList.add('flowing');branchLines[f.key].classList.add('flowing');}
-    if(phase===1){core.classList.add('active');status.textContent='Clipora Core กำลัง Snapshot JobSpec';stepText.textContent='Snapshot → ตรวจค่า → เลือก worker';setBar(16);}
-    if(phase===2){branches[f.key].classList.add('active');status.textContent='เลือก Pipeline: '+f.mode;stepText.textContent='Route ไปยัง '+f.mode;setBar(27);}
-    if(phase>=3&&phase<=6){
-      branches[f.key].classList.add('active');
-      var si=phase-3;
-      for(var i=0;i<4;i++){
-        var el=steps[f.key+'-'+i];
-        if(i<si)el.classList.add('done');
-        else if(i===si)el.classList.add('active');
-      }
-      status.textContent=f.mode+': '+f.labels[si];stepText.textContent=f.labels[si];setBar(38+si*15);
+  var bars = Array.prototype.slice.call(wave.children);
+
+  function shape(seed) {
+    bars.forEach(function (el, i) {
+      el.style.setProperty("--h", (24 + Math.abs(Math.sin(i * 0.31 + seed)) * 72).toFixed(1));
+    });
+  }
+  function fmt(seconds) {
+    var m = Math.floor(seconds / 60);
+    var s = Math.floor(seconds % 60);
+    var cs = Math.floor((seconds % 1) * 100);
+    return ("0" + m).slice(-2) + ":" + ("0" + s).slice(-2) + "." + ("0" + cs).slice(-2);
+  }
+  function setProgress(value) {
+    bar.style.width = Math.max(0, Math.min(100, value)) + "%";
+    pct.textContent = Math.round(value) + "%";
+  }
+  function setStage(index) {
+    stages.forEach(function (el, i) { if (el) el.classList.toggle("on", i === index); });
+  }
+  function resetRows() {
+    rows.forEach(function (row) {
+      row.classList.remove("active", "done");
+      row.querySelector(".jstate").textContent = "รอคิว";
+    });
+  }
+
+  var index = 0;
+  var running = false;
+  var userPaused = false;
+  var elapsed = 0;
+  var last = 0;
+  var doneAt = 0;
+  var raf = 0;
+  var visible = true;
+  var JOB_MS = 3400;
+
+  function activate(i) {
+    index = i;
+    var job = jobs[i];
+    resetRows();
+    for (var j = 0; j < i; j++) {
+      rows[j].classList.add("done");
+      rows[j].querySelector(".jstate").textContent = "เสร็จ";
     }
-    if(phase===7){
-      branches[f.key].classList.add('done');
-      for(var j=0;j<4;j++)steps[f.key+'-'+j].classList.add('done');
-      lineOut.classList.add('flowing');out.classList.add('active');
-      status.textContent='งานสำเร็จ พร้อมใช้ผลลัพธ์';stepText.textContent='Finalize → after() → UI';setBar(100);
+    rows[i].classList.add("active");
+    rows[i].querySelector(".jstate").textContent = "กำลังทำ";
+    shape(job.seed);
+    elapsed = 0;
+    doneAt = 0;
+    setProgress(0);
+    setStage(0);
+    stage.textContent = job.stage;
+    log.textContent = job.log;
+    total.textContent = fmt(job.total);
+    time.textContent = "00:00.00";
+    state.innerHTML = "<i></i> กำลังทำงาน";
+    state.style.color = "";
+    deck.classList.remove("paused");
+  }
+
+  function complete() {
+    rows[index].classList.remove("active");
+    rows[index].classList.add("done");
+    rows[index].querySelector(".jstate").textContent = "เสร็จ";
+    setProgress(100);
+    setStage(2);
+    stage.textContent = "ตรวจผลผ่าน · พร้อมใช้";
+    time.textContent = fmt(jobs[index].total);
+    doneAt = performance.now();
+  }
+
+  function frame(now) {
+    if (!running) return;
+    if (!last) last = now;
+    elapsed += now - last;
+    last = now;
+    var p = Math.min(1, elapsed / JOB_MS);
+    setProgress(p * 100);
+    time.textContent = fmt(p * jobs[index].total);
+    if (p < 0.18) setStage(0);
+    else if (p < 0.86) setStage(1);
+    else setStage(2);
+    if (p >= 1 && !doneAt) complete();
+    if (doneAt && now - doneAt > 900) {
+      var next = (index + 1) % jobs.length;
+      if (next === 0) { resetRows(); }
+      activate(next);
+      if (!running) return;
     }
+    raf = window.requestAnimationFrame(frame);
   }
-  function next(){
-    var f=flows[flowIndex];
-    if(phase===0){log.textContent='';addLog('เริ่มงาน: '+f.mode,'inf');addLog('input received → snapshot job','');}
-    else if(phase===1){addLog('Clipora Core: snapshot + disk check [OK]','inf');}
-    else if(phase===2){addLog('route → '+f.engine,'inf');}
-    else if(phase>=3&&phase<=6){var si=phase-3;addLog(f.logs[si],si===3?'ok':'');}
-    else if(phase===7){addLog('OUTPUT READY — update UI via after() ✓','ok');}
-    render();
-    if(reduceMotion)return;
-    var wait=phase===7?1900:1150;
-    timer=setTimeout(function(){
-      if(phase<7){phase++;}
-      else{phase=0;flowIndex=(flowIndex+1)%flows.length;}
-      next();
-    },wait);
+
+  function start() {
+    if (reduce || running || userPaused) return;
+    running = true;
+    last = 0;
+    deck.classList.remove("paused");
+    if (!raf) raf = window.requestAnimationFrame(frame);
   }
-  if(reduceMotion){
-    flowIndex=0;phase=7;render();log.textContent='';flows[0].logs.forEach(function(x,i){addLog(x,i===3?'ok':'');});addLog('OUTPUT READY ✓','ok');status.textContent='แสดง Flow Tree แบบคงที่ตามการตั้งค่าลดการเคลื่อนไหว';
-  }else next();
+  function pause() {
+    running = false;
+    last = 0;
+    if (raf) window.cancelAnimationFrame(raf);
+    raf = 0;
+    deck.classList.add("paused");
+  }
+
+  function staticState() {
+    resetRows();
+    rows[0].classList.add("done");
+    rows[0].querySelector(".jstate").textContent = "เสร็จ";
+    shape(jobs[0].seed);
+    setProgress(100);
+    setStage(2);
+    stage.textContent = "ตรวจผลผ่าน · พร้อมใช้";
+    log.textContent = jobs[0].log;
+    time.textContent = fmt(jobs[0].total);
+    total.textContent = fmt(jobs[0].total);
+    state.innerHTML = "คงที่";
+    deck.classList.add("paused");
+    if (toggle) toggle.hidden = true;
+  }
+
+  activate(0);
+  if (reduce) {
+    staticState();
+  } else {
+    if (toggle) {
+      toggle.addEventListener("click", function () {
+        userPaused = !userPaused;
+        toggle.setAttribute("aria-pressed", userPaused ? "true" : "false");
+        toggle.setAttribute("aria-label", userPaused ? "เล่นตัวอย่าง" : "หยุดตัวอย่าง");
+        if (userPaused) pause(); else start();
+      });
+    }
+    deck.addEventListener("mouseenter", pause);
+    deck.addEventListener("mouseleave", function () { if (!userPaused) start(); });
+    deck.addEventListener("focusin", pause);
+    deck.addEventListener("focusout", function () { if (!userPaused && !deck.contains(document.activeElement)) start(); });
+
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(function (entries) {
+        visible = entries[0].isIntersecting;
+        if (visible && !userPaused) start(); else pause();
+      }, { threshold: 0.2 }).observe(deck);
+    } else {
+      start();
+    }
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) pause(); else if (visible && !userPaused) start();
+    });
+  }
 })();
 </script>
 </body>

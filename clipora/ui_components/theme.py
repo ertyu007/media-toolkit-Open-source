@@ -147,7 +147,7 @@ def resolve_palette(theme: str, system_dark: bool) -> dict[str, str]:
 
 def _read_theme_setting() -> str:
     try:
-        from .app_update import load_settings
+        from ..app_update import load_settings
     except ImportError:
         return DEFAULT_THEME
     try:

@@ -204,7 +204,7 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--enhance',
         action='store_true',
-        help='เปิดปรับเสียงพอดแคสต์ (ลดนอยส์/เกลี่ยเสียง/ดัง -16 LUFS)',
+        help='ลดนอยส์/เกลี่ยเสียง/ดัง -16 LUFS',
     )
     parser.add_argument(
         '--output-dir',

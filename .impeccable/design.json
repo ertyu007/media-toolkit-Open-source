@@ -1,0 +1,217 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-04T14:20:00Z",
+  "title": "Design System: Clipora",
+  "extensions": {
+    "colorMeta": {
+      "signal": {
+        "role": "primary",
+        "displayName": "Amethyst Signal",
+        "canonical": "#8b5cf6",
+        "tonalRamp": ["#2e1065", "#4c1d95", "#5b21b6", "#6d28d9", "#7c3aed", "#8b5cf6", "#a78bfa", "#c4b5fd"]
+      },
+      "signal-deep": {
+        "role": "primary",
+        "displayName": "Amethyst Deep",
+        "canonical": "#6d28d9",
+        "tonalRamp": ["#1e0a44", "#2e1065", "#4c1d95", "#5b21b6", "#6d28d9", "#7c3aed", "#8b5cf6", "#a78bfa"]
+      },
+      "ground": {
+        "role": "neutral",
+        "displayName": "Control Ground",
+        "canonical": "#0b0b0f",
+        "tonalRamp": ["#08080c", "#0b0b0f", "#111117", "#14141b", "#1b1b24", "#24242e", "#30303c", "#454552"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Instrument Ink",
+        "canonical": "#f1eff8",
+        "tonalRamp": ["#2a2833", "#4b4857", "#6f6c7f", "#8c899c", "#a7a4b6", "#c9c5d8", "#e2deee", "#f1eff8"]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Quiet Copy",
+        "canonical": "#a7a4b6",
+        "tonalRamp": ["#24222e", "#3a3747", "#514e60", "#6f6c7f", "#8c899c", "#a7a4b6", "#c9c5d8", "#e2deee"]
+      },
+      "complete": {
+        "role": "secondary",
+        "displayName": "Completed Mint",
+        "canonical": "#5eead4",
+        "tonalRamp": ["#042f2e", "#115e59", "#0f766e", "#14b8a6", "#2dd4bf", "#5eead4", "#99f6e4", "#ccfbf1"]
+      },
+      "armed": {
+        "role": "tertiary",
+        "displayName": "Armed Amber",
+        "canonical": "#fbbf24",
+        "tonalRamp": ["#451a03", "#78350f", "#b45309", "#d97706", "#f59e0b", "#fbbf24", "#fcd34d", "#fef3c7"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Hero statement only; three balanced lines on desktop."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section headings and the download title."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Thai prose at 16px with a 54-56ch measure on this page."
+      },
+      "label": {
+        "displayName": "Measurement Label",
+        "purpose": "Timecode, logs, filenames, queue state, manifests, and route tags."
+      }
+    },
+    "shadows": [
+      {
+        "name": "inset-highlight",
+        "value": "inset 0 1px 0 rgba(255,255,255,.06)",
+        "purpose": "The only elevation cue; sits on raised panels and the render deck."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state",
+        "value": "0.2s ease",
+        "purpose": "Hover and focus transitions for buttons, links, and controls."
+      },
+      {
+        "name": "breathe",
+        "value": "2.5s ease-in-out infinite",
+        "purpose": "Waveform idle breathing; paused off-screen, on hover, and on focus."
+      },
+      {
+        "name": "reduced",
+        "value": "0.001ms",
+        "purpose": "All animation and transitions collapse; the deck renders one completed job and hides its toggle."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "620px" },
+      { "name": "md", "value": "760px" },
+      { "name": "lg", "value": "920px" },
+      { "name": "xl", "value": "1080px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The download action; violet fill, white text, 48px tall.",
+      "html": "<a class=\"ds-btn ds-btn-primary\" href=\"#\"><svg class=\"ds-icon\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v12m0 0 4-4m-4 4-4-4M5 21h14\"/></svg>ดาวน์โหลดสำหรับ Windows</a>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;padding:0 20px;border-radius:10px;border:1px solid transparent;font-family:\"IBM Plex Sans Thai\",sans-serif;font-size:.95rem;font-weight:500;text-decoration:none;transition:background .2s,border-color .2s}.ds-icon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.ds-btn-primary{background:#6d28d9;border-color:#8b5cf6;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}.ds-btn-primary:hover{background:#7c3aed;border-color:#a78bfa;color:#fff}.ds-btn-primary:focus-visible{outline:2px solid #c4b5fd;outline-offset:4px}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary docs action; translucent fill over the dark ground.",
+      "html": "<a class=\"ds-btn ds-btn-ghost\" href=\"#\">อ่านเอกสาร</a>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;padding:0 20px;border-radius:10px;border:1px solid transparent;font-family:\"IBM Plex Sans Thai\",sans-serif;font-size:.95rem;font-weight:500;text-decoration:none;transition:background .2s,border-color .2s}.ds-btn-ghost{background:rgba(255,255,255,.035);border-color:#353543;color:#f1eff8}.ds-btn-ghost:hover{background:rgba(255,255,255,.06);border-color:#4a4a5c;color:#f1eff8}.ds-btn-ghost:focus-visible{outline:2px solid #c4b5fd;outline-offset:4px}"
+    },
+    {
+      "name": "Nav Download",
+      "kind": "nav",
+      "refersTo": "nav-download",
+      "description": "Compact sticky-nav download action.",
+      "html": "<a class=\"ds-nav-dl\" href=\"#\"><svg class=\"ds-icon\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3v12m0 0 4-4m-4 4-4-4M5 21h14\"/></svg>ดาวน์โหลด</a>",
+      "css": ".ds-nav-dl{display:inline-flex;align-items:center;gap:8px;background:#191922;border:1px solid #353543;color:#f1eff8;text-decoration:none;font-family:\"IBM Plex Sans Thai\",sans-serif;font-size:.86rem;font-weight:500;padding:8px 14px;border-radius:9px;transition:background .2s,border-color .2s}.ds-nav-dl:hover{background:#20202b;border-color:#4a4a5c}.ds-nav-dl:focus-visible{outline:2px solid #c4b5fd;outline-offset:4px}.ds-icon{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}"
+    },
+    {
+      "name": "Capability Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Static format/capability tag inside panels.",
+      "html": "<span class=\"ds-chip\">MP4</span>",
+      "css": ".ds-chip{display:inline-flex;align-items:center;border:1px solid #373150;border-radius:6px;background:rgba(139,92,246,.09);color:#d6ccf7;padding:3px 8px;font-family:\"IBM Plex Sans Thai\",sans-serif;font-size:.75rem;line-height:1.7}"
+    },
+    {
+      "name": "Rack Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Feature module: tonal surface, hairline rail, inset highlight.",
+      "html": "<section class=\"ds-panel\"><p class=\"ds-kicker\">FFMPEG</p><h3 class=\"ds-panel-title\">แปลงวิดีโอและเสียง</h3><p class=\"ds-panel-copy\">เลือกฟอร์แมตและคุณภาพได้ในหน้าเดียว</p></section>",
+      "css": ".ds-panel{overflow:hidden;border:1px solid #2a2a35;border-radius:14px;padding:clamp(20px,2.4vw,30px);background:linear-gradient(155deg,#16161e,#101016);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);color:#a7a4b6;font-family:\"IBM Plex Sans Thai\",sans-serif}.ds-kicker{margin:0 0 20px;font-family:\"IBM Plex Mono\",monospace;font-size:.75rem;letter-spacing:.16em;color:#8c899c;text-transform:uppercase}.ds-panel-title{margin:0 0 10px;font-size:1.25rem;line-height:1.35;color:#f1eff8;font-weight:600}.ds-panel-copy{margin:0;font-size:.94rem;line-height:1.8}"
+    },
+    {
+      "name": "Deck Toggle",
+      "kind": "button",
+      "refersTo": "deck-toggle",
+      "description": "28px pause/play control on the synthetic render deck.",
+      "html": "<button class=\"ds-deck-toggle\" type=\"button\" aria-label=\"หยุดตัวอย่าง\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M9 5v14M15 5v14\"/></svg></button>",
+      "css": ".ds-deck-toggle{width:28px;height:28px;display:grid;place-items:center;border:1px solid #32323e;border-radius:8px;background:#171720;color:#a7a4b6;cursor:pointer;transition:background .2s,color .2s,border-color .2s}.ds-deck-toggle:hover{background:#20202b;color:#f1eff8;border-color:#464655}.ds-deck-toggle:focus-visible{outline:2px solid #c4b5fd;outline-offset:4px}.ds-deck-toggle svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}"
+    },
+    {
+      "name": "Render Deck",
+      "kind": "custom",
+      "refersTo": "render-deck",
+      "description": "The signature hero instrument: synthetic waveform, timecode, active job, and progress rail.",
+      "html": "<div class=\"ds-deck\"><div class=\"ds-deck-head\"><span>Render Deck</span><span class=\"ds-deck-live\">Running</span></div><div class=\"ds-wave\"><i style=\"--h:34%\"></i><i style=\"--h:58%\"></i><i style=\"--h:42%\"></i><i style=\"--h:76%\"></i><i style=\"--h:52%\"></i><i style=\"--h:88%\"></i><i style=\"--h:64%\"></i><i style=\"--h:46%\"></i><i style=\"--h:72%\"></i><i style=\"--h:38%\"></i><i style=\"--h:60%\"></i><i style=\"--h:82%\"></i><i style=\"--h:50%\"></i><i style=\"--h:66%\"></i><i style=\"--h:40%\"></i><i style=\"--h:30%\"></i></div><div class=\"ds-deck-row\"><span>concert_2026.mov</span><b>67%</b></div><div class=\"ds-deck-bar\"><i></i></div><div class=\"ds-deck-foot\">ตัวอย่างการทำงาน · ไม่ได้ประมวลผลจริง</div></div>",
+      "css": ".ds-deck{max-width:540px;border:1px solid #323240;border-radius:18px;padding:16px;background:linear-gradient(180deg,#171720,#101016);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);color:#f1eff8;font-family:\"IBM Plex Sans Thai\",sans-serif}.ds-deck-head{display:flex;justify-content:space-between;gap:12px;padding:2px 4px 12px;font-family:\"IBM Plex Mono\",monospace;font-size:.75rem;letter-spacing:.15em;color:#8c899c;text-transform:uppercase}.ds-deck-live{color:#5eead4}.ds-wave{display:flex;align-items:center;gap:2px;height:76px;margin:12px 0 10px;overflow:hidden}.ds-wave i{flex:1;min-width:2px;height:var(--h);border-radius:2px;background:linear-gradient(180deg,#c4b5fd,#8b5cf6);opacity:.82}.ds-deck-row{display:flex;justify-content:space-between;gap:12px;padding:9px 8px;background:rgba(139,92,246,.10);font-family:\"IBM Plex Mono\",monospace;font-size:.75rem;color:#c4b5fd}.ds-deck-bar{height:6px;margin:10px 4px 8px;background:#20202a;border-radius:99px;overflow:hidden}.ds-deck-bar i{display:block;height:100%;width:67%;border-radius:inherit;background:linear-gradient(90deg,#6d28d9,#a78bfa)}.ds-deck-foot{padding:0 4px;font-family:\"IBM Plex Mono\",monospace;font-size:.75rem;color:#8c899c}"
+    },
+    {
+      "name": "Document Row",
+      "kind": "custom",
+      "refersTo": "doc-link",
+      "description": "Two-line docs link; no card, just a rail and a drawn arrow.",
+      "html": "<a class=\"ds-doc\" href=\"#\"><span class=\"ds-doc-title\">คู่มือการใช้งาน</span><span class=\"ds-doc-desc\">ขั้นตอนการใช้งานทั้งหมดในหน้าเดียว</span><svg class=\"ds-doc-arrow\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7 17 17 7M9 7h8v8\"/></svg></a>",
+      "css": ".ds-doc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 18px;align-items:center;padding:18px 0;border-bottom:1px solid #2a2a35;text-decoration:none;color:#f1eff8;font-family:\"IBM Plex Sans Thai\",sans-serif}.ds-doc-title{grid-column:1;grid-row:1;font-size:.98rem;font-weight:500;line-height:1.4}.ds-doc-desc{grid-column:1;grid-row:2;color:#a7a4b6;font-size:.8rem;line-height:1.6}.ds-doc-arrow{grid-column:2;grid-row:1/3;width:20px;height:20px;fill:none;stroke:#8c899c;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;transition:color .2s,transform .2s}.ds-doc:hover .ds-doc-arrow{stroke:#c4b5fd;transform:translate(2px,-2px)}.ds-doc:focus-visible{outline:2px solid #c4b5fd;outline-offset:4px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Studio Deck",
+    "overview": "Clipora's site is a working render deck, not a brochure. The media pipeline is the first object on the page, already running: a waveform, a timecode, four queued jobs, and one active row. The rest of the page follows the same instrument logic — features are rack modules, the workflow is a signal route, and downloads are a release manifest. The visitor should feel the product operating before reading a list of claims.\n\nThe world is Midnight Amethyst, the existing app theme: a near-black control surface, raised charcoal panels, hairline rails, and a violet signal that means \"this is the live path.\" Mint marks completed output; amber marks an armed or caution state. The palette is restrained on purpose. Violet is an operational signal, not a wash, and the one animated moment lives in the deck.\n\nThe copy is direct, formal Thai. Technical names stay as they are (FFmpeg, yt-dlp, Demucs, H.264) because they are the product's own vocabulary. No invented screenshots, benchmarks, testimonials, or customer logos appear; the deck is explicitly labeled synthetic data.",
+    "keyCharacteristics": [
+      "One live object: the hero render deck, with a synthetic job cycle and a static reduced-motion state.",
+      "Dark, tonal surfaces separated by 1px rails rather than drop shadows.",
+      "Violet signal used sparingly; mint for completion; amber for caution.",
+      "IBM Plex Sans Thai for voice, IBM Plex Mono for measurement.",
+      "Drawn 1.6px line icons, never glyphs or color emoji.",
+      "Promotion and download first; proof and limits are visible, not buried."
+    ],
+    "rules": [
+      {
+        "name": "The Signal Rarity Rule",
+        "body": "Violet is an operational signal, not a surface wash. It appears on the primary action, the active job, progress, and focus. It never colors long prose, and it never fills the page field.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two-State Rule",
+        "body": "Mint means finished; amber means armed or caution. Neither color is used as a generic accent, and they are never mixed within one state.",
+        "section": "colors"
+      },
+      {
+        "name": "The Measured Mono Rule",
+        "body": "Monospace is for data, code, timecode, and measurement. It is never used as a costume for ordinary prose.",
+        "section": "typography"
+      },
+      {
+        "name": "The Rail-First Rule",
+        "body": "Depth comes from a 1px rail, a tonal step, and an inset highlight. If a surface needs more separation, adjust its value or its spacing before adding a drop shadow.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep violet on the signal path: primary action, active job, progress, focus.",
+      "Do use 1px rails, tonal steps, and inset highlights for depth.",
+      "Do set functional text at 12px or larger; use tabular numerals for timecode.",
+      "Do label demonstration data as synthetic and keep every claim traceable to the repository docs.",
+      "Do draw icons as inline SVG with a consistent 1.6px stroke.",
+      "Do respect reduced motion, keyboard focus, and 390px width."
+    ],
+    "donts": [
+      "Don't put a kicker or eyebrow above a heading; the heading speaks for itself.",
+      "Don't use gradient text, glass/blur decoration, or zero-offset colored halos.",
+      "Don't use hard offset shadows or colored side stripes on cards or callouts.",
+      "Don't use color emoji, Unicode glyphs, or an icon font in place of drawn icons.",
+      "Don't nest cards inside cards; use spacing and dividers.",
+      "Don't wash the page in violet or use mint/amber as generic accents.",
+      "Don't invent screenshots, benchmarks, testimonials, customer logos, or features that are not in the docs.",
+      "Don't use monospace for prose or set body copy below 12px."
+    ]
+  }
+}

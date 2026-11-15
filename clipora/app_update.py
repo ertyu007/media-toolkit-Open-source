@@ -98,11 +98,11 @@ def parse_release_payload(payload: str | list[dict[str, Any]] | dict[str, Any]) 
     else:
         raise AppUpdateError('รูปแบบข้อมูลการตอบกลับจาก GitHub ไม่ถูกต้อง')
 
-    # Look for the first release that matches PC tag (pc-v*) and is not a draft
+    # Look for the first release that matches PC tag (pc-v*) and is stable
     for release in releases:
         if not isinstance(release, dict):
             continue
-        if release.get('draft', False):
+        if release.get('draft', False) or release.get('prerelease', False):
             continue
 
         tag_name = release.get('tag_name')

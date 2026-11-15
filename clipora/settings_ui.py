@@ -13,8 +13,14 @@ from tkinter import filedialog, ttk
 from typing import Callable
 
 from .ui_components.motion import fade_in_window
-from .ui_components.theme import BG
-from .ui_components.widgets import RoundedButton, RoundedCombobox, RoundedEntry, Switch
+from .ui_components.theme import ACCENT, ACCENT_HOVER, BG
+from .ui_components.widgets import (
+    IconButton,
+    RoundedButton,
+    RoundedCombobox,
+    RoundedEntry,
+    Switch,
+)
 
 THEME_LABELS = {'เข้ม': 'dark', 'อ่อน': 'light', 'ตามระบบ': 'system'}
 MODE_LABELS = {
@@ -187,9 +193,9 @@ class SettingsDialog(tk.Toplevel):
             style='Muted.TLabel', wraplength=500, justify='left',
         ).grid(row=16, column=0, columnspan=2, sticky='w')
         self._danger_expanded = False
-        self._danger_toggle = ttk.Button(
-            body, text='▸ ถอนการติดตั้ง', style='Ghost.TButton',
-            command=self._toggle_danger,
+        self._danger_toggle = IconButton(
+            body, icon='chevron-right', text='ถอนการติดตั้ง',
+            command=self._toggle_danger, height=30, icon_size=14, pad_x=0,
         )
         self._danger_toggle.grid(
             row=17, column=0, columnspan=2, sticky='w', pady=(8, 0))
@@ -210,12 +216,11 @@ class SettingsDialog(tk.Toplevel):
 
         actions = ttk.Frame(shell, style='TFrame')
         actions.grid(row=2, column=0, sticky='e', pady=(16, 0))
-        ttk.Button(
-            actions, text='ยกเลิก', style='Secondary.TButton',
-            command=self._cancel,
+        RoundedButton(
+            actions, text='ยกเลิก', command=self._cancel,
         ).pack(side='left', padx=(0, 8))
-        ttk.Button(
-            actions, text='บันทึก', style='DialogAccent.TButton',
+        RoundedButton(
+            actions, text='บันทึก', fill=ACCENT, hover_fill=ACCENT_HOVER,
             command=self._save,
         ).pack(side='left')
 
@@ -227,10 +232,10 @@ class SettingsDialog(tk.Toplevel):
         self._danger_expanded = not self._danger_expanded
         try:
             if self._danger_expanded:
-                self._danger_toggle.configure(text='▾ ถอนการติดตั้ง')
+                self._danger_toggle.set_icon('chevron-down')
                 self._danger_box.grid()
             else:
-                self._danger_toggle.configure(text='▸ ถอนการติดตั้ง')
+                self._danger_toggle.set_icon('chevron-right')
                 self._danger_box.grid_remove()
         except tk.TclError:
             pass

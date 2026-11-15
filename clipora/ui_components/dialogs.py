@@ -11,12 +11,14 @@ from .format import format_file_size
 from .motion import fade_in_window
 from .theme import (
     ACCENT,
+    ACCENT_HOVER,
     BORDER,
     CARD,
     FIELD,
     FONT_FAMILY,
     TEXT,
 )
+from .widgets import RoundedButton
 
 OVERWRITE = 'overwrite'
 KEEP = 'keep'
@@ -123,26 +125,25 @@ class OverwriteDialog(tk.Toplevel):
         buttons.grid(row=4, column=1, sticky='ew')
         buttons.columnconfigure(0, weight=1)
 
-        keep_btn = ttk.Button(
+        keep_btn = RoundedButton(
             buttons,
             text='เก็บทั้งสองไฟล์',
-            style='Secondary.TButton',
             command=lambda: self._close(KEEP),
         )
         keep_btn.grid(row=0, column=1, padx=(8, 0))
 
-        cancel_btn = ttk.Button(
+        cancel_btn = RoundedButton(
             buttons,
             text='ยกเลิก',
-            style='Secondary.TButton',
             command=lambda: self._close(CANCEL),
         )
         cancel_btn.grid(row=0, column=2, padx=(8, 0))
 
-        overwrite_btn = ttk.Button(
+        overwrite_btn = RoundedButton(
             buttons,
             text='เขียนทับ',
-            style='DialogAccent.TButton',
+            fill=ACCENT,
+            hover_fill=ACCENT_HOVER,
             command=lambda: self._close(OVERWRITE),
         )
         overwrite_btn.grid(row=0, column=3, padx=(8, 0))
@@ -228,18 +229,18 @@ class ErrorDialog(tk.Toplevel):
         buttons = ttk.Frame(shell, style='Card.TFrame')
         buttons.grid(row=2, column=0, sticky='e')
 
-        copy_btn = ttk.Button(
+        copy_btn = RoundedButton(
             buttons,
             text='คัดลอก Error Log',
-            style='Secondary.TButton',
             command=lambda: self._copy_to_clipboard(message),
         )
         copy_btn.grid(row=0, column=0, padx=(0, 8))
 
-        close_btn = ttk.Button(
+        close_btn = RoundedButton(
             buttons,
             text='ปิด',
-            style='DialogAccent.TButton',
+            fill=ACCENT,
+            hover_fill=ACCENT_HOVER,
             command=self.destroy,
         )
         close_btn.grid(row=0, column=1)
@@ -394,26 +395,25 @@ class AppUpdateDialog(tk.Toplevel):
         btn_box = ttk.Frame(buttons, style='Card.TFrame')
         btn_box.pack(side='right')
 
-        self.update_btn = ttk.Button(
+        self.update_btn = RoundedButton(
             btn_box,
             text='อัปเดตทันที',
-            style='DialogAccent.TButton',
+            fill=ACCENT,
+            hover_fill=ACCENT_HOVER,
             command=self._on_update,
         )
         self.update_btn.pack(side='left', padx=(0, 8))
 
-        self.remind_btn = ttk.Button(
+        self.remind_btn = RoundedButton(
             btn_box,
             text='เตือนฉันภายหลัง',
-            style='Secondary.TButton',
             command=lambda: self._close(ACTION_REMIND_LATER),
         )
         self.remind_btn.pack(side='left', padx=(0, 8))
 
-        self.skip_btn = ttk.Button(
+        self.skip_btn = RoundedButton(
             btn_box,
             text='ข้ามเวอร์ชันนี้',
-            style='Secondary.TButton',
             command=self._on_skip,
         )
         self.skip_btn.pack(side='left')

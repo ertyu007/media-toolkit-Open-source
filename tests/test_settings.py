@@ -1,9 +1,11 @@
 import unittest
+from unittest.mock import patch
 
 from clipora.ui import load_job_defaults, validate_job_settings
 from clipora.ui_components.theme import (
     _DARK,
     _LIGHT,
+    _read_theme_setting,
     normalize_theme,
     resolve_palette,
 )
@@ -27,6 +29,10 @@ class ThemeTests(unittest.TestCase):
         self.assertEqual(normalize_theme(' Dark '), 'dark')
         self.assertEqual(normalize_theme('neon'), 'system')
         self.assertEqual(normalize_theme(None), 'system')
+
+    def test_saved_theme_is_read(self):
+        with patch('clipora.app_update.load_settings', return_value={'theme': 'light'}):
+            self.assertEqual(_read_theme_setting(), 'light')
 
 
 class JobSettingsTests(unittest.TestCase):

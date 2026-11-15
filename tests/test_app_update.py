@@ -140,6 +140,26 @@ class ReleasePayloadParsingTests(unittest.TestCase):
         assert info is not None
         self.assertEqual(info.version, '0.7.0')
 
+    def test_ignores_prereleases(self):
+        payload = [
+            {
+                'tag_name': 'pc-v0.8.0',
+                'name': 'Release Candidate',
+                'draft': False,
+                'prerelease': True,
+            },
+            {
+                'tag_name': 'pc-v0.7.0',
+                'name': 'Clipora 0.7.0',
+                'draft': False,
+                'prerelease': False,
+            },
+        ]
+        info = parse_release_payload(payload)
+        self.assertIsNotNone(info)
+        assert info is not None
+        self.assertEqual(info.version, '0.7.0')
+
     def test_fallbacks_to_html_url_when_no_installer_asset(self):
         payload = [
             {

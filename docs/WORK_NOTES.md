@@ -1,6 +1,35 @@
 # บันทึกงาน (Work Notes) — ฟีเจอร์แยก Stem เสียง (Stem Separation) + อัปเดต yt-dlp
 
-อัปเดตล่าสุด: 2026-11-04
+อัปเดตล่าสุด: 2026-11-15
+
+## ทำวันนี้ (2026-11-15) — แก้บัค/รอยรั่วรอบเก็บทั้งสองไฟล์, ยกเลิก, อัปเดต และภาพตัวอย่าง
+
+- `ffmpeg.finalize_output(overwrite=False)`: ถ้า `os.link` ใช้ไม่ได้ (FAT32/exFAT/โฟลเดอร์แชร์) ให้ fallback คัดลอกแบบ exclusive-create แทนการล้มงาน — mirror ใน `android/core/ffmpeg.py`; เพิ่มเทสต์จำลอง hard link ถูกปฏิเสธ
+- `ffmpeg.detect_silences`: รับ `cancellation` และรันผ่าน `Popen` ที่ผูกกับ `CancellationToken` เพื่อให้ยกเลิกงานระหว่างตรวจช่วงเงียบได้ทันที (เดิม `subprocess.run` ไม่สนใจการยกเลิก) — mirror ฝั่ง Android
+- `app_update.parse_release_payload`: ข้าม release ที่ `prerelease: true` (เดิมข้ามแค่ draft) + เทสต์
+- `ui`: ภาพตัวอย่างใช้ชื่อไฟล์ต่อ generation กัน worker เก่า/ใหม่เขียนทับกัน, ล้าง `TemporaryDirectory` ของภาพตัวอย่างตอนปิดโปรแกรม และกัน `TclError` ใน `_ask_overwrite`
+- Bump PC 0.7.1 → **0.7.2** sync `version_info.txt`, `clipora.iss`, README; ไม่แตะ dependency, `docs/index.html` อัปเดตตอนปล่อย release
+
+## ทำวันนี้ (2026-11-04) — หน้าเว็บ GitHub Pages ใหม่ (Studio Deck / Midnight Amethyst)
+
+- เขียน `docs/index.html` ใหม่ทั้งหน้า: landing page สำหรับโปรโมตและดาวน์โหลด Clipora 0.7.1 ธีม Midnight Amethyst (พื้น charcoal, violet signal, mint = เสร็จ, amber = คำเตือน) ใช้ IBM Plex Sans Thai + IBM Plex Mono จาก Google Fonts, ไอคอน SVG เส้น 1.6px, ไม่มี external JS และไม่มี color emoji
+- Hero เป็น render deck จำลองงาน 4 ประเภท (วิดีโอ/เสียง/URL/Stem) มี waveform, timecode, แถวงานที่กำลังทำ, progress rail, ปุ่ม pause/play, หยุดเมื่อ hover/focus, หยุดเมื่อพ้นจอ (IntersectionObserver) และแสดงสถานะคงที่เมื่อ `prefers-reduced-motion`; ระบุชัดว่าเป็นข้อมูลตัวอย่างและไม่ได้ประมวลผลจริง
+- เนื้อหาตามจริงจาก repo: ฟีเจอร์เสียง/วิดีโอ/URL/Stem, CLI, pipeline 4 ขั้น, วิธีติดตั้ง + ตรวจ SHA-256 + SmartScreen, requirements, Releases manifest, เอกสาร; คง version 0.7.1 และไม่ได้แตะโค้ดแอป/dependency
+- เพิ่ม `PRODUCT.md`, surface brief `.impeccable/surfaces/docs-index-html.md`, `DESIGN.md` และ `.impeccable/design.json` (tokens/components/narrative ของหน้าเว็บ)
+- ตรวจ layout ที่ 1440px และ 390px ด้วย CDP: ไม่มี horizontal overflow; ตรวจ detector เหลือเฉพาะ advisory เรื่อง palette violet ซึ่งเป็น brand ที่ผู้ใช้ pin ไว้ และ grid บางที่ brief กำหนด
+- หมายเหตุ: ปุ่ม/ไอคอน/ตารางประวัติที่แก้ก่อนหน้ายัง uncommitted และไม่เกี่ยวกับหน้าเว็บนี้
+
+## ทำวันนี้ (2026-11-04) — ลากปรับความกว้างคอลัมน์ในประวัติได้
+
+- หัวตารางประวัติย้ายเข้า `list_frame` และวาดด้วย Canvas (`_draw_header`) พร้อมเส้นแบ่งคอลัมน์; ลากเส้นเพื่อปรับความกว้าง ชื่อ/ประเภท/วันที่/ขนาด โดยดึงพื้นที่จากคอลัมน์ข้างเคียงและไม่ให้ต่ำกว่าขั้นต่ำ (`_resize_pair`)
+- ชื่อไฟล์ย่อตามความกว้างจริงด้วย `elide_text()` (เดิมตัดตายตัวที่ 40 ตัวอักษร) — ย่อคอลัมน์ชื่อแล้วเห็น `…`, ขยายแล้วเห็นชื่อมากขึ้น
+- เพิ่ม unit tests ของ `elide_text`; full suite 480 ผ่าน (skipped 2)
+
+## ทำวันนี้ (2026-11-04) — เปลี่ยนไอคอนในแอปเป็นเส้นที่วาดเอง
+
+- เพิ่ม `draw_line_icon()` + `IconButton` ใน `clipora/ui_components/widgets.py` — ไอคอนเส้น 2px มุมโค้ง (เมนู, chevron ซ้าย/ขวา/ลง, sliders, จุดสามจุด) วาดบน Canvas ตามสีธีม ไม่พึ่งฟอนต์สัญลักษณ์/อีโมจิ; รองรับ hover/press/focus และ Enter/Space
+- แทน glyph เดิม: `☰`/`«` (ปุ่มย่อ sidebar), `⚙` (ตั้งค่า), `▸`/`▾` (ตัวเลือกเพิ่มเติม, ถอนการติดตั้ง) และ `⋯` (เมนูแถวประวัติ)
+- ไม่เปลี่ยนพฤติกรรม/เลย์เอาต์หลัก; full suite 477 ผ่าน (skipped 2)
 
 ## ทำวันนี้ (2026-11-04) — ปรับถ้อยคำในโปรแกรมให้เป็นทางการ
 

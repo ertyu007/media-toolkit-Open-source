@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from clipora.ffmpeg import (
     CancellationToken,
@@ -15,6 +15,7 @@ from clipora.ffmpeg import (
     cleanup_temporary_output,
     collision_free_output_path,
     convert,
+    detect_silences,
     finalize_output,
     hardware_encoder_args,
     hardware_h264_encoder,
@@ -433,6 +434,16 @@ class EnhanceFilterTests(unittest.TestCase):
 
 
 class SilenceCutTests(unittest.TestCase):
+    def test_cancelled_detection_raises(self):
+        cancellation = CancellationToken()
+        cancellation.cancel()
+        process = MagicMock()
+        process.communicate.return_value = (None, None)
+
+        with patch('clipora.ffmpeg.subprocess.Popen', return_value=process):
+            with self.assertRaises(ConversionCancelled):
+                detect_silences(Path('in.mp3'), 10.0, cancellation=cancellation)
+
     def test_parses_start_end_pairs(self):
         report = (
             '[silencedetect @ 0] silence_start: 1.000\n'
@@ -601,6 +612,18 @@ class OutputLifecycleTests(unittest.TestCase):
             temporary.write_bytes(b'completed output')
 
             finalize_output(temporary, target, overwrite=True)
+
+            self.assertEqual(target.read_bytes(), b'completed output')
+            self.assertFalse(temporary.exists())
+
+    def test_finalize_copies_when_hard_links_are_unsupported(self):
+        with TemporaryDirectory() as directory:
+            target = Path(directory) / 'result.mp3'
+            temporary = temporary_output_path(target)
+            temporary.write_bytes(b'completed output')
+
+            with patch('clipora.ffmpeg.os.link', side_effect=OSError('no hard links')):
+                finalize_output(temporary, target, overwrite=False)
 
             self.assertEqual(target.read_bytes(), b'completed output')
             self.assertFalse(temporary.exists())
